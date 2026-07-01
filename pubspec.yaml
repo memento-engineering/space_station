@@ -1,0 +1,23 @@
+name: space_station
+description: >-
+  memento's grid station — the assembled runner + configuration over the
+  the_grid CLI-SDK and the power_station asset packs (the Dart runner model:
+  compose the Commands you want, `dart compile exe bin/space.dart -o space`).
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  args: ^2.6.0
+  dart_grid_assets: any
+  grid_assets: any
+  grid_cli: any
+  grid_controller: any
+  grid_engine: any
+  grid_federation: any
+  grid_runtime: any
+
+dev_dependencies:
+  lints: ^5.1.0
+  test: ^1.25.0
