@@ -10,6 +10,7 @@ environment:
 
 dependencies:
   args: ^2.6.0
+  butane_grid_assets: any
   dart_grid_assets: any
   grid_assets: any
   grid_cli: any

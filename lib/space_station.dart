@@ -12,6 +12,8 @@
 library;
 
 import 'package:args/command_runner.dart';
+import 'package:butane_grid_assets/butane_grid_assets.dart'
+    show BurnRunCommand;
 import 'package:dart_grid_assets/dart_grid_assets.dart' show DartCommand;
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -32,6 +34,10 @@ CommandRunner<int> buildRunner() =>
     CommandRunner<int>('space', "memento's grid station")
       ..addCommand(WatchCommand())
       ..addCommand(CodeRunCommand())
+      // The butane burn (the pack lives with its system in butane_flutter;
+      // the studio composes its run command — follower boxes run
+      // `butane_station serve --kind burn` from the butane checkout).
+      ..addCommand(BurnRunCommand())
       // Asset-exported Commands consumed by a runner (the CLI-SDK model): the
       // DART domain ships DartCommand from dart_grid_assets; this app just
       // assembles it.
@@ -81,6 +87,10 @@ CommandRunner<int> buildRunner() =>
                   'bounded use: allow-list '
                   '${bounds.allowedCommands.toList()..sort()}  ·  '
                   'timeout ${bounds.timeout.inSeconds}s',
+              // Compute launches nothing that outlives a dispatch — no
+              // lease-end teardown (the burn's lessor, by contrast, reaps
+              // its follower app here).
+              onLeaseEnded: null,
             );
           },
         ),
