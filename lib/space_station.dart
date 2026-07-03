@@ -12,8 +12,6 @@
 library;
 
 import 'package:args/command_runner.dart';
-import 'package:butane_grid_assets/butane_grid_assets.dart'
-    show BurnRunCommand;
 import 'package:dart_grid_assets/dart_grid_assets.dart' show DartCommand;
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -34,10 +32,11 @@ CommandRunner<int> buildRunner() =>
     CommandRunner<int>('space', "memento's grid station")
       ..addCommand(WatchCommand())
       ..addCommand(CodeRunCommand())
-      // The butane burn (the pack lives with its system in butane_flutter;
-      // the studio composes its run command — follower boxes run
-      // `butane_station serve --kind burn` from the butane checkout).
-      ..addCommand(BurnRunCommand())
+      // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
+      // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
+      // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
+      // when butane_grid_assets migrates (butane integration is deprioritized
+      // per Nico's policy; the pack stays with its domain).
       // Asset-exported Commands consumed by a runner (the CLI-SDK model): the
       // DART domain ships DartCommand from dart_grid_assets; this app just
       // assembles it.
