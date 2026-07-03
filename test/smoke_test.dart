@@ -11,6 +11,9 @@ void main() {
       containsAll(<String>[
         'watch',
         'run',
+        'up',
+        'down',
+        'status',
         'dart',
         'gate',
         'demo',
