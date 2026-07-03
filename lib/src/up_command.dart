@@ -40,6 +40,8 @@ import 'package:grid_assets/grid_assets.dart'
         kCodeCircuit;
 import 'package:grid_cli/grid_cli.dart';
 import 'package:grid_engine/grid_engine.dart';
+import 'package:grid_runtime/grid_runtime.dart'
+    show GitOps, PrOpener, RootCheckout, StationGitService;
 
 /// The bead→circuit policy for the `code` asset — all coding work roots the
 /// `code` circuit.
@@ -165,25 +167,13 @@ class UpCommand extends Command<int> {
       // `ServiceBundle.sourceControlFor` (provisioning works even when LAND
       // is off — gitOps/prOpener are non-null only when --land armed a live
       // run; null ⇒ canLand false ⇒ commit-only posture).
-      final defaultRootName = args.substations.first;
-      final sourceControlsByRoot = <String, SourceControl>{
-        for (final entry in live.roots.entries)
-          if (entry.key != defaultRootName)
-            entry.key: GitSourceControl(
-              gitOps: live.gitOps,
-              prOpener: live.prOpener,
-              provisioner: live.git,
-              root: entry.value,
-            ),
-      };
-      final services = ServiceBundle(
-        sourceControl: GitSourceControl(
-          gitOps: live.gitOps,
-          prOpener: live.prOpener,
-          provisioner: live.git,
-          root: live.workRoot,
-        ),
-        sourceControlsByRoot: sourceControlsByRoot,
+      final services = serviceBundleMapFor(
+        defaultSubstation: args.substations.first,
+        workRoot: live.workRoot,
+        roots: live.roots,
+        provisioner: live.git,
+        gitOps: live.gitOps,
+        prOpener: live.prOpener,
       );
 
       final wiring = composeStation(
@@ -215,7 +205,7 @@ class UpCommand extends Command<int> {
         // ONE substation composed (this resident verb owns exactly one), so
         // ITS bundle is the only entry — tg-7gm's `services` param is keyed
         // by `SubstationConfig.substationId`, not by root name.
-        services: {args.substations.first: services},
+        services: services,
         // D-C rung 1: the asset mounts its station-default config VALUES as
         // ancestors of everything (Theme-of-context; the effect boundary
         // resolves the ladder per work).
@@ -255,6 +245,48 @@ Uri _parseBase(String raw, String flag) {
     throw FormatException('$flag is not an absolute url: "$raw"');
   }
   return uri;
+}
+
+/// Builds `composeStation`'s `services` map (tg-7gm) for the ONE substation
+/// `up` composes: [defaultSubstation]'s entry carries a [GitSourceControl]
+/// over [workRoot] as its DEFAULT `sourceControl`, plus one EXTRA
+/// [GitSourceControl] per OTHER [roots] entry (every name but
+/// [defaultSubstation] itself) under `sourceControlsByRoot` — the split
+/// [ServiceBundle.sourceControlFor] resolves a bead's `metadata.grid.root`
+/// against. [gitOps]/[prOpener] ride every constructed [GitSourceControl]
+/// unchanged (non-null only when `--land` armed a live run; null ⇒ canLand
+/// false ⇒ the commit-only posture) — pure construction, no I/O. Exposed
+/// (no leading `_`) — RS-5b rework r2's seam for asserting the map's shape
+/// without booting a real station; `run()` above is the only real call site.
+Map<String, ServiceBundle> serviceBundleMapFor({
+  required String defaultSubstation,
+  required RootCheckout workRoot,
+  required Map<String, RootCheckout> roots,
+  required StationGitService provisioner,
+  GitOps? gitOps,
+  PrOpener? prOpener,
+}) {
+  final sourceControlsByRoot = <String, SourceControl>{
+    for (final entry in roots.entries)
+      if (entry.key != defaultSubstation)
+        entry.key: GitSourceControl(
+          gitOps: gitOps,
+          prOpener: prOpener,
+          provisioner: provisioner,
+          root: entry.value,
+        ),
+  };
+  return {
+    defaultSubstation: ServiceBundle(
+      sourceControl: GitSourceControl(
+        gitOps: gitOps,
+        prOpener: prOpener,
+        provisioner: provisioner,
+        root: workRoot,
+      ),
+      sourceControlsByRoot: sourceControlsByRoot,
+    ),
+  };
 }
 
 /// Adds the standard station flags MINUS `--bead` — a byte-for-byte mirror of

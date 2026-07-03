@@ -23,6 +23,12 @@ import 'package:test/test.dart';
 ///      confirmed exited) and no-ops cleanly (exit 0) when nothing is up.
 ///      The raw-OS-SIGTERM path (e)'s `down` rides internally is proven as
 ///      its OWN case below — the signal-path control `down` depends on.
+///  (f) RS-5b rework round 2 (tg-1di, tg-7gm's multi-root surface): booting
+///      with TWO named `--root` registrations — one equal to the owned
+///      `--substation` (its DEFAULT) and one EXTRA name — `GET /status`
+///      reports BOTH under `station.workRoot`, proving the parsed
+///      `StationArgs.roots` map (not just a single legacy path) actually
+///      reaches the live control surface.
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
@@ -123,9 +129,7 @@ void main() {
     expect(down.exitCode, 0, reason: 'graceful stop.\nstderr: ${down.stderr}');
     expect(
       '${down.stdout}',
-      contains(
-        'down: stopped station (pid ${up.pid}) — the lock is released.',
-      ),
+      contains('down: stopped station (pid ${up.pid}) — the lock is released.'),
     );
 
     final exitCode = await up.exitCode.timeout(
@@ -170,17 +174,92 @@ void main() {
     expect('${downAgain.stdout}', contains('already down'));
   }, timeout: const Timeout(Duration(minutes: 3)));
 
-  test('a real OS SIGTERM to the resident process also drains it gracefully '
-      '(exit 0, lock released) — the signal-path control `down` itself '
-      'relies on (StationAttach.stop signals + polls exactly this path)', () async {
-    final workDir = await _bdInitWorkspace('space-up-signal-work-');
-    final stateDir = await _bdInitWorkspace('space-up-signal-state-');
+  test(
+    'a real OS SIGTERM to the resident process also drains it gracefully '
+    '(exit 0, lock released) — the signal-path control `down` itself '
+    'relies on (StationAttach.stop signals + polls exactly this path)',
+    () async {
+      final workDir = await _bdInitWorkspace('space-up-signal-work-');
+      final stateDir = await _bdInitWorkspace('space-up-signal-state-');
+      addTearDown(() async {
+        await workDir.delete(recursive: true);
+        await stateDir.delete(recursive: true);
+      });
+      final lockPath = StationLockService.lockPath(stateDir.path);
+
+      final up = await _spawnSpace([
+        'up',
+        '--dry-run',
+        '--substation',
+        'smoketest',
+        '--workspace',
+        workDir.path,
+        '--state-workspace',
+        stateDir.path,
+        '--control-port',
+        '0',
+      ]);
+      final upIo = _CapturedIo(up);
+      addTearDown(() async {
+        if (await _isAlive(up.pid)) {
+          up.kill(ProcessSignal.sigkill);
+        }
+      });
+
+      final lock = await _untilLockAdvertised(lockPath);
+      final controlUrl = lock['controlUrl']! as String;
+      final token = lock['token']! as String;
+      final statusCode = await _get(
+        Uri.parse('$controlUrl/status'),
+        token: token,
+      );
+      expect(statusCode, HttpStatus.ok, reason: 'GET /status, the real bearer');
+
+      // A settle margin — GENEROUS, not the lifecycle test's 500ms: THAT test's
+      // margin is safe only because the second-`up`-refused + live-`status`
+      // round trips ahead of it already burn several real seconds (each spins
+      // up its own `dart`/`bd` subprocess), which is what actually outlasts
+      // `sources.start()`/`wiring.start()` (a real Dolt-backed workspace boot,
+      // not a fixed-cost step) before this test's SIGTERM. This test has no
+      // such incidental warm-up, so it waits outright (empirically bisected on
+      // this machine: 2s still raced the listener attach, 3-3.5s consistently
+      // didn't — 5s below is that margin plus headroom).
+      await Future<void>.delayed(const Duration(seconds: 5));
+
+      expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
+      final exitCode = await up.exitCode.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          up.kill(ProcessSignal.sigkill);
+          fail(
+            'up did not exit after SIGTERM.\n'
+            'stdout: ${upIo.out}\nstderr: ${upIo.err}',
+          );
+        },
+      );
+      expect(exitCode, 0, reason: 'graceful drain.\nstderr: ${upIo.err}');
+      expect(
+        await File(lockPath).exists(),
+        isFalse,
+        reason: 'the graceful path released the lock',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test('up --dry-run with TWO named --root registrations (tg-7gm) reports '
+      'BOTH under GET /status\'s station.workRoot — the DEFAULT (named after '
+      'the owned --substation) and an EXTRA named root', () async {
+    final workDir = await _bdInitWorkspace('space-up-multiroot-work-');
+    final stateDir = await _bdInitWorkspace('space-up-multiroot-state-');
     addTearDown(() async {
       await workDir.delete(recursive: true);
       await stateDir.delete(recursive: true);
     });
     final lockPath = StationLockService.lockPath(stateDir.path);
 
+    const defaultRoot = '/tmp/space-up-multiroot-default';
+    const extraRoot = '/tmp/space-up-multiroot-extra';
     final up = await _spawnSpace([
       'up',
       '--dry-run',
@@ -192,6 +271,10 @@ void main() {
       stateDir.path,
       '--control-port',
       '0',
+      '--root',
+      'smoketest=$defaultRoot',
+      '--root',
+      'power_station=$extraRoot',
     ]);
     final upIo = _CapturedIo(up);
     addTearDown(() async {
@@ -203,41 +286,25 @@ void main() {
     final lock = await _untilLockAdvertised(lockPath);
     final controlUrl = lock['controlUrl']! as String;
     final token = lock['token']! as String;
-    final statusCode = await _get(
+
+    final status = await _getJson(
       Uri.parse('$controlUrl/status'),
       token: token,
     );
-    expect(statusCode, HttpStatus.ok, reason: 'GET /status, the real bearer');
-
-    // A settle margin — GENEROUS, not the lifecycle test's 500ms: THAT test's
-    // margin is safe only because the second-`up`-refused + live-`status`
-    // round trips ahead of it already burn several real seconds (each spins
-    // up its own `dart`/`bd` subprocess), which is what actually outlasts
-    // `sources.start()`/`wiring.start()` (a real Dolt-backed workspace boot,
-    // not a fixed-cost step) before this test's SIGTERM. This test has no
-    // such incidental warm-up, so it waits outright (empirically bisected on
-    // this machine: 2s still raced the listener attach, 3-3.5s consistently
-    // didn't — 5s below is that margin plus headroom).
-    await Future<void>.delayed(const Duration(seconds: 5));
-
-    expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
-    final exitCode = await up.exitCode.timeout(
-      const Duration(seconds: 20),
-      onTimeout: () {
-        up.kill(ProcessSignal.sigkill);
-        fail(
-          'up did not exit after SIGTERM.\n'
-          'stdout: ${upIo.out}\nstderr: ${upIo.err}',
-        );
-      },
-    );
-    expect(exitCode, 0, reason: 'graceful drain.\nstderr: ${upIo.err}');
+    final station = status['station']! as Map<String, Object?>;
+    final workRoot = station['workRoot'] as String?;
     expect(
-      await File(lockPath).exists(),
-      isFalse,
-      reason: 'the graceful path released the lock',
+      workRoot,
+      allOf(
+        contains('smoketest=$defaultRoot'),
+        contains('power_station=$extraRoot'),
+      ),
+      reason:
+          'both registered roots must reach the live control surface, '
+          'not just the owned substation\'s own\nfull payload: $status\n'
+          'stdout: ${upIo.out}\nstderr: ${upIo.err}',
     );
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 1)));
 }
 
 /// `bd init`s a fresh, hermetic temp workspace (embedded Dolt — no server, no
@@ -313,6 +380,23 @@ Future<int> _get(Uri url, {required String token}) async {
     final response = await request.close();
     await response.drain<void>();
     return response.statusCode;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// A bearer-gated `GET`, decoding the JSON body — the multi-root case (f)
+/// needs the actual `/status` payload (`station.workRoot`), not just
+/// reachability.
+Future<Map<String, Object?>> _getJson(Uri url, {required String token}) async {
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(url);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    expect(response.statusCode, HttpStatus.ok, reason: 'GET $url\n$body');
+    return jsonDecode(body) as Map<String, Object?>;
   } finally {
     client.close(force: true);
   }
