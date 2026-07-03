@@ -11,6 +11,7 @@ environment:
 dependencies:
   args: ^2.6.0
   dart_grid_assets: any
+  genesis_tree: ^0.1.3
   grid_assets: any
   grid_cli: any
   grid_controller: any

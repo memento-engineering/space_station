@@ -5,10 +5,12 @@
 /// the Commands memento wants — the generic CLI-SDK ones (watch/gate/demo and
 /// serve/lease, "leasing is core") from `grid_cli`, plus the asset-exported
 /// Commands from the `power_station` packs ([CodeRunCommand] from the code
-/// asset, [DartCommand] from the DART domain). `bin/space.dart` runs it;
-/// `dart compile exe bin/space.dart -o space` ships it. The construction lives
-/// here in the lib (not on the bin) so a test — or a Flutter app — can build
-/// the runner without running it.
+/// asset, [DartCommand] from the DART domain), plus memento's OWN resident
+/// verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`): `up`/`down`/
+/// `status` — the composed resident station + its thin attach client.
+/// `bin/space.dart` runs it; `dart compile exe bin/space.dart -o space` ships
+/// it. The construction lives here in the lib (not on the bin) so a test — or
+/// a Flutter app — can build the runner without running it.
 library;
 
 import 'package:args/command_runner.dart';
@@ -24,6 +26,10 @@ import 'package:grid_assets/grid_assets.dart'
 import 'package:grid_cli/grid_cli.dart'
     show DemoCommand, GateCommand, LeaseCommand, ServeCommand, WatchCommand;
 
+import 'src/down_command.dart';
+import 'src/status_command.dart';
+import 'src/up_command.dart';
+
 /// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
 /// the power_station assets' exported Commands, with the COMPUTE asset's use
 /// (bounded dispatch + its payload/result codec) assembled into the generic
@@ -32,6 +38,12 @@ CommandRunner<int> buildRunner() =>
     CommandRunner<int>('space', "memento's grid station")
       ..addCommand(WatchCommand())
       ..addCommand(CodeRunCommand())
+      // memento's OWN resident verbs (RS-5b): the composed resident station
+      // (up) + the thin StationAttach renders over it (down/status). `run`
+      // stays untouched transitional scaffolding until RS-8 retires it.
+      ..addCommand(UpCommand())
+      ..addCommand(DownCommand())
+      ..addCommand(StatusCommand())
       // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
       // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
       // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
