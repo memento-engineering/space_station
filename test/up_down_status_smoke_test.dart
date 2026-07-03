@@ -13,18 +13,21 @@ import 'package:test/test.dart';
 ///
 ///  (b) `up --dry-run` boots resident: the station lock exists, advertises a
 ///      REAL loopback control endpoint + bearer token, `GET /status` answers
-///      200 with that token, a real OS SIGTERM drains it gracefully (exit 0,
-///      the lock released);
+///      200 with that token;
 ///  (c) a SECOND `up` against the SAME state store while the first is live
 ///      is refused LOUD (exit 64, naming the live holder + the invariant);
 ///  (d) `status` renders live while up, and falls back to a direct,
 ///      read-only store view labeled `(station: down)` once it isn't;
-///  (e) `down` stops the live station gracefully and no-ops cleanly
-///      (exit 0) when nothing is up.
+///  (e) `down` ITSELF performs the graceful stop of a live station (its
+///      `Stopped` message, exit 0, the lock released, AND the target process
+///      confirmed exited) and no-ops cleanly (exit 0) when nothing is up.
+///      The raw-OS-SIGTERM path (e)'s `down` rides internally is proven as
+///      its OWN case below — the signal-path control `down` depends on.
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
-      'status renders live -> a real SIGTERM drains it (exit 0, lock gone) -> '
-      'status falls back to (station: down) -> down no-ops cleanly', () async {
+      'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
+      'lock released, process exited) -> status falls back to '
+      '(station: down) -> down no-ops cleanly when already down', () async {
     final workDir = await _bdInitWorkspace('space-up-smoke-work-');
     final stateDir = await _bdInitWorkspace('space-up-smoke-state-');
     addTearDown(() async {
@@ -103,14 +106,120 @@ void main() {
 
     // A settle margin: driveStation attaches its signal listener AFTER
     // sources.start()/wiring.start() complete, strictly later than the
-    // control-advertise moment this test already waited on — a real OS
-    // SIGTERM sent before that listener attaches would hit the default
-    // (abrupt) disposition instead of the graceful path (the exact race
-    // grid_cli's own RS-1 suite proves narrowly; this smoke just needs a
-    // safe margin past it, not to re-litigate the race itself).
+    // control-advertise moment this test already waited on — a SIGTERM sent
+    // before that listener attaches (whether raw, or via `down` below) would
+    // hit the default (abrupt) disposition instead of the graceful path (the
+    // exact race grid_cli's own RS-1 suite proves narrowly; this smoke just
+    // needs a safe margin past it, not to re-litigate the race itself).
     await Future<void>.delayed(const Duration(milliseconds: 500));
 
-    // --- (b, cont'd) a REAL OS SIGTERM drains it gracefully ---------------
+    // --- (e) `down` ITSELF performs the graceful stop ----------------------
+    final down = await Process.run(Platform.resolvedExecutable, [
+      'bin/space.dart',
+      'down',
+      '--state-workspace',
+      stateDir.path,
+    ], workingDirectory: Directory.current.path);
+    expect(down.exitCode, 0, reason: 'graceful stop.\nstderr: ${down.stderr}');
+    expect(
+      '${down.stdout}',
+      contains(
+        'down: stopped station (pid ${up.pid}) — the lock is released.',
+      ),
+    );
+
+    final exitCode = await up.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        up.kill(ProcessSignal.sigkill);
+        fail(
+          'up did not exit after `down` reported Stopped.\n'
+          'stdout: ${upIo.out}\nstderr: ${upIo.err}',
+        );
+      },
+    );
+    expect(exitCode, 0, reason: 'graceful drain.\nstderr: ${upIo.err}');
+    expect(
+      await File(lockPath).exists(),
+      isFalse,
+      reason: '`down`\'s graceful stop released the lock',
+    );
+
+    // --- (d, fallback half) `status` falls back once nothing is up -------
+    final downStatus = await Process.run(Platform.resolvedExecutable, [
+      'bin/space.dart',
+      'status',
+      '--state-workspace',
+      stateDir.path,
+      '--workspace',
+      workDir.path,
+      '--substation',
+      'smoketest',
+    ], workingDirectory: Directory.current.path);
+    expect(downStatus.exitCode, 0);
+    expect('${downStatus.stdout}', contains('(station: down)'));
+
+    // --- (e, cont'd) `down` no-ops cleanly when already down --------------
+    final downAgain = await Process.run(Platform.resolvedExecutable, [
+      'bin/space.dart',
+      'down',
+      '--state-workspace',
+      stateDir.path,
+    ], workingDirectory: Directory.current.path);
+    expect(downAgain.exitCode, 0);
+    expect('${downAgain.stdout}', contains('already down'));
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('a real OS SIGTERM to the resident process also drains it gracefully '
+      '(exit 0, lock released) — the signal-path control `down` itself '
+      'relies on (StationAttach.stop signals + polls exactly this path)', () async {
+    final workDir = await _bdInitWorkspace('space-up-signal-work-');
+    final stateDir = await _bdInitWorkspace('space-up-signal-state-');
+    addTearDown(() async {
+      await workDir.delete(recursive: true);
+      await stateDir.delete(recursive: true);
+    });
+    final lockPath = StationLockService.lockPath(stateDir.path);
+
+    final up = await _spawnSpace([
+      'up',
+      '--dry-run',
+      '--substation',
+      'smoketest',
+      '--workspace',
+      workDir.path,
+      '--state-workspace',
+      stateDir.path,
+      '--control-port',
+      '0',
+    ]);
+    final upIo = _CapturedIo(up);
+    addTearDown(() async {
+      if (await _isAlive(up.pid)) {
+        up.kill(ProcessSignal.sigkill);
+      }
+    });
+
+    final lock = await _untilLockAdvertised(lockPath);
+    final controlUrl = lock['controlUrl']! as String;
+    final token = lock['token']! as String;
+    final statusCode = await _get(
+      Uri.parse('$controlUrl/status'),
+      token: token,
+    );
+    expect(statusCode, HttpStatus.ok, reason: 'GET /status, the real bearer');
+
+    // A settle margin — GENEROUS, not the lifecycle test's 500ms: THAT test's
+    // margin is safe only because the second-`up`-refused + live-`status`
+    // round trips ahead of it already burn several real seconds (each spins
+    // up its own `dart`/`bd` subprocess), which is what actually outlasts
+    // `sources.start()`/`wiring.start()` (a real Dolt-backed workspace boot,
+    // not a fixed-cost step) before this test's SIGTERM. This test has no
+    // such incidental warm-up, so it waits outright (empirically bisected on
+    // this machine: 2s still raced the listener attach, 3-3.5s consistently
+    // didn't — 5s below is that margin plus headroom).
+    await Future<void>.delayed(const Duration(seconds: 5));
+
     expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
     final exitCode = await up.exitCode.timeout(
       const Duration(seconds: 20),
@@ -128,31 +237,7 @@ void main() {
       isFalse,
       reason: 'the graceful path released the lock',
     );
-
-    // --- (d, fallback half) `status` falls back once nothing is up -------
-    final downStatus = await Process.run(Platform.resolvedExecutable, [
-      'bin/space.dart',
-      'status',
-      '--state-workspace',
-      stateDir.path,
-      '--workspace',
-      workDir.path,
-      '--substation',
-      'smoketest',
-    ], workingDirectory: Directory.current.path);
-    expect(downStatus.exitCode, 0);
-    expect('${downStatus.stdout}', contains('(station: down)'));
-
-    // --- (e) `down` no-ops cleanly when nothing is up ---------------------
-    final downAgain = await Process.run(Platform.resolvedExecutable, [
-      'bin/space.dart',
-      'down',
-      '--state-workspace',
-      stateDir.path,
-    ], workingDirectory: Directory.current.path);
-    expect(downAgain.exitCode, 0);
-    expect('${downAgain.stdout}', contains('already down'));
-  }, timeout: const Timeout(Duration(minutes: 3)));
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 /// `bd init`s a fresh, hermetic temp workspace (embedded Dolt — no server, no
