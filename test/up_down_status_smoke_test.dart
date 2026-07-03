@@ -241,7 +241,7 @@ void main() {
 }
 
 /// `bd init`s a fresh, hermetic temp workspace (embedded Dolt — no server, no
-/// credentials; mirrors `grid_controller`'s `HermeticWorkspace` test fixture).
+/// credentials; mirrors `beads_dart`'s `HermeticWorkspace` test fixture).
 /// Never touches the live `tg` store.
 Future<Directory> _bdInitWorkspace(String prefix) async {
   final dir = await Directory.systemTemp.createTemp(prefix);

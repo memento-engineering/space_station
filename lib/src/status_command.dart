@@ -11,15 +11,15 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
-import 'package:grid_cli/grid_cli.dart'
-    show AttachResult, Down, StationAttach, Stale, Unauthorized, Up;
-import 'package:grid_controller/grid_controller.dart'
+import 'package:beads_dart/beads_dart.dart'
     show
         BdCliService,
         BeadsWorkspace,
         CliSnapshotReader,
         GraphSnapshot,
         ProcessBdRunner;
+import 'package:grid_cli/grid_cli.dart'
+    show AttachResult, Down, StationAttach, Stale, Unauthorized, Up;
 import 'package:grid_runtime/grid_runtime.dart' show BeadOwnershipPredicate;
 
 import 'attach_support.dart';

@@ -24,7 +24,13 @@
 		<string>--substation</string>
 		<string>CHANGE_ME-substation</string>
 		<string>--root</string>
-		<string>/CHANGE_ME/path/to/the_grid</string>
+		<string>CHANGE_ME-substation=/CHANGE_ME/path/to/the_grid</string>
+		<string>--root</string>
+		<string>power_station=/CHANGE_ME/path/to/power_station</string>
+		<string>--root</string>
+		<string>space_station=/CHANGE_ME/path/to/space_station</string>
+		<string>--root</string>
+		<string>genesis=/CHANGE_ME/path/to/genesis</string>
 		<string>--no-dry-run</string>
 	</array>
 

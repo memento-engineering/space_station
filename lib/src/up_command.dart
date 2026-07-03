@@ -1,29 +1,30 @@
 /// `space up` — RS-5b (tg-3s8.6, `the_grid/docs/SCRATCH-resident-station.md`
 /// D-R1/D-C3): the resident station.
 ///
-/// EXACTLY [CodeRunCommand]'s composed pieces (station flags MINUS any bead
-/// flag — a resident verb takes no drive-list, ever, per D-R4/D-R1: the ready
-/// frontier of the owned substation IS the drive set; a `--bead` would be a
-/// trigger surface a misbehaving agent or a confused human could pull) —
-/// boot-eager `AgentHarnessRegistry.validate`, `discoverWorkspaces` →
-/// `buildControllers` → `buildLiveWiring` → the code asset's own
-/// `ServiceBundle` (`GitSourceControl`) → `composeStation` + `wrapRoot`
-/// mounting `InheritedSeed<AgentConfig>` + `InheritedSeed<AgentHarnessRegistry>`
-/// → `driveStation` — but with [StationArgs.resident] ON so `driveStation`
-/// arms RS-3 (the ready-frontier drive set), acquires the RS-2 station lock,
-/// and binds the RS-4 `StationControl` surface. Foreground-resident: no
+/// The station flags MINUS any bead flag (a resident verb takes no
+/// drive-list, ever, per D-R4/D-R1: the ready frontier of the owned
+/// substation IS the drive set; a `--bead` would be a trigger surface a
+/// misbehaving agent or a confused human could pull) — boot-eager
+/// `AgentHarnessRegistry.validate`, `discoverWorkspaces` → `buildControllers`
+/// → `buildLiveWiring` → the code asset's own per-substation `ServiceBundle`
+/// (`GitSourceControl` over the DEFAULT root + EVERY EXTRA registered root,
+/// tg-7gm — `sourceControlsByRoot`) → `composeStation` + `wrapRoot` mounting
+/// `InheritedSeed<AgentConfig>` + `InheritedSeed<AgentHarnessRegistry>` →
+/// `driveStation` — but with [StationArgs.resident] ON so `driveStation` arms
+/// RS-3 (the ready-frontier drive set), acquires the RS-2 station lock, and
+/// binds the RS-4 `StationControl` surface. Foreground-resident: no
 /// self-daemonization, no double-fork — the supervisor (launchd, RS-6) owns
-/// backgrounding; `up` just parks on `driveStation`'s termination-signal wait
-/// exactly like `run` does.
+/// backgrounding; `up` just parks on `driveStation`'s termination-signal wait.
 ///
-/// `run` ([CodeRunCommand]) stays byte-identical and untouched — it is
-/// transitional scaffolding until RS-8 retires it (D-R1).
+/// `run` (`CodeRunCommand`) is RETIRED (RS-8, tg-opp) — `up`'s composed
+/// pieces are the only consumer left; this file is no longer a mirror of it.
 library;
 
 import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
+import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -38,17 +39,16 @@ import 'package:grid_assets/grid_assets.dart'
         buildCodeRegistry,
         kCodeCircuit;
 import 'package:grid_cli/grid_cli.dart';
-import 'package:grid_controller/grid_controller.dart' show Bead;
 import 'package:grid_engine/grid_engine.dart';
 
-/// The bead→circuit policy for the `code` asset (mirrors [CodeRunCommand]'s
-/// own private tear-off — all coding work roots the `code` circuit).
+/// The bead→circuit policy for the `code` asset — all coding work roots the
+/// `code` circuit.
 Circuit _codeCircuit(Bead bead) => kCodeCircuit;
 
 /// `space up`: boots the resident station.
 class UpCommand extends Command<int> {
   /// Creates the up command (the station flags MINUS `--bead`, plus the
-  /// agent scope's — identical surface to [CodeRunCommand]'s).
+  /// agent scope's).
   UpCommand() {
     _addResidentStationFlags(argParser);
     argParser
@@ -85,9 +85,9 @@ class UpCommand extends Command<int> {
 
   @override
   final String description =
-      'Boot the resident station (RS-5b): the SAME composed pieces `run` '
-      'assembles (validated harness scope, discovered workspaces, live '
-      'wiring, the code asset\'s registry + git SourceControl), but ALWAYS '
+      'Boot the resident station (RS-5b): validated harness scope, '
+      'discovered workspaces, live wiring, the code asset\'s registry + git '
+      'SourceControl (per registered root, tg-7gm), but ALWAYS '
       'resident — the ready frontier of the owned substation IS the drive '
       'set (RS-3; no --bead, ever), guarded by the ONE-supervisor-per-store '
       'lock (RS-2) and observable over the read-only StationControl surface '
@@ -137,7 +137,7 @@ class UpCommand extends Command<int> {
 
     // Held outside the try so a refusal AFTER the controllers exist still
     // releases them (the Dolt pool would otherwise keep the process alive —
-    // the same station_runner.dart lesson CodeRunCommand carries).
+    // the same lesson station_runner.dart's own doc-comment example carries).
     StationSources? sources;
     try {
       // --- the station-runner pieces, in order (the inversion) ---
@@ -158,10 +158,24 @@ class UpCommand extends Command<int> {
       );
 
       // The asset's OWN per-substation services: the git SourceControl over
-      // the leased execution machinery + registered root (provisioning works
-      // even when LAND is off — gitOps/prOpener are non-null only when
-      // --land armed a live run; null ⇒ canLand false ⇒ commit-only
-      // posture).
+      // the leased execution machinery + EVERY registered root (tg-7gm) —
+      // the owned substation's OWN name's entry is its DEFAULT root
+      // ([live.workRoot]); any OTHER registered name is an EXTRA root a bead
+      // opts into via its `metadata.grid.root`, resolved through
+      // `ServiceBundle.sourceControlFor` (provisioning works even when LAND
+      // is off — gitOps/prOpener are non-null only when --land armed a live
+      // run; null ⇒ canLand false ⇒ commit-only posture).
+      final defaultRootName = args.substations.first;
+      final sourceControlsByRoot = <String, SourceControl>{
+        for (final entry in live.roots.entries)
+          if (entry.key != defaultRootName)
+            entry.key: GitSourceControl(
+              gitOps: live.gitOps,
+              prOpener: live.prOpener,
+              provisioner: live.git,
+              root: entry.value,
+            ),
+      };
       final services = ServiceBundle(
         sourceControl: GitSourceControl(
           gitOps: live.gitOps,
@@ -169,6 +183,7 @@ class UpCommand extends Command<int> {
           provisioner: live.git,
           root: live.workRoot,
         ),
+        sourceControlsByRoot: sourceControlsByRoot,
       );
 
       final wiring = composeStation(
@@ -183,6 +198,12 @@ class UpCommand extends Command<int> {
             // engine's own narrowing to driveable-work TYPES (task/bug/
             // feature/chore) rides `resident`, never `driveList`.
             resident: true,
+            // The registered root NAMES (tg-7gm) gate `WorkList`'s mount
+            // boundary: an owned bead whose `metadata.grid.root` selection
+            // isn't in this set is a LOUD per-bead skip, never a
+            // station-wide gate. Empty (no --root at all) stays
+            // UNCONSTRAINED — matches pre-multi-root behavior.
+            registeredRoots: live.roots.keys.toSet(),
           ),
         ],
         git: live.git,
@@ -191,7 +212,10 @@ class UpCommand extends Command<int> {
         freshnessBarrier: live.freshnessBarrier,
         resolver: const CircuitResolver(_codeCircuit),
         registry: buildCodeRegistry(devRoot: live.workRoot.path),
-        services: services,
+        // ONE substation composed (this resident verb owns exactly one), so
+        // ITS bundle is the only entry — tg-7gm's `services` param is keyed
+        // by `SubstationConfig.substationId`, not by root name.
+        services: {args.substations.first: services},
         // D-C rung 1: the asset mounts its station-default config VALUES as
         // ancestors of everything (Theme-of-context; the effect boundary
         // resolves the ladder per work).
@@ -261,11 +285,18 @@ void _addResidentStationFlags(ArgParser parser) {
       defaultsTo: 'subprocess',
       help: 'The runtime provider for agent spawns.',
     )
-    ..addOption(
+    ..addMultiOption(
       'root',
       help:
-          'The registered worktree root checkout. Required to ARM a non-dry '
-          'run; never created by the runner.',
+          'A registered worktree root checkout (repeatable, tg-7gm): '
+          '`--root <name>=<path>[@head]` registers <path> under <name> — a '
+          'name equal to an owned --substation becomes that substation\'s '
+          'DEFAULT root; any OTHER name is an EXTRA root a bead opts into via '
+          'its `metadata.grid.root` (e.g. a `tg` bead building `power_station` '
+          'names `--root power_station=<path>` + `grid.root: power_station`). '
+          'Bare `--root <path>` (no `=`) is the single-root shorthand — '
+          'back-compatible: registers under the first --substation. At least '
+          'one is required to ARM a non-dry run; never created by the runner.',
     )
     ..addOption(
       'head',
@@ -335,16 +366,34 @@ void _addResidentStationFlags(ArgParser parser) {
 /// Builds [StationArgs] from the flags [_addResidentStationFlags] added —
 /// [StationArgs.resident] is ALWAYS true and [StationArgs.targetBeads] is
 /// ALWAYS empty (there is no `--bead` option on this parser to read from;
-/// mirrors [StationArgs.from] otherwise).
+/// mirrors [StationArgs.from] otherwise, including its `--root` parse
+/// (`<name>=<path>[@head]`, tg-7gm) into [StationArgs.roots]; the deprecated
+/// `rootPath` alias is NOT used here).
 StationArgs _residentStationArgsFrom(ArgResults args) {
   final seconds = args.option('for-seconds');
+  final substations = <String>{
+    ...args.multiOption('substation'),
+    ...args.multiOption('owner'),
+  }..removeWhere((r) => r.trim().isEmpty);
+  final roots = <String, RootSpec>{};
+  for (final raw in args.multiOption('root')) {
+    if (raw.trim().isEmpty) continue;
+    final entry = RootSpec.parse(
+      raw,
+      defaultName: substations.isNotEmpty ? substations.first : '',
+    );
+    if (roots.containsKey(entry.key)) {
+      throw FormatException(
+        'space up: --root "$raw" registers name "${entry.key}" more than '
+        'once',
+      );
+    }
+    roots[entry.key] = entry.value;
+  }
   return StationArgs(
-    substations: <String>{
-      ...args.multiOption('substation'),
-      ...args.multiOption('owner'),
-    }..removeWhere((r) => r.trim().isEmpty),
+    substations: substations,
     provider: RuntimeProviderKind.parse(args.option('provider')),
-    rootPath: args.option('root'),
+    roots: roots,
     head: args.option('head'),
     workspacePath: args.option('workspace'),
     stateWorkspacePath: args.option('state-workspace'),

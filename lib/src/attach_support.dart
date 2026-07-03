@@ -6,7 +6,7 @@
 /// re-derives arming/ownership — the lock is the only address that matters.
 library;
 
-import 'package:grid_controller/grid_controller.dart' show BeadsWorkspace;
+import 'package:beads_dart/beads_dart.dart' show BeadsWorkspace;
 
 /// Adds the ONE flag `down`/`status` need to find the lock: the SAME
 /// `--state-workspace` `up` was given. Unlike `up`'s station flags, this is
