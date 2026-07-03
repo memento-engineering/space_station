@@ -33,3 +33,8 @@ space
 # IDE noise
 *.iml
 .idea/
+
+# bd/harness integration scaffolding (generated per checkout — adopt deliberately, never by sweep)
+.claude/
+.codex/
+.agents/

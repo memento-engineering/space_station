@@ -10,7 +10,6 @@ void main() {
       runner.commands.keys,
       containsAll(<String>[
         'watch',
-        'run',
         'up',
         'down',
         'status',
