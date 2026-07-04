@@ -51,6 +51,7 @@ CommandRunner<int> buildRunner() =>
       // assembles it.
       ..addCommand(DartCommand())
       ..addCommand(GateCommand())
+      ..addCommand(ReworkCommand())
       ..addCommand(DemoCommand())
       // serve/lease are GENERIC core commands ("leasing is core"); the
       // COMPUTE asset's use (bounded dispatch + its payload/result codec) is
