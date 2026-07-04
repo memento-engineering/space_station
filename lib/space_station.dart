@@ -2,12 +2,14 @@
 /// the_grid `docs/SCRATCH-dart-runner-and-cli-sdk.md`).
 ///
 /// A station is a user-composed, AOT-compiled runner: [buildRunner] assembles
-/// the Commands memento wants — the generic CLI-SDK ones (watch/gate/demo and
-/// serve/lease, "leasing is core") from `grid_cli`, plus the asset-exported
-/// [DartCommand] from the DART domain, plus memento's OWN resident verbs
-/// (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`): `up`/`down`/
-/// `status` — the composed resident station + its thin attach client (RS-8
-/// retired the transitional `run`/`CodeRunCommand` once `up` proved out).
+/// the Commands memento wants — the generic CLI-SDK ones (watch/gate/demo)
+/// from `grid_cli`, plus serve/lease ("leasing is core") from power_station's
+/// `federated_grid_assets` (AL-5c, D-A9 — moved out of `grid_cli`), plus the
+/// asset-exported [DartCommand] from the DART domain, plus memento's OWN
+/// resident verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`):
+/// `up`/`down`/`status` — the composed resident station + its thin attach
+/// client (RS-8 retired the transitional `run`/`CodeRunCommand` once `up`
+/// proved out).
 /// `bin/space.dart` runs it; `dart compile exe bin/space.dart -o space` ships
 /// it. The construction lives here in the lib (not on the bin) so a test — or
 /// a Flutter app — can build the runner without running it.
@@ -15,6 +17,8 @@ library;
 
 import 'package:args/command_runner.dart';
 import 'package:dart_grid_assets/dart_grid_assets.dart' show DartCommand;
+import 'package:federated_grid_assets/federated_grid_assets.dart'
+    show LeaseCommand, ServeCommand;
 import 'package:grid_assets/grid_assets.dart'
     show
         CommandResult,
@@ -23,7 +27,7 @@ import 'package:grid_assets/grid_assets.dart'
         computeDispatchHandler,
         kComputeKind;
 import 'package:grid_cli/grid_cli.dart'
-    show DemoCommand, GateCommand, LeaseCommand, ReworkCommand, ServeCommand, WatchCommand;
+    show DemoCommand, GateCommand, ReworkCommand, WatchCommand;
 
 import 'src/down_command.dart';
 import 'src/status_command.dart';
