@@ -145,7 +145,8 @@ class UpCommand extends Command<int> {
       // --- the station-runner pieces, in order (the inversion) ---
       validateArming(args);
       final ws = discoverWorkspaces(
-        workspacePath: args.workspacePath,
+        workspaces: args.workspaces,
+        defaultSubstation: args.substations.first,
         stateWorkspacePath: args.stateWorkspacePath,
       );
       sources = await buildControllers(
