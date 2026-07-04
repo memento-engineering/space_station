@@ -23,7 +23,7 @@ import 'package:grid_assets/grid_assets.dart'
         computeDispatchHandler,
         kComputeKind;
 import 'package:grid_cli/grid_cli.dart'
-    show DemoCommand, GateCommand, LeaseCommand, ServeCommand, WatchCommand;
+    show DemoCommand, GateCommand, LeaseCommand, ReworkCommand, ServeCommand, WatchCommand;
 
 import 'src/down_command.dart';
 import 'src/status_command.dart';
