@@ -2,167 +2,169 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// RS-5b rework round 1 (tg-3s8.6): offline coverage for `UpCommand`'s
-/// boot-eager validation branches (`up_command.dart`'s `run()`, mirroring
-/// `CodeRunCommand`'s) — the `--openai-base`/`--swift-base` mutual
-/// exclusion, a malformed endpoint url, and the boot-eager
-/// `AgentHarnessRegistry.validate` legality check. All three RETURN before
-/// `validateArming`/`discoverWorkspaces`/`buildControllers` run, so none of
-/// them touch a beads workspace or the station lock — no `--workspace`,
-/// `--state-workspace`, `--substation`, or `--root` needed. Still exercised
-/// over the real `space` CLI (`bin/space.dart`) for the same reason
-/// `up_down_status_smoke_test.dart` is: `Stdout`/`Stderr` cannot be faked
-/// in-process (no public constructor), so a real process is this codebase's
-/// only capture seam for a command's rendered refusal text — but unlike that
-/// file's full lifecycle boot/shutdown smoke, every case here returns
-/// immediately (no lock, no boot, no wait).
+/// RS-5b / H2 (tg-r81): offline coverage for `UpCommand`'s boot-eager
+/// validation + v3 arming branches (`up_command.dart`'s `run()`) — the
+/// `--openai-base`/`--swift-base` mutual exclusion, a malformed endpoint url,
+/// the boot-eager `AgentHarnessRegistry.validate` legality check, and the
+/// stores-at-roots arming gates (`--grid-home` + `--substation <name>=<root>`,
+/// the exact-at-root work-store refusal). Every case here returns BEFORE the
+/// station lock is acquired or the tree mounts — no lock, no boot, no wait.
 ///
-/// Track G-space (tg-33n): the resident-station flags + `StationArgs`
-/// construction now live in `space_delegate.dart` as space's OWN CLI surface
-/// (`addSpaceStationFlags`/`spaceStationArgsFrom`) — the hand-mirror
-/// `_addResidentStationFlags`/`_residentStationArgsFrom` are GONE (absorbs
-/// tg-da7). This coverage stays process-level (`space up ...`) because
-/// `Stdout`/`Stderr` have no in-process fake — the rendered refusal text is
-/// only capturable over a real process. The three PARSE-SUCCEEDS
-/// shapes (bare shorthand / `name=path` / `name=path@head`) are proven by
-/// `--no-dry-run`ing PAST the `--root` gate: a parse failure would throw an
-/// uncaught `FormatException` (see the duplicate-name case) or trip the
-/// `requires --root` refusal below — reaching the NEXT gate
-/// (`requires --state-workspace`) instead is the observable proof the
-/// `--root` value parsed clean, with no real workspace ever touched.
+/// Exercised over the real `space` CLI (`bin/space.dart`) because
+/// `Stdout`/`Stderr` cannot be faked in-process (no public constructor), so a
+/// real process is this codebase's only capture seam for a command's rendered
+/// refusal text.
+///
+/// Track G-space / H2: the resident-station flags + config construction live in
+/// `space_delegate.dart` as space's OWN v3 CLI surface
+/// (`addSpaceStationFlags` / `spaceStationConfigFrom`) — no `StationArgs`, no
+/// `RootSpec`, no `--workspace` axis. A substation is a name AND its ONE root,
+/// paired in `--substation <name>=<root>`.
 void main() {
-  test(
-    '--openai-base + --swift-base together is refused LOUD (exit 64)',
-    () async {
+  group('boot-eager agent-scope validation (returns before any config)', () {
+    test(
+      '--openai-base + --swift-base together is refused LOUD (exit 64)',
+      () async {
+        final result = await _runUp([
+          '--openai-base',
+          'http://localhost:1234',
+          '--swift-base',
+          'http://localhost:5678',
+        ]);
+        expect(result.exitCode, 64);
+        expect(
+          '${result.stderr}',
+          contains('space up: pass --openai-base OR --swift-base, not both.'),
+        );
+      },
+    );
+
+    test('a malformed --openai-base url is refused LOUD (exit 64)', () async {
+      final result = await _runUp(['--openai-base', 'not-a-url']);
+      expect(result.exitCode, 64);
+      expect(
+        '${result.stderr}',
+        contains('space up: --openai-base is not an absolute url: "not-a-url"'),
+      );
+    });
+
+    test('a harness x target combo the registry rejects is refused LOUD (exit '
+        '64) — the boot-eager AgentHarnessRegistry.validate check', () async {
       final result = await _runUp([
-        '--openai-base',
-        'http://localhost:1234',
+        '--harness',
+        'claude',
         '--swift-base',
-        'http://localhost:5678',
+        'http://localhost:4321',
       ]);
       expect(result.exitCode, 64);
       expect(
         '${result.stderr}',
-        contains('space up: pass --openai-base OR --swift-base, not both.'),
-      );
-    },
-  );
-
-  test('a malformed --openai-base url is refused LOUD (exit 64)', () async {
-    final result = await _runUp(['--openai-base', 'not-a-url']);
-    expect(result.exitCode, 64);
-    expect(
-      '${result.stderr}',
-      contains('space up: --openai-base is not an absolute url: "not-a-url"'),
-    );
-  });
-
-  test('a harness x target combo the registry rejects is refused LOUD (exit '
-      '64) — the boot-eager AgentHarnessRegistry.validate check', () async {
-    final result = await _runUp([
-      '--harness',
-      'claude',
-      '--swift-base',
-      'http://localhost:4321',
-    ]);
-    expect(result.exitCode, 64);
-    expect(
-      '${result.stderr}',
-      allOf(
-        contains('space up: harness "claude" cannot reach'),
-        contains('fail-closed'),
-      ),
-    );
-  });
-
-  test(
-    'a live arm (--no-dry-run) with NO --root at all is refused LOUD (exit '
-    '64) — validateArming\'s root gate, unchanged by the tg-7gm grammar',
-    () async {
-      final result = await _runUp(['--substation', 'foo', '--no-dry-run']);
-      expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        contains('a non-dry (live) run requires --root'),
-      );
-    },
-  );
-
-  group('the tg-7gm --root grammar parses (proven by reaching the NEXT '
-      'gate, --state-workspace, rather than being refused for a missing '
-      '--root)', () {
-    test('a bare --root <path> (no "=") — the single-root shorthand', () async {
-      final result = await _runUp([
-        '--substation',
-        'foo',
-        '--no-dry-run',
-        '--root',
-        '/tmp/some/path',
-      ]);
-      expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        contains('a non-dry (live) run requires --state-workspace'),
-      );
-    });
-
-    test('"--root <name>=<path>" — an explicitly named root', () async {
-      final result = await _runUp([
-        '--substation',
-        'foo',
-        '--no-dry-run',
-        '--root',
-        'foo=/tmp/some/path',
-      ]);
-      expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        contains('a non-dry (live) run requires --state-workspace'),
-      );
-    });
-
-    test('"--root <name>=<path>@<head>" — a per-root assigned head', () async {
-      final result = await _runUp([
-        '--substation',
-        'foo',
-        '--no-dry-run',
-        '--root',
-        'foo=/tmp/some/path@some-branch',
-      ]);
-      expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        contains('a non-dry (live) run requires --state-workspace'),
+        allOf(
+          contains('space up: harness "claude" cannot reach'),
+          contains('fail-closed'),
+        ),
       );
     });
   });
 
-  test('registering the SAME --root name twice is refused LOUD: '
-      'spaceStationArgsFrom throws a FormatException BEFORE the '
-      'try/catch in run() that maps StationRefusal -> (message, code) — an '
-      'uncaught exception, not exit 64 (a config defect the operator should '
-      'see immediately, not silently overwrite)', () async {
-    final result = await _runUp([
-      '--substation',
-      'foo',
-      '--root',
-      'foo=/tmp/a',
-      '--root',
-      'foo=/tmp/b',
-    ]);
-    expect(result.exitCode, isNot(0));
-    expect(
-      '${result.stderr}',
-      contains(
-        'FormatException: space up: --root "foo=/tmp/b" registers name '
-        '"foo" more than once',
-      ),
-    );
+  group('v3 stores-at-roots arming (returns before the lock / tree mount)', () {
+    test('NO --grid-home and NO --substation is refused LOUD (exit 64) — v3 §0: '
+        'no default root, no default substation', () async {
+      final result = await _runUp([]);
+      expect(result.exitCode, 64);
+      expect(
+        '${result.stderr}',
+        allOf(
+          contains('--grid-home'),
+          contains('--substation <name>=<root>'),
+          contains('required to ARM'),
+        ),
+      );
+    });
+
+    test('--grid-home present but NO --substation is refused LOUD (exit 64)',
+        () async {
+      final result = await _runUp(['--grid-home', '/tmp/space-up-nosub']);
+      expect(result.exitCode, 64);
+      expect('${result.stderr}', contains('required to ARM'));
+    });
+
+    test('a --substation with no "=" (unpaired name) is a LOUD FormatException '
+        '— a config defect the operator sees immediately, not exit 64', () async {
+      final result = await _runUp([
+        '--grid-home',
+        '/tmp/space-up-unpaired',
+        '--substation',
+        'lonely',
+      ]);
+      expect(result.exitCode, isNot(0));
+      expect(
+        '${result.stderr}',
+        contains(
+          'FormatException: space up: --substation "lonely" must pair a name '
+          'with its ONE root',
+        ),
+      );
+    });
+
+    test('registering the SAME --substation name twice is a LOUD FormatException '
+        '(never a silent overwrite)', () async {
+      final result = await _runUp([
+        '--grid-home',
+        '/tmp/space-up-dup',
+        '--substation',
+        'foo=/tmp/a',
+        '--substation',
+        'foo=/tmp/b',
+      ]);
+      expect(result.exitCode, isNot(0));
+      expect(
+        '${result.stderr}',
+        contains(
+          'FormatException: space up: --substation "foo=/tmp/b" registers name '
+          '"foo" more than once',
+        ),
+      );
+    });
+
+    test('a RELATIVE substation root is refused LOUD (exit 64) — cwd-relative '
+        'roots re-import the ambience v3 kills', () async {
+      final result = await _runUp([
+        '--grid-home',
+        '/tmp/space-up-rel',
+        '--substation',
+        'foo=relative/path',
+      ]);
+      expect(result.exitCode, 64);
+      expect(
+        '${result.stderr}',
+        allOf(contains('space up:'), contains('ABSOLUTE')),
+      );
+    });
+
+    test('an absolute substation root with NO `.beads/` work store is refused '
+        'LOUD (exit 1) — exact-at-root, no walk-up (grid_sdk StoreLocator)',
+        () async {
+      final result = await _runUp([
+        '--grid-home',
+        '/tmp/space-up-nostore',
+        '--substation',
+        'foo=/tmp/space-up-nonexistent-work-root-xyz',
+      ]);
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stderr}',
+        allOf(
+          contains('space up:'),
+          contains('no work store'),
+          contains('/tmp/space-up-nonexistent-work-root-xyz'),
+        ),
+      );
+    });
   });
 }
 
-/// Runs `space up` with [args] (no station flags — every case here refuses
-/// before any workspace IO) from THIS package's root, directly over `dart`
+/// Runs `space up` with [args] from THIS package's root, directly over `dart`
 /// (no `dart run` wrapper — mirrors `up_down_status_smoke_test.dart`).
 Future<ProcessResult> _runUp(List<String> args) => Process.run(
   Platform.resolvedExecutable,
