@@ -9,12 +9,18 @@
 /// resident verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`):
 /// `up`/`down`/`status`.
 ///
-/// Track G-space (tg-33n): the resident station is now **authored as a Seed** —
-/// [SpaceDelegate], a `grid_sdk` `GridDelegate` subclass carrying space's v3 §2
-/// composition tree and its OWN CLI surface (the hand-mirror of `grid_cli`'s
-/// station flags is gone; absorbs tg-da7). `up` re-seats over it; see
-/// `src/space_delegate.dart` for the transitional-seam note (the live-drive
-/// bridge to `runGrid` is pending engine work in `grid_sdk`/`grid_engine`).
+/// Track G-space / H2 (tg-33n → tg-r81): the resident station is **authored as
+/// a Seed** — [SpaceDelegate], a `grid_sdk` `GridDelegate` subclass carrying
+/// space's v3 §2 composition tree and its OWN CLI surface (the hand-mirror of
+/// `grid_cli`'s station flags is gone; absorbs tg-da7). H2 cut the last wrapper:
+/// `up` now **drives the C/D-era pieces** — `runGrid(SpaceDelegate())` over
+/// stores at roots — and nothing here imports the old station-runner kill-list
+/// (`StationArgs` / `RootSpec` / `composeStation` / `driveStation` /
+/// `serviceBundleMapFor`; DoD#6). `grid_cli` is consumed only for the four
+/// re-seated verbs (watch/gate/rework/demo) + the RS-2/RS-4 lock/control/attach
+/// survivors. The engine's `WorkList`/kernel binding into the tree (live work
+/// driving) is the pending `runGrid`→kernel bridge — held for the human gate
+/// (Track J); see `src/space_delegate.dart` / `src/up_command.dart`.
 ///
 /// `bin/space.dart` runs it; `dart compile exe bin/space.dart -o space` ships
 /// it. The construction lives here in the lib (not on the bin) so a test — or

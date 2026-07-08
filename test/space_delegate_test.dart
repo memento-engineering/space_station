@@ -1,20 +1,23 @@
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
-    show AgentConfig, AgentHarnessRegistry, ProviderManaged;
+    show AgentConfig, ProviderManaged;
 import 'package:grid_runtime/grid_runtime.dart'
     show PrOpener, PullRequestRef, PullRequestResult, RootCheckout;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station/src/space_delegate.dart';
 import 'package:test/test.dart';
 
-/// Track G-space (tg-33n): offline coverage for [SpaceDelegate] — space_station
-/// authored as a Seed (the v3 §2 tree). Pure + offline: the delegate's [build]
-/// tree is mounted in a bare genesis tree (no kernel, no live git/claude —
-/// null provisioner/gitOps is the dry authoring where the layout still
-/// resolves), and its asset-seam members are read back directly. The Track F
-/// assets themselves (GitGridAssets resolving canLand, worktree layout) are
-/// proven in power_station; this proves space COMPOSES them into a valid v3
-/// tree AND owns the seam `space up` drives through.
+/// Track G-space / H2 (tg-r81): offline coverage for [SpaceDelegate] —
+/// space_station authored as a Seed (the v3 §2 tree). Pure + offline: the
+/// delegate's [build] tree is mounted in a bare genesis tree (no kernel, no
+/// live git/claude — null provisioner/gitOps is the dry authoring where the
+/// layout still resolves — Track F), the same tree `runGrid(SpaceDelegate())`
+/// mounts under `space up`. The Track F assets themselves (GitGridAssets
+/// resolving canLand, worktree layout) are proven in power_station; this proves
+/// space COMPOSES them into a valid v3 tree. The old asset seam
+/// (`circuitResolver` / `codeRegistry` / `wrapRoot` / `serviceBundleMapFor`)
+/// that fed the deleted `composeStation` boot path is GONE (H2, DoD#6) — the
+/// per-substation git is an asset in [build], nothing more.
 void main() {
   RootCheckout root(String name, String path) =>
       RootCheckout(path: path, substation: name, defaultBranch: 'main');
@@ -89,31 +92,14 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
     });
+
+    test('the overridden `root` getter surfaces the grid home (not the base\'s '
+        'no-default-root throw)', () {
+      expect(delegate(gridRoot: '/home/space').root, '/home/space');
+    });
   });
 
-  group('SpaceDelegate — the asset seam `space up` drives through', () {
-    test('wrapRoot mounts the station-default AgentConfig + harness registry as '
-        'ancestors (D-C rung 1) — both reach a leaf below', () {
-      final d = delegate();
-      AgentConfig? cfg;
-      AgentHarnessRegistry? reg;
-      _mount(
-        d.wrapRoot(
-          _Probe((ctx) {
-            cfg = ctx.getInheritedSeedOfExactType<AgentConfig>();
-            reg = ctx.getInheritedSeedOfExactType<AgentHarnessRegistry>();
-          }),
-        ),
-      );
-      expect(cfg, same(d.agentConfig));
-      expect(reg, same(d.harnesses));
-      expect(reg!.ids, contains('claude'));
-    });
-
-    test('codeRegistry builds a capability registry rooted at the devRoot', () {
-      expect(delegate().codeRegistry('/work/tg'), isNotNull);
-    });
-
+  group('SpaceDelegate — the station-default agent scope', () {
     test('harnesses defaults to the first-party claude set', () {
       expect(delegate().harnesses.ids, contains('claude'));
     });
@@ -138,24 +124,6 @@ class _Author extends StatelessSeed {
   @override
   Seed build(TreeContext context) =>
       delegate.build(context, const sdk.GridConfiguration());
-}
-
-/// A terminal leaf that runs [onBuild] against a live TreeContext (inherited
-/// lookups are valid only while mounted).
-class _Probe extends StatelessSeed {
-  const _Probe(this.onBuild);
-
-  final void Function(TreeContext) onBuild;
-
-  @override
-  Seed build(TreeContext context) {
-    onBuild(context);
-    return const _Leaf();
-  }
-}
-
-class _Leaf extends MultiChildSeed {
-  const _Leaf() : super(children: const []);
 }
 
 /// A non-throwing PR opener (the land arm only needs a non-null opener to mount

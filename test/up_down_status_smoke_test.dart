@@ -4,54 +4,58 @@ import 'dart:io';
 import 'package:grid_cli/grid_cli.dart' show StationLockService;
 import 'package:test/test.dart';
 
-/// RS-5b (tg-3s8.6, `the_grid/docs/SCRATCH-resident-station.md` D-R1/D-C3):
+/// RS-5b / H2 (tg-r81, `the_grid/docs/SCRATCH-resident-station.md` D-R1/D-C3):
 /// a PROCESS-LEVEL smoke over the REAL `space` CLI (`bin/space.dart`) —
-/// nothing here calls into `lib/` directly. Two hermetic, `bd init`'d temp
-/// beads workspaces (a work store + a SEPARATE state store, A36/A37); no live
-/// `tg`, no real `claude`/`git`, `--dry-run` throughout. What this file
-/// locks (the acceptance criteria):
+/// nothing here calls into `lib/` directly. Migrated onto the v3 store model
+/// (Track G-space / H2, DoD#6): `space up` now drives the C/D-era pieces —
+/// `runGrid(SpaceDelegate())` over stores at roots — with the old
+/// `composeStation`/`driveStation` boot path GONE. The resident
+/// lock/control/drain contract (RS-2/RS-4/D-R2) survives, orchestrated by `up`
+/// over the surviving lock/control primitives; the LIVE work-driving arm is
+/// held for the human gate (Track J), so `--dry-run` mounts the tree and guards
+/// the store but spawns no work.
+///
+/// Fixtures: a bd-init'd GRID HOME (its `.grid/station.lock` is the RS-2 lock;
+/// its `.beads/` is what `space down`/`space status` discover to attach) and a
+/// bd-init'd SUBSTATION ROOT (its `.beads/` is the substation's work store, the
+/// exact-at-root store `up` resolves). No live `tg`, no real `claude`/`git`,
+/// `--dry-run` throughout. What this file locks (the acceptance criteria):
 ///
 ///  (b) `up --dry-run` boots resident: the station lock exists, advertises a
 ///      REAL loopback control endpoint + bearer token, `GET /status` answers
 ///      200 with that token;
-///  (c) a SECOND `up` against the SAME state store while the first is live
-///      is refused LOUD (exit 64, naming the live holder + the invariant);
-///  (d) `status` renders live while up, and falls back to a direct,
-///      read-only store view labeled `(station: down)` once it isn't;
+///  (c) a SECOND `up` against the SAME grid home while the first is live is
+///      refused LOUD (exit 64, naming the live holder + the invariant);
+///  (d) `status` renders live while up, and falls back to a direct, read-only
+///      store view labeled `(station: down)` once it isn't;
 ///  (e) `down` ITSELF performs the graceful stop of a live station (its
 ///      `Stopped` message, exit 0, the lock released, AND the target process
-///      confirmed exited) and no-ops cleanly (exit 0) when nothing is up.
-///      The raw-OS-SIGTERM path (e)'s `down` rides internally is proven as
-///      its OWN case below — the signal-path control `down` depends on.
-///  (f) RS-5b rework round 2 (tg-1di, tg-7gm's multi-root surface): booting
-///      with TWO named `--root` registrations — one equal to the owned
-///      `--substation` (its DEFAULT) and one EXTRA name — `GET /status`
-///      reports BOTH under `station.workRoot`, proving the parsed
-///      `StationArgs.roots` map (not just a single legacy path) actually
-///      reaches the live control surface.
+///      confirmed exited) and no-ops cleanly (exit 0) when nothing is up. The
+///      raw-OS-SIGTERM path is proven as its OWN case below.
+///  (f) booting with TWO named substations (v3: each a name AND its ONE root)
+///      reports BOTH under `GET /status`'s `station.workRoot`, proving the
+///      parsed multi-substation config reaches the live control surface.
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
       'lock released, process exited) -> status falls back to '
       '(station: down) -> down no-ops cleanly when already down', () async {
-    final workDir = await _bdInitWorkspace('space-up-smoke-work-');
-    final stateDir = await _bdInitWorkspace('space-up-smoke-state-');
+    final gridHome = await _bdInitWorkspace('space-up-smoke-home-');
+    final subRoot = await _bdInitWorkspace('space-up-smoke-sub-');
     addTearDown(() async {
-      await workDir.delete(recursive: true);
-      await stateDir.delete(recursive: true);
+      await gridHome.delete(recursive: true);
+      await subRoot.delete(recursive: true);
     });
-    final lockPath = StationLockService.lockPath(stateDir.path);
+    final lockPath = StationLockService.lockPath(gridHome.path);
 
     // --- (b) boot resident, wait for the lock to advertise control -------
     final up = await _spawnSpace([
       'up',
       '--dry-run',
       '--substation',
-      'smoketest',
-      '--workspace',
-      workDir.path,
-      '--state-workspace',
-      stateDir.path,
+      'smoketest=${subRoot.path}',
+      '--grid-home',
+      gridHome.path,
       '--control-port',
       '0',
     ]);
@@ -72,21 +76,19 @@ void main() {
     );
     expect(statusCode, HttpStatus.ok, reason: 'GET /status, the real bearer');
 
-    // --- (c) a second `up` over the SAME state store is refused LOUD -----
+    // --- (c) a second `up` over the SAME grid home is refused LOUD -------
     final second = await Process.run(Platform.resolvedExecutable, [
       'bin/space.dart',
       'up',
       '--dry-run',
       '--substation',
-      'smoketest',
-      '--workspace',
-      workDir.path,
-      '--state-workspace',
-      stateDir.path,
+      'smoketest=${subRoot.path}',
+      '--grid-home',
+      gridHome.path,
       '--control-port',
       '0',
     ], workingDirectory: Directory.current.path);
-    expect(second.exitCode, 64, reason: 'refused before any composition');
+    expect(second.exitCode, 64, reason: 'refused at the station lock');
     expect(
       '${second.stderr}',
       allOf(
@@ -101,22 +103,19 @@ void main() {
       'bin/space.dart',
       'status',
       '--state-workspace',
-      stateDir.path,
+      gridHome.path,
       '--workspace',
-      workDir.path,
+      subRoot.path,
       '--substation',
       'smoketest',
     ], workingDirectory: Directory.current.path);
     expect(liveStatus.exitCode, 0);
     expect('${liveStatus.stdout}', contains('station: UP'));
 
-    // A settle margin: driveStation attaches its signal listener AFTER
-    // sources.start()/wiring.start() complete, strictly later than the
-    // control-advertise moment this test already waited on — a SIGTERM sent
-    // before that listener attaches (whether raw, or via `down` below) would
-    // hit the default (abrupt) disposition instead of the graceful path (the
-    // exact race grid_cli's own RS-1 suite proves narrowly; this smoke just
-    // needs a safe margin past it, not to re-litigate the race itself).
+    // A settle margin past the (now negligible) window between the control
+    // advertise and `up`'s signal-listener attach — `up` attaches SIGINT/
+    // SIGTERM synchronously right after `updateControl`, but this margin keeps
+    // the smoke robust to scheduling on a loaded machine.
     await Future<void>.delayed(const Duration(milliseconds: 500));
 
     // --- (e) `down` ITSELF performs the graceful stop ----------------------
@@ -124,7 +123,7 @@ void main() {
       'bin/space.dart',
       'down',
       '--state-workspace',
-      stateDir.path,
+      gridHome.path,
     ], workingDirectory: Directory.current.path);
     expect(down.exitCode, 0, reason: 'graceful stop.\nstderr: ${down.stderr}');
     expect(
@@ -154,9 +153,9 @@ void main() {
       'bin/space.dart',
       'status',
       '--state-workspace',
-      stateDir.path,
+      gridHome.path,
       '--workspace',
-      workDir.path,
+      subRoot.path,
       '--substation',
       'smoketest',
     ], workingDirectory: Directory.current.path);
@@ -168,7 +167,7 @@ void main() {
       'bin/space.dart',
       'down',
       '--state-workspace',
-      stateDir.path,
+      gridHome.path,
     ], workingDirectory: Directory.current.path);
     expect(downAgain.exitCode, 0);
     expect('${downAgain.stdout}', contains('already down'));
@@ -179,23 +178,21 @@ void main() {
     '(exit 0, lock released) — the signal-path control `down` itself '
     'relies on (StationAttach.stop signals + polls exactly this path)',
     () async {
-      final workDir = await _bdInitWorkspace('space-up-signal-work-');
-      final stateDir = await _bdInitWorkspace('space-up-signal-state-');
+      final gridHome = await _bdInitWorkspace('space-up-signal-home-');
+      final subRoot = await _bdInitWorkspace('space-up-signal-sub-');
       addTearDown(() async {
-        await workDir.delete(recursive: true);
-        await stateDir.delete(recursive: true);
+        await gridHome.delete(recursive: true);
+        await subRoot.delete(recursive: true);
       });
-      final lockPath = StationLockService.lockPath(stateDir.path);
+      final lockPath = StationLockService.lockPath(gridHome.path);
 
       final up = await _spawnSpace([
         'up',
         '--dry-run',
         '--substation',
-        'smoketest',
-        '--workspace',
-        workDir.path,
-        '--state-workspace',
-        stateDir.path,
+        'smoketest=${subRoot.path}',
+        '--grid-home',
+        gridHome.path,
         '--control-port',
         '0',
       ]);
@@ -215,16 +212,8 @@ void main() {
       );
       expect(statusCode, HttpStatus.ok, reason: 'GET /status, the real bearer');
 
-      // A settle margin — GENEROUS, not the lifecycle test's 500ms: THAT test's
-      // margin is safe only because the second-`up`-refused + live-`status`
-      // round trips ahead of it already burn several real seconds (each spins
-      // up its own `dart`/`bd` subprocess), which is what actually outlasts
-      // `sources.start()`/`wiring.start()` (a real Dolt-backed workspace boot,
-      // not a fixed-cost step) before this test's SIGTERM. This test has no
-      // such incidental warm-up, so it waits outright (empirically bisected on
-      // this machine: 2s still raced the listener attach, 3-3.5s consistently
-      // didn't — 5s below is that margin plus headroom).
-      await Future<void>.delayed(const Duration(seconds: 5));
+      // A generous settle margin before the SIGTERM (see the lifecycle test).
+      await Future<void>.delayed(const Duration(seconds: 2));
 
       expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
       final exitCode = await up.exitCode.timeout(
@@ -247,34 +236,29 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('up --dry-run with TWO named --root registrations (tg-7gm) reports '
-      'BOTH under GET /status\'s station.workRoot — the DEFAULT (named after '
-      'the owned --substation) and an EXTRA named root', () async {
-    final workDir = await _bdInitWorkspace('space-up-multiroot-work-');
-    final stateDir = await _bdInitWorkspace('space-up-multiroot-state-');
+  test('up --dry-run with TWO named substations (v3: each a name AND its ONE '
+      'root) reports BOTH under GET /status\'s station.workRoot', () async {
+    final gridHome = await _bdInitWorkspace('space-up-multi-home-');
+    final rootA = await _bdInitWorkspace('space-up-multi-a-');
+    final rootB = await _bdInitWorkspace('space-up-multi-b-');
     addTearDown(() async {
-      await workDir.delete(recursive: true);
-      await stateDir.delete(recursive: true);
+      await gridHome.delete(recursive: true);
+      await rootA.delete(recursive: true);
+      await rootB.delete(recursive: true);
     });
-    final lockPath = StationLockService.lockPath(stateDir.path);
+    final lockPath = StationLockService.lockPath(gridHome.path);
 
-    const defaultRoot = '/tmp/space-up-multiroot-default';
-    const extraRoot = '/tmp/space-up-multiroot-extra';
     final up = await _spawnSpace([
       'up',
       '--dry-run',
       '--substation',
-      'smoketest',
-      '--workspace',
-      workDir.path,
-      '--state-workspace',
-      stateDir.path,
+      'smoketest=${rootA.path}',
+      '--substation',
+      'power_station=${rootB.path}',
+      '--grid-home',
+      gridHome.path,
       '--control-port',
       '0',
-      '--root',
-      'smoketest=$defaultRoot',
-      '--root',
-      'power_station=$extraRoot',
     ]);
     final upIo = _CapturedIo(up);
     addTearDown(() async {
@@ -296,12 +280,12 @@ void main() {
     expect(
       workRoot,
       allOf(
-        contains('smoketest=$defaultRoot'),
-        contains('power_station=$extraRoot'),
+        contains('smoketest=${rootA.path}'),
+        contains('power_station=${rootB.path}'),
       ),
       reason:
-          'both registered roots must reach the live control surface, '
-          'not just the owned substation\'s own\nfull payload: $status\n'
+          'both substation roots must reach the live control surface\n'
+          'full payload: $status\n'
           'stdout: ${upIo.out}\nstderr: ${upIo.err}',
     );
   }, timeout: const Timeout(Duration(minutes: 1)));
@@ -328,8 +312,8 @@ Future<Directory> _bdInitWorkspace(String prefix) async {
 }
 
 /// Spawns `bin/space.dart` with [args] directly over `dart` (no `dart run`
-/// wrapper — mirrors `grid_cli`'s own process-level smoke,
-/// `station_signals_test.dart`), from THIS package's root.
+/// wrapper — mirrors `grid_cli`'s own process-level smoke), from THIS package's
+/// root.
 Future<Process> _spawnSpace(List<String> args) => Process.start(
   Platform.resolvedExecutable,
   ['bin/space.dart', ...args],
@@ -348,9 +332,8 @@ class _CapturedIo {
 }
 
 /// Polls [lockPath] (a bounded wait — `up`'s boot spans real `dart` JIT
-/// startup + `bd` calls under the CLI read path) until it parses AND carries
-/// `controlUrl`/`token` (RS-4's advertise moment, strictly after RS-2's
-/// acquire).
+/// startup) until it parses AND carries `controlUrl`/`token` (RS-4's advertise
+/// moment, strictly after RS-2's acquire).
 Future<Map<String, Object?>> _untilLockAdvertised(String lockPath) async {
   final deadline = DateTime.now().add(const Duration(seconds: 60));
   while (DateTime.now().isBefore(deadline)) {
@@ -370,8 +353,7 @@ Future<Map<String, Object?>> _untilLockAdvertised(String lockPath) async {
 }
 
 /// A bearer-gated `GET`, returning the response status code (draining the
-/// body — this helper only asserts reachability + auth, not the payload
-/// shape, which `station_control_test.dart` already locks upstream).
+/// body — this helper only asserts reachability + auth, not the payload shape).
 Future<int> _get(Uri url, {required String token}) async {
   final client = HttpClient();
   try {
@@ -385,7 +367,7 @@ Future<int> _get(Uri url, {required String token}) async {
   }
 }
 
-/// A bearer-gated `GET`, decoding the JSON body — the multi-root case (f)
+/// A bearer-gated `GET`, decoding the JSON body — the multi-substation case (f)
 /// needs the actual `/status` payload (`station.workRoot`), not just
 /// reachability.
 Future<Map<String, Object?>> _getJson(Uri url, {required String token}) async {
