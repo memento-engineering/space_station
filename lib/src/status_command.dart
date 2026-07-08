@@ -5,6 +5,10 @@
 /// existing one-shot [SnapshotReader] path ([CliSnapshotReader]: `bd export`
 /// + `bd ready`, TWO spawns total) — never `bd show` per issue, never a
 /// requery side effect, never the reactive polling controller.
+///
+/// Track G-space (tg-33n): the station it reports on is the one `up` boots from
+/// its `SpaceDelegate`; `status` re-seats over that station by attaching to the
+/// SAME state-store lock (`--state-workspace`).
 library;
 
 import 'dart:io';

@@ -7,12 +7,13 @@ import 'package:grid_runtime/grid_runtime.dart'
         PrOpener,
         PullRequestResult,
         RootCheckout;
-import 'package:space_station/src/up_command.dart' show serviceBundleMapFor;
+import 'package:space_station/src/space_delegate.dart' show serviceBundleMapFor;
 import 'package:test/test.dart';
 
 /// RS-5b rework round 2 (tg-1di): offline coverage for `serviceBundleMapFor`
-/// (`up_command.dart`) — the pure `composeStation(services:)` construction
-/// `UpCommand.run()` extracted from (tg-7gm's per-substation `ServiceBundle`
+/// (`space_delegate.dart`, moved there with the Track G-space re-seat) — the
+/// pure `composeStation(services:)` construction `UpCommand.run()` feeds
+/// (tg-7gm's per-substation `ServiceBundle`
 /// map + the per-root `GitSourceControl` split, `sourceControl` vs
 /// `sourceControlsByRoot`). Zero I/O: [buildDryTreeGitService] is the SAME
 /// inert provisioner `up` wires under `--dry-run`, and the two roots below

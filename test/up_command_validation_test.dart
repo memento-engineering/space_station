@@ -17,10 +17,13 @@ import 'package:test/test.dart';
 /// file's full lifecycle boot/shutdown smoke, every case here returns
 /// immediately (no lock, no boot, no wait).
 ///
-/// RS-5b rework round 2 (tg-1di): the `--root` grammar tg-7gm's multi-root
-/// surface mirrors (`_addResidentStationFlags`/`_residentStationArgsFrom`,
-/// both private to `up_command.dart` — there is no public seam a test can
-/// call directly, so this stays process-level). The three PARSE-SUCCEEDS
+/// Track G-space (tg-33n): the resident-station flags + `StationArgs`
+/// construction now live in `space_delegate.dart` as space's OWN CLI surface
+/// (`addSpaceStationFlags`/`spaceStationArgsFrom`) — the hand-mirror
+/// `_addResidentStationFlags`/`_residentStationArgsFrom` are GONE (absorbs
+/// tg-da7). This coverage stays process-level (`space up ...`) because
+/// `Stdout`/`Stderr` have no in-process fake — the rendered refusal text is
+/// only capturable over a real process. The three PARSE-SUCCEEDS
 /// shapes (bare shorthand / `name=path` / `name=path@head`) are proven by
 /// `--no-dry-run`ing PAST the `--root` gate: a parse failure would throw an
 /// uncaught `FormatException` (see the duplicate-name case) or trip the
@@ -135,7 +138,7 @@ void main() {
   });
 
   test('registering the SAME --root name twice is refused LOUD: '
-      '_residentStationArgsFrom throws a FormatException BEFORE the '
+      'spaceStationArgsFrom throws a FormatException BEFORE the '
       'try/catch in run() that maps StationRefusal -> (message, code) — an '
       'uncaught exception, not exit 64 (a config defect the operator should '
       'see immediately, not silently overwrite)', () async {

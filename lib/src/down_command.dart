@@ -4,6 +4,10 @@
 /// station lock, SIGTERMs the holder, and waits for the target's OWN
 /// graceful-shutdown release; it never mutates the lock file itself and never
 /// escalates to SIGKILL (that is a human/supervisor call).
+///
+/// Track G-space (tg-33n): the station it stops is the one `up` boots from its
+/// `SpaceDelegate`; `down` re-seats over that station by attaching to the SAME
+/// state-store lock (`--state-workspace`), never re-deriving arming/ownership.
 library;
 
 import 'dart:io';
