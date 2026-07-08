@@ -7,9 +7,15 @@
 /// `federated_grid_assets` (AL-5c, D-A9 — moved out of `grid_cli`), plus the
 /// asset-exported [DartCommand] from the DART domain, plus memento's OWN
 /// resident verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`):
-/// `up`/`down`/`status` — the composed resident station + its thin attach
-/// client (RS-8 retired the transitional `run`/`CodeRunCommand` once `up`
-/// proved out).
+/// `up`/`down`/`status`.
+///
+/// Track G-space (tg-33n): the resident station is now **authored as a Seed** —
+/// [SpaceDelegate], a `grid_sdk` `GridDelegate` subclass carrying space's v3 §2
+/// composition tree and its OWN CLI surface (the hand-mirror of `grid_cli`'s
+/// station flags is gone; absorbs tg-da7). `up` re-seats over it; see
+/// `src/space_delegate.dart` for the transitional-seam note (the live-drive
+/// bridge to `runGrid` is pending engine work in `grid_sdk`/`grid_engine`).
+///
 /// `bin/space.dart` runs it; `dart compile exe bin/space.dart -o space` ships
 /// it. The construction lives here in the lib (not on the bin) so a test — or
 /// a Flutter app — can build the runner without running it.
@@ -32,6 +38,10 @@ import 'package:grid_cli/grid_cli.dart'
 import 'src/down_command.dart';
 import 'src/status_command.dart';
 import 'src/up_command.dart';
+
+// space_station authored as a Seed (Track G-space): the delegate the resident
+// verbs re-seat over is part of the public library surface.
+export 'src/space_delegate.dart' show SpaceDelegate, SpaceSubstation;
 
 /// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
 /// the power_station assets' exported Commands, with the COMPUTE asset's use

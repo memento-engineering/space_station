@@ -1,58 +1,53 @@
-/// `space up` — RS-5b (tg-3s8.6, `the_grid/docs/SCRATCH-resident-station.md`
-/// D-R1/D-C3): the resident station.
+/// `space up` — RS-5b (`the_grid/docs/SCRATCH-resident-station.md` D-R1/D-C3):
+/// the resident station, re-seated over [SpaceDelegate] (Track G-space).
 ///
-/// The station flags MINUS any bead flag (a resident verb takes no
-/// drive-list, ever, per D-R4/D-R1: the ready frontier of the owned
-/// substation IS the drive set; a `--bead` would be a trigger surface a
-/// misbehaving agent or a confused human could pull) — boot-eager
-/// `AgentHarnessRegistry.validate`, `discoverWorkspaces` → `buildControllers`
-/// → `buildLiveWiring` → the code asset's own per-substation `ServiceBundle`
-/// (`GitSourceControl` over the DEFAULT root + EVERY EXTRA registered root,
-/// tg-7gm — `sourceControlsByRoot`) → `composeStation` + `wrapRoot` mounting
-/// `InheritedSeed<AgentConfig>` + `InheritedSeed<AgentHarnessRegistry>` →
-/// `driveStation` — but with [StationArgs.resident] ON so `driveStation` arms
-/// RS-3 (the ready-frontier drive set), acquires the RS-2 station lock, and
-/// binds the RS-4 `StationControl` surface. Foreground-resident: no
-/// self-daemonization, no double-fork — the supervisor (launchd, RS-6) owns
-/// backgrounding; `up` just parks on `driveStation`'s termination-signal wait.
+/// `up` no longer hand-mirrors `grid_cli`'s station-runner flags. It authors a
+/// [SpaceDelegate] — space_station as a Seed (the v3 §2 tree) — from its OWN
+/// flag surface ([addSpaceStationFlags] / [spaceStationArgsFrom], in
+/// `space_delegate.dart`), and drives it. The station flags are space's own and
+/// take NO `--bead` (a resident verb has no drive-list, EVER — D-R4/D-R1: the
+/// ready frontier of the owned substation IS the drive set).
 ///
-/// `run` (`CodeRunCommand`) is RETIRED (RS-8, tg-opp) — `up`'s composed
-/// pieces are the only consumer left; this file is no longer a mirror of it.
+/// The pieces, in order (the inversion): boot-eager `AgentHarnessRegistry`
+/// validation → `discoverWorkspaces` → `buildControllers` → `buildLiveWiring` →
+/// author the [SpaceDelegate] over the live git machinery → drive its ASSET
+/// SEAM ([SpaceDelegate.circuitResolver] / [SpaceDelegate.codeRegistry] /
+/// [SpaceDelegate.wrapRoot] + [serviceBundleMapFor]) through `composeStation`
+/// with `resident: true` → `driveStation` (arms RS-3, acquires the RS-2 lock,
+/// binds the RS-4 control surface, parks on the termination signal).
+/// Foreground-resident: no self-daemonization, no double-fork — the supervisor
+/// (launchd, RS-6) owns backgrounding.
+///
+/// The remaining transitional seam (honest scope): the v3 end-state is `up`
+/// driving by `runGrid(SpaceDelegate())` — mounting [SpaceDelegate.build]
+/// directly. That needs the composition tree bound to the engine's live driving
+/// (`StationKernel` / `WorkList` / lock), which lives in `grid_sdk` /
+/// `grid_engine` (the private engine). Until it lands, `up` drives through
+/// `grid_cli`'s primitives, sourced from the delegate — see `space_delegate.dart`.
 library;
 
 import 'dart:io';
 
-import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
-import 'package:beads_dart/beads_dart.dart' show Bead;
-import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
-        AgentHarnessRegistry,
-        GitSourceControl,
         ModelTarget,
         OpenAiCompatible,
         ProviderManaged,
         SwiftInfer,
-        buildAgentHarnessRegistry,
-        buildCodeRegistry,
-        kCodeCircuit;
+        buildAgentHarnessRegistry;
 import 'package:grid_cli/grid_cli.dart';
-import 'package:grid_engine/grid_engine.dart';
-import 'package:grid_runtime/grid_runtime.dart'
-    show GitOps, PrOpener, RootCheckout, StationGitService;
+import 'package:grid_engine/grid_engine.dart' show SubstationConfig;
 
-/// The bead→circuit policy for the `code` asset — all coding work roots the
-/// `code` circuit.
-Circuit _codeCircuit(Bead bead) => kCodeCircuit;
+import 'space_delegate.dart';
 
 /// `space up`: boots the resident station.
 class UpCommand extends Command<int> {
-  /// Creates the up command (the station flags MINUS `--bead`, plus the
+  /// Creates the up command (space's own station flags MINUS `--bead`, plus the
   /// agent scope's).
   UpCommand() {
-    _addResidentStationFlags(argParser);
+    addSpaceStationFlags(argParser);
     argParser
       ..addOption(
         'harness',
@@ -87,20 +82,20 @@ class UpCommand extends Command<int> {
 
   @override
   final String description =
-      'Boot the resident station (RS-5b): validated harness scope, '
-      'discovered workspaces, live wiring, the code asset\'s registry + git '
-      'SourceControl (per registered root, tg-7gm), but ALWAYS '
-      'resident — the ready frontier of the owned substation IS the drive '
-      'set (RS-3; no --bead, ever), guarded by the ONE-supervisor-per-store '
-      'lock (RS-2) and observable over the read-only StationControl surface '
-      '(RS-4). Foreground-resident: no self-daemonization, no double-fork — '
-      'a supervisor (launchd) owns backgrounding. Defaults to --dry-run '
+      'Boot the resident station (RS-5b), authored as a SpaceDelegate: '
+      'validated harness scope, discovered workspaces, live wiring, and the '
+      'code asset\'s per-substation git — but ALWAYS resident: the ready '
+      'frontier of the owned substation IS the drive set (RS-3; no --bead, '
+      'ever), guarded by the ONE-supervisor-per-store lock (RS-2) and '
+      'observable over the read-only StationControl surface (RS-4). '
+      'Foreground-resident: no self-daemonization, no double-fork — a '
+      'supervisor (launchd) owns backgrounding. Defaults to --dry-run '
       '(observe-only).';
 
   @override
   Future<int> run() async {
     final results = argResults!;
-    final args = _residentStationArgsFrom(results);
+    final args = spaceStationArgsFrom(results);
     final out = _out;
     final err = _err;
 
@@ -138,8 +133,7 @@ class UpCommand extends Command<int> {
     }
 
     // Held outside the try so a refusal AFTER the controllers exist still
-    // releases them (the Dolt pool would otherwise keep the process alive —
-    // the same lesson station_runner.dart's own doc-comment example carries).
+    // releases them (the Dolt pool would otherwise keep the process alive).
     StationSources? sources;
     try {
       // --- the station-runner pieces, in order (the inversion) ---
@@ -160,14 +154,30 @@ class UpCommand extends Command<int> {
         onRefusal: out,
       );
 
-      // The asset's OWN per-substation services: the git SourceControl over
-      // the leased execution machinery + EVERY registered root (tg-7gm) —
-      // the owned substation's OWN name's entry is its DEFAULT root
-      // ([live.workRoot]); any OTHER registered name is an EXTRA root a bead
-      // opts into via its `metadata.grid.root`, resolved through
-      // `ServiceBundle.sourceControlFor` (provisioning works even when LAND
-      // is off — gitOps/prOpener are non-null only when --land armed a live
-      // run; null ⇒ canLand false ⇒ commit-only posture).
+      // --- space_station AS A SEED: author the delegate over the live git
+      // machinery. Its per-substation `GitGridAssets` (Track F) are the v3
+      // successor to the `serviceBundleMapFor` map below; both describe the
+      // SAME per-substation source control (the delegate authors the tree, the
+      // map feeds the primitive drive until `up` drives through runGrid).
+      final delegate = SpaceDelegate(
+        gridRoot: live.workRoot.path,
+        stationName: 'space',
+        substations: [
+          for (final entry in live.roots.entries)
+            SpaceSubstation(name: entry.key, root: entry.value),
+        ],
+        agentConfig: agentConfig,
+        harnesses: harnesses,
+        provisioner: live.git,
+        gitOps: live.gitOps,
+        prOpener: live.prOpener,
+      );
+
+      // The asset's OWN per-substation services (tg-7gm): the git SourceControl
+      // over the leased execution machinery + EVERY registered root — the
+      // owned substation's DEFAULT root ([live.workRoot]) plus any OTHER
+      // registered name a bead opts into (gitOps/prOpener are non-null only
+      // when --land armed a live run; null ⇒ canLand false ⇒ commit-only).
       final services = serviceBundleMapFor(
         defaultSubstation: args.substations.first,
         workRoot: live.workRoot,
@@ -190,10 +200,9 @@ class UpCommand extends Command<int> {
             // feature/chore) rides `resident`, never `driveList`.
             resident: true,
             // The registered root NAMES (tg-7gm) gate `WorkList`'s mount
-            // boundary: an owned bead whose `metadata.grid.root` selection
-            // isn't in this set is a LOUD per-bead skip, never a
-            // station-wide gate. Empty (no --root at all) stays
-            // UNCONSTRAINED — matches pre-multi-root behavior.
+            // boundary: an owned bead whose root selection isn't in this set
+            // is a LOUD per-bead skip, never a station-wide gate. Empty (no
+            // --root) stays UNCONSTRAINED.
             registeredRoots: live.roots.keys.toSet(),
           ),
         ],
@@ -201,22 +210,14 @@ class UpCommand extends Command<int> {
         workRoot: live.workRoot,
         groups: live.groups,
         freshnessBarrier: live.freshnessBarrier,
-        resolver: const CircuitResolver(_codeCircuit),
-        registry: buildCodeRegistry(devRoot: live.workRoot.path),
-        // ONE substation composed (this resident verb owns exactly one), so
-        // ITS bundle is the only entry — tg-7gm's `services` param is keyed
-        // by `SubstationConfig.substationId`, not by root name.
+        // The ASSET SEAM, owned by the delegate (ADR-0008 D1).
+        resolver: delegate.circuitResolver,
+        registry: delegate.codeRegistry(live.workRoot.path),
         services: services,
-        // D-C rung 1: the asset mounts its station-default config VALUES as
+        // D-C rung 1: the delegate mounts its station-default config VALUES as
         // ancestors of everything (Theme-of-context; the effect boundary
         // resolves the ladder per work).
-        wrapRoot: (root) => InheritedSeed<AgentConfig>(
-          value: agentConfig,
-          child: InheritedSeed<AgentHarnessRegistry>(
-            value: harnesses,
-            child: root,
-          ),
-        ),
+        wrapRoot: delegate.wrapRoot,
       );
 
       out(
@@ -246,198 +247,4 @@ Uri _parseBase(String raw, String flag) {
     throw FormatException('$flag is not an absolute url: "$raw"');
   }
   return uri;
-}
-
-/// Builds `composeStation`'s `services` map (tg-7gm) for the ONE substation
-/// `up` composes: [defaultSubstation]'s entry carries a [GitSourceControl]
-/// over [workRoot] as its DEFAULT `sourceControl`, plus one EXTRA
-/// [GitSourceControl] per OTHER [roots] entry (every name but
-/// [defaultSubstation] itself) under `sourceControlsByRoot` — the split
-/// [ServiceBundle.sourceControlFor] resolves a bead's `metadata.grid.root`
-/// against. [gitOps]/[prOpener] ride every constructed [GitSourceControl]
-/// unchanged (non-null only when `--land` armed a live run; null ⇒ canLand
-/// false ⇒ the commit-only posture) — pure construction, no I/O. Exposed
-/// (no leading `_`) — RS-5b rework r2's seam for asserting the map's shape
-/// without booting a real station; `run()` above is the only real call site.
-Map<String, ServiceBundle> serviceBundleMapFor({
-  required String defaultSubstation,
-  required RootCheckout workRoot,
-  required Map<String, RootCheckout> roots,
-  required StationGitService provisioner,
-  GitOps? gitOps,
-  PrOpener? prOpener,
-}) {
-  final sourceControlsByRoot = <String, SourceControl>{
-    for (final entry in roots.entries)
-      if (entry.key != defaultSubstation)
-        entry.key: GitSourceControl(
-          gitOps: gitOps,
-          prOpener: prOpener,
-          provisioner: provisioner,
-          root: entry.value,
-        ),
-  };
-  return {
-    defaultSubstation: ServiceBundle(
-      sourceControl: GitSourceControl(
-        gitOps: gitOps,
-        prOpener: prOpener,
-        provisioner: provisioner,
-        root: workRoot,
-      ),
-      sourceControlsByRoot: sourceControlsByRoot,
-    ),
-  };
-}
-
-/// Adds the standard station flags MINUS `--bead` — a byte-for-byte mirror of
-/// `grid_cli`'s `addStationFlags` (`station_runner.dart`) with the drive-list
-/// flag omitted. A resident verb takes no drive-list, EVER (D-R1/D-R4): the
-/// flag itself must not exist on `up`'s parser, not merely be refused at
-/// arming time — a trigger surface a misbehaving agent could still discover
-/// and pass. Kept in lockstep with `addStationFlags` by hand (`args.
-/// ArgParser` has no "remove an option" API, so composing-then-stripping
-/// isn't possible); a drift here is caught by `space up --help` review.
-void _addResidentStationFlags(ArgParser parser) {
-  parser
-    ..addMultiOption(
-      'substation',
-      abbr: 'r',
-      help:
-          'An OWNED substation / ownership token (repeatable) — the SINGLE '
-          'allow-set feeding both the ownership gate and the dispatch '
-          'predicate. The dogfood substation is `tgdog`.',
-    )
-    ..addMultiOption(
-      'owner',
-      help: 'Alias for --substation; merged into one shared allow-set.',
-    )
-    ..addOption(
-      'provider',
-      allowed: ['subprocess', 'tmux'],
-      defaultsTo: 'subprocess',
-      help: 'The runtime provider for agent spawns.',
-    )
-    ..addMultiOption(
-      'root',
-      help:
-          'A registered worktree root checkout (repeatable, tg-7gm): '
-          '`--root <name>=<path>[@head]` registers <path> under <name> — a '
-          'name equal to an owned --substation becomes that substation\'s '
-          'DEFAULT root; any OTHER name is an EXTRA root a bead opts into via '
-          'its `metadata.grid.root` (e.g. a `tg` bead building `power_station` '
-          'names `--root power_station=<path>` + `grid.root: power_station`). '
-          'Bare `--root <path>` (no `=`) is the single-root shorthand — '
-          'back-compatible: registers under the first --substation. At least '
-          'one is required to ARM a non-dry run; never created by the runner.',
-    )
-    ..addOption(
-      'head',
-      help:
-          'ASSIGN the base branch per-bead worktrees cut from, overriding '
-          'the probed origin/HEAD. Omit to probe.',
-    )
-    ..addOption(
-      'workspace',
-      abbr: 'w',
-      help:
-          'The beads workspace to read ready work from (a dir at or above a '
-          '`.beads/`). Defaults to discovery from the cwd; read-only under '
-          '--dry-run.',
-    )
-    ..addOption(
-      'state-workspace',
-      help:
-          'A SEPARATE the_grid-owned beads workspace for its own session/'
-          'lifecycle beads (A36/A37), so the --workspace source stays '
-          'read-only. Omit to write sessions into --workspace.',
-    )
-    ..addOption(
-      'state-substation',
-      defaultsTo: 'tgdog',
-      help:
-          "the_grid's OWNED session partition (the --state-workspace "
-          'prefix), unioned into the allow-set. Only used with '
-          '--state-workspace.',
-    )
-    ..addFlag(
-      'dry-run',
-      defaultsTo: true,
-      help:
-          'Observe-only: NO writes, NO spawns (the SAFE DEFAULT). Pass '
-          '--no-dry-run to ARM the live writing arm (requires --root).',
-    )
-    ..addFlag(
-      'land',
-      defaultsTo: false,
-      negatable: false,
-      help:
-          'ARM the land step (ADR-0006 D3): on step-complete, commit → push '
-          '→ open a PR (never auto-merges). OPT-IN, OFF by default; '
-          'requires --no-dry-run.',
-    )
-    ..addOption(
-      'for-seconds',
-      help: 'Run for a fixed number of seconds then exit (scripted / CI).',
-    )
-    ..addFlag(
-      'no-sql',
-      negatable: false,
-      help:
-          'Force the bd-CLI read path even when pooled Dolt SQL is '
-          'available.',
-    )
-    ..addOption(
-      'control-port',
-      defaultsTo: '0',
-      help:
-          'The StationControl loopback port (RS-4). 0 = ephemeral '
-          '(default).',
-    );
-}
-
-/// Builds [StationArgs] from the flags [_addResidentStationFlags] added —
-/// [StationArgs.resident] is ALWAYS true and [StationArgs.targetBeads] is
-/// ALWAYS empty (there is no `--bead` option on this parser to read from;
-/// mirrors [StationArgs.from] otherwise, including its `--root` parse
-/// (`<name>=<path>[@head]`, tg-7gm) into [StationArgs.roots]; the deprecated
-/// `rootPath` alias is NOT used here).
-StationArgs _residentStationArgsFrom(ArgResults args) {
-  final seconds = args.option('for-seconds');
-  final substations = <String>{
-    ...args.multiOption('substation'),
-    ...args.multiOption('owner'),
-  }..removeWhere((r) => r.trim().isEmpty);
-  final roots = <String, RootSpec>{};
-  for (final raw in args.multiOption('root')) {
-    if (raw.trim().isEmpty) continue;
-    final entry = RootSpec.parse(
-      raw,
-      defaultName: substations.isNotEmpty ? substations.first : '',
-    );
-    if (roots.containsKey(entry.key)) {
-      throw FormatException(
-        'space up: --root "$raw" registers name "${entry.key}" more than '
-        'once',
-      );
-    }
-    roots[entry.key] = entry.value;
-  }
-  return StationArgs(
-    substations: substations,
-    provider: RuntimeProviderKind.parse(args.option('provider')),
-    roots: roots,
-    head: args.option('head'),
-    workspacePath: args.option('workspace'),
-    stateWorkspacePath: args.option('state-workspace'),
-    stateSubstation: args.option('state-workspace') == null
-        ? null
-        : args.option('state-substation'),
-    dryRun: args.flag('dry-run'),
-    land: args.flag('land'),
-    noSql: args.flag('no-sql'),
-    runFor: seconds == null ? null : Duration(seconds: int.parse(seconds)),
-    resident: true,
-    controlPort: int.parse(args.option('control-port')!),
-  );
 }

@@ -7,6 +7,13 @@
   is installed. See space_station/README.md "Resident operation" for the
   full compile/install/start/stop/status/logs/lock/crash-recovery runbook.
 
+  Track G-space (tg-33n): `up` now authors its station as a SpaceDelegate
+  (a grid_sdk GridDelegate subclass). The launchd POSTURE is unchanged —
+  foreground-resident, KeepAlive with SuccessfulExit=false — and these
+  ProgramArguments are space's OWN CLI (no longer a mirror of grid_cli's
+  station flags), still arg-compatible while `up` drives through grid_cli's
+  primitives (until it drives through runGrid(SpaceDelegate)).
+
   There is deliberately no `space install` command yet: a template earns
   automation after it has been operated by hand.
 -->
