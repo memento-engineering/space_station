@@ -23,12 +23,18 @@
 /// members (`circuitResolver` / `codeRegistry` / `wrapRoot`) and
 /// `serviceBundleMapFor` are DELETED with the old boot path they served.
 ///
-/// The live work-driving (the engine's `WorkList` / kernel binding into this
-/// tree) is the pending `runGrid`→kernel bridge — held for the human gate
-/// (Track J). H2 is offline authoring: this tree mounts over resolved stores
-/// (exercised by `test/space_delegate_test.dart`); `space up` guards the state
-/// store (RS-2) and binds the read-only control surface (RS-4) around it, but
-/// spawns no work. The first LIVE arm stays the human gate.
+/// ## Track J — the work binding is IN (tg-yl8 / space-6nj)
+///
+/// The engine's `WorkList` now mounts INSIDE this tree: `space up` assembles
+/// the off-tree machinery (`grid_sdk.buildStationWork` — controllers over the
+/// stores at their roots, the join bridge, the bd chokepoint, the restart
+/// reconciler) and threads its [sdk.StationWorkWiring] into this delegate;
+/// [build] mounts `StationWork` above the fan-out and each substation's
+/// `SubstationWork` seat establishes its `WorkList` (v3 §3). A delegate built
+/// WITHOUT wiring (offline tests, fixtures) keeps H2's authoring-only shape —
+/// the tree stands, drives no work. `--dry-run` (the default) arms the tree
+/// over INERT seams (no spawn, no store write, no git). The first LIVE arm
+/// (`--no-dry-run`) stays the human gate.
 library;
 
 import 'package:args/args.dart';
@@ -50,13 +56,22 @@ import 'package:grid_sdk/grid_sdk.dart' as sdk;
 /// out as `Substation`s; each substation's work store lives at `<root>/.beads/`.
 class SpaceSubstation {
   /// A project named [name] rooted at [root] (an absolute [RootCheckout]).
-  const SpaceSubstation({required this.name, required this.root});
+  /// [prefix] is the work store's issue-id prefix — a SEPARATE axis from the
+  /// name (Nico, 2026-07-08; `SUBSTATION-INIT.md` §2): `the_grid` (name) mints
+  /// `tg-…` (prefix). Defaults to the name.
+  const SpaceSubstation({required this.name, required this.root, String? prefix})
+    : _prefix = prefix;
 
   /// The project's name (its substation id / ownership token).
   final String name;
 
   /// The project's single root checkout (absolute path + branch/remote).
   final RootCheckout root;
+
+  final String? _prefix;
+
+  /// The work store's issue-id prefix (ownership's primary axis).
+  String get prefix => _prefix ?? name;
 }
 
 /// The delegate seat memento's `space` verbs re-seat over — space_station
@@ -79,6 +94,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     required this.substations,
     required this.agentConfig,
     AgentHarnessRegistry? harnesses,
+    this.wiring,
     this.provisioner,
     this.gitOps,
     this.prOpener,
@@ -114,6 +130,14 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// mounts [GitHubGridAssets] under each substation (canLand true).
   final PrOpener? prOpener;
 
+  /// The station's work-axis wiring (Track J, tg-yl8/space-6nj): the DI'd
+  /// ambient values `runGrid`'s tree provides through `StationWork` so each
+  /// substation's `SubstationWork` mounts the engine's `WorkList` — the
+  /// runGrid→engine bridge, assembled off-tree by `buildStationWork` in
+  /// `space up`. Null ⇒ the UNARMED authoring-only mount (H2's shape: the tree
+  /// stands, drives no work — offline tests, `space status` fixtures).
+  final sdk.StationWorkWiring? wiring;
+
   /// The `RawAssetGrid` root — the grid's home (v3 §3). `space` overrides the
   /// base's throwing [sdk.GridDelegate.root] so the default-build machinery and
   /// this wholesale [build] agree on one home.
@@ -137,6 +161,34 @@ class SpaceDelegate extends sdk.GridDelegate {
   @override
   Seed build(TreeContext context, sdk.GridConfiguration configuration) {
     final opener = prOpener;
+    final armedWiring = wiring;
+    final substationFanOut = sdk.Substations(
+      substations: [
+        for (final s in substations)
+          sdk.Substation(
+            name: s.name,
+            root: s.root.path,
+            prefix: s.prefix,
+            assets: [
+              Nest(
+                children: [
+                  GitGridAssets(
+                    provisioner: provisioner,
+                    gitOps: gitOps,
+                    defaultBranch: s.root.defaultBranch,
+                    remote: s.root.remote,
+                  ),
+                  if (opener != null) GitHubGridAssets(prOpener: opener),
+                ],
+                // The work seat (Track J): the engine's WorkList mounts here
+                // when the station is armed (an ambient work axis above);
+                // unarmed it mounts nothing — the authored tree stands.
+                child: const sdk.SubstationWork(),
+              ),
+            ],
+          ),
+      ],
+    );
     return sdk.RawAssetGrid(
       root: gridRoot,
       assets: [
@@ -147,42 +199,18 @@ class SpaceDelegate extends sdk.GridDelegate {
             HarnessProvider(
               registry: harnesses,
               config: agentConfig,
-              child: sdk.Substations(
-                substations: [
-                  for (final s in substations)
-                    sdk.Substation(
-                      name: s.name,
-                      root: s.root.path,
-                      assets: [
-                        Nest(
-                          children: [
-                            GitGridAssets(
-                              provisioner: provisioner,
-                              gitOps: gitOps,
-                              defaultBranch: s.root.defaultBranch,
-                              remote: s.root.remote,
-                            ),
-                            if (opener != null) GitHubGridAssets(prOpener: opener),
-                          ],
-                          child: const _WorkListMount(),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
+              // ARMED: StationWork provides the engine's ambient work-axis
+              // stack above the fan-out (the runGrid→engine bridge, tg-yl8);
+              // UNARMED (wiring null): H2's authoring-only shape.
+              child: armedWiring != null
+                  ? sdk.StationWork(wiring: armedWiring, child: substationFanOut)
+                  : substationFanOut,
             ),
           ],
         ),
       ],
     );
   }
-}
-
-/// The seat the engine's `WorkList` binds into once the runGrid → kernel bridge
-/// exists — a terminal leaf today (the [SpaceDelegate.build] tree is authored
-/// but not yet driven).
-class _WorkListMount extends MultiChildSeed {
-  const _WorkListMount() : super(children: const []);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,10 +270,11 @@ void addSpaceStationFlags(ArgParser parser) {
       abbr: 'r',
       help:
           'An OWNED substation and its ONE root, paired: '
-          '`--substation <name>=<root>` (repeatable, absolute root). A '
-          'substation is a name and ONE root (v3 §0) — its `.beads/` work '
-          'store lives at `<root>/.beads/`. At least one is required. The '
-          'dogfood substation is `tgdog`.',
+          '`--substation <name>[@<prefix>]=<root>` (repeatable, absolute '
+          'root). A substation is a name and ONE root (v3 §0) — its `.beads/` '
+          'work store lives at `<root>/.beads/`. The optional `@<prefix>` '
+          'names the store\'s issue-id prefix when it differs from the name '
+          '(`the_grid@tg=/work/the_grid`). At least one is required.',
     )
     ..addOption(
       'grid-home',
@@ -281,21 +310,37 @@ void addSpaceStationFlags(ArgParser parser) {
     );
 }
 
-/// Parses one `--substation <name>=<root>` value into a [SpaceSubstation] over
-/// an absolute [RootCheckout]. Throws [FormatException] on a malformed pairing
-/// (no `=`, empty name, or empty root) — a config defect the operator sees
-/// immediately. The root's branch defaults to `main` (dry authoring never
-/// probes `origin/HEAD`; the live git arm — held — assigns the probed default).
+/// Parses one `--substation <name>[@<prefix>]=<root>` value into a
+/// [SpaceSubstation] over an absolute [RootCheckout]. Throws [FormatException]
+/// on a malformed pairing (no `=`, empty name/prefix/root) — a config defect
+/// the operator sees immediately. The optional `@<prefix>` names the store's
+/// issue-id prefix when it differs from the name (names ≠ prefixes:
+/// `the_grid@tg=/work/the_grid`); absent, the prefix IS the name. The root's
+/// branch defaults to `main` (dry authoring never probes `origin/HEAD`; the
+/// live git arm assigns the probed default at root registration).
 SpaceSubstation _parseSubstation(String raw) {
   final eq = raw.indexOf('=');
   if (eq < 0) {
     throw FormatException(
       'space up: --substation "$raw" must pair a name with its ONE root — '
-      '`--substation <name>=<root>` (v3 §0: a substation is a name AND a root)',
+      '`--substation <name>[@<prefix>]=<root>` (v3 §0: a substation is a name '
+      'AND a root)',
     );
   }
-  final name = raw.substring(0, eq).trim();
+  var name = raw.substring(0, eq).trim();
   final rootPath = raw.substring(eq + 1).trim();
+  String? prefix;
+  final at = name.indexOf('@');
+  if (at >= 0) {
+    prefix = name.substring(at + 1).trim();
+    name = name.substring(0, at).trim();
+    if (prefix.isEmpty) {
+      throw FormatException(
+        'space up: --substation "$raw" has an empty prefix after "@" — omit '
+        'the "@" entirely when the prefix is the name',
+      );
+    }
+  }
   if (name.isEmpty) {
     throw FormatException(
       'space up: --substation "$raw" has an empty name before "="',
@@ -308,6 +353,7 @@ SpaceSubstation _parseSubstation(String raw) {
   }
   return SpaceSubstation(
     name: name,
+    prefix: prefix,
     root: RootCheckout(path: rootPath, defaultBranch: 'main', substation: name),
   );
 }

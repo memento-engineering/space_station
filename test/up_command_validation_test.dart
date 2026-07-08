@@ -107,6 +107,38 @@ void main() {
       );
     });
 
+    test('a --substation with an EMPTY "@" prefix is a LOUD FormatException — '
+        'omit the "@" entirely when the prefix is the name', () async {
+      final result = await _runUp([
+        '--grid-home',
+        '/tmp/space-up-empty-prefix',
+        '--substation',
+        'the_grid@=/tmp/tg',
+      ]);
+      expect(result.exitCode, isNot(0));
+      expect(
+        '${result.stderr}',
+        contains('has an empty prefix after "@"'),
+      );
+    });
+
+    test('--land contradicts --dry-run — refused LOUD (exit 64), never a '
+        'silent no-op (the operator believes PRs will open)', () async {
+      final result = await _runUp([
+        '--dry-run',
+        '--land',
+        '--grid-home',
+        '/tmp/space-up-land-dry',
+        '--substation',
+        'foo=/tmp/a',
+      ]);
+      expect(result.exitCode, 64);
+      expect(
+        '${result.stderr}',
+        contains('--land contradicts --dry-run'),
+      );
+    });
+
     test('registering the SAME --substation name twice is a LOUD FormatException '
         '(never a silent overwrite)', () async {
       final result = await _runUp([

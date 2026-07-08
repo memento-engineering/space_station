@@ -6,7 +6,10 @@
 /// re-derives arming/ownership — the lock is the only address that matters.
 library;
 
+import 'dart:io';
+
 import 'package:beads_dart/beads_dart.dart' show BeadsWorkspace;
+import 'package:path/path.dart' as p;
 
 /// Adds the ONE flag `down`/`status` need to find the lock: the SAME
 /// `--state-workspace` `up` was given. Unlike `up`'s station flags, this is
@@ -24,12 +27,17 @@ sealed class StateWorkspaceResult {
   const StateWorkspaceResult();
 }
 
-/// The discovered state workspace.
+/// The resolved grid home + its state store.
 class StateWorkspaceFound extends StateWorkspaceResult {
-  /// Wraps the discovered [workspace].
-  const StateWorkspaceFound(this.workspace);
+  /// Wraps the grid [home] (the lock's scope — `<home>/.grid/station.lock`)
+  /// and the parsed state-store [workspace] (rooted at `<home>/.grid`).
+  const StateWorkspaceFound({required this.home, required this.workspace});
 
-  /// The discovered workspace.
+  /// The grid home — the SAME `--grid-home`/`--state-workspace` `up` was
+  /// given; the RS-2 lock is scoped here.
+  final String home;
+
+  /// The parsed state store (its root is `<home>/.grid`, per Q5a).
   final BeadsWorkspace workspace;
 }
 
@@ -62,13 +70,28 @@ StateWorkspaceResult resolveStateWorkspace({
       code: 64,
     );
   }
-  final workspace = BeadsWorkspace.discover(start: stateWorkspacePath);
-  if (workspace == null) {
+  // v3 stores-at-roots (Q5a): the grid's state store lives at
+  // `<home>/.grid/.beads` — resolved EXACTLY there, never by walk-up (a
+  // walk-up from the home would bind the dual-role repo's WORK store at
+  // `<home>/.beads` and attach the lock to the wrong scope — A37).
+  final home = stateWorkspacePath.trim();
+  final runtimeDir = p.join(home, '.grid');
+  if (!File(p.join(runtimeDir, '.beads', 'metadata.json')).existsSync()) {
     return StateWorkspaceRefusal(
-      'space $verb: no .beads/ state workspace found from '
-      '$stateWorkspacePath (--state-workspace)',
+      'space $verb: no grid state store at $runtimeDir/.beads — the grid\'s '
+      'own store lives under <grid-home>/.grid/ (Q5a). Pass the SAME '
+      '--grid-home `up` was given (seed a new home via the substation-init '
+      'process, the_grid docs/SUBSTATION-INIT.md).',
       code: 1,
     );
   }
-  return StateWorkspaceFound(workspace);
+  final workspace = BeadsWorkspace.discover(start: runtimeDir);
+  if (workspace == null || workspace.root != runtimeDir) {
+    return StateWorkspaceRefusal(
+      'space $verb: could not parse the grid state store at '
+      '$runtimeDir/.beads (resolved: ${workspace?.root ?? 'nothing'})',
+      code: 1,
+    );
+  }
+  return StateWorkspaceFound(home: home, workspace: workspace);
 }
