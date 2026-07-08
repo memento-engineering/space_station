@@ -76,9 +76,9 @@ class StatusCommand extends Command<int> {
       case StateWorkspaceRefusal(:final message, :final code):
         stderr.writeln(message);
         return code;
-      case StateWorkspaceFound(:final workspace):
+      case StateWorkspaceFound(:final home, :final workspace):
         final AttachResult result = await StationAttach().status(
-          stateWorkspaceDir: workspace.root,
+          stateWorkspaceDir: home,
         );
         switch (result) {
           case Up(:final payload):
@@ -89,7 +89,7 @@ class StatusCommand extends Command<int> {
             return 0;
           case Stale(:final pid, :final record):
             stderr.writeln(
-              'status: station.lock at ${workspace.root}/.grid/station.lock '
+              'status: station.lock at $home/.grid/station.lock '
               'names pid $pid but it is unreachable (dead, or '
               'alive-but-not-answering — record: $record). (station: down) '
               '— a fresh `up` steals a dead lock automatically; if $pid is '

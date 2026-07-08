@@ -40,7 +40,7 @@ void main() {
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
       'lock released, process exited) -> status falls back to '
       '(station: down) -> down no-ops cleanly when already down', () async {
-    final gridHome = await _bdInitWorkspace('space-up-smoke-home-');
+    final gridHome = await _bdInitGridHome('space-up-smoke-home-');
     final subRoot = await _bdInitWorkspace('space-up-smoke-sub-');
     addTearDown(() async {
       await gridHome.delete(recursive: true);
@@ -178,7 +178,7 @@ void main() {
     '(exit 0, lock released) — the signal-path control `down` itself '
     'relies on (StationAttach.stop signals + polls exactly this path)',
     () async {
-      final gridHome = await _bdInitWorkspace('space-up-signal-home-');
+      final gridHome = await _bdInitGridHome('space-up-signal-home-');
       final subRoot = await _bdInitWorkspace('space-up-signal-sub-');
       addTearDown(() async {
         await gridHome.delete(recursive: true);
@@ -238,7 +238,7 @@ void main() {
 
   test('up --dry-run with TWO named substations (v3: each a name AND its ONE '
       'root) reports BOTH under GET /status\'s station.workRoot', () async {
-    final gridHome = await _bdInitWorkspace('space-up-multi-home-');
+    final gridHome = await _bdInitGridHome('space-up-multi-home-');
     final rootA = await _bdInitWorkspace('space-up-multi-a-');
     final rootB = await _bdInitWorkspace('space-up-multi-b-');
     addTearDown(() async {
@@ -297,18 +297,36 @@ void main() {
 Future<Directory> _bdInitWorkspace(String prefix) async {
   final dir = await Directory.systemTemp.createTemp(prefix);
   final resolved = Directory(dir.resolveSymbolicLinksSync());
+  await _bdInit(resolved.path, args: const ['init']);
+  return resolved;
+}
+
+/// A hermetic GRID HOME: the state store lives NESTED at `<home>/.grid/.beads`
+/// (Q5a stores-at-roots — `space up`'s assembly binds it exact-at-root and
+/// refuses a home whose store sits anywhere else). The home root itself holds
+/// no store.
+Future<Directory> _bdInitGridHome(String prefix) async {
+  final dir = await Directory.systemTemp.createTemp(prefix);
+  final resolved = Directory(dir.resolveSymbolicLinksSync());
+  final runtimeDir = Directory('${resolved.path}/.grid')..createSync();
+  await _bdInit(runtimeDir.path, args: const ['init', '--prefix', 'state']);
+  return resolved;
+}
+
+Future<void> _bdInit(String dir, {required List<String> args}) async {
   final init = await Process.run(
     'bd',
-    ['init'],
-    workingDirectory: resolved.path,
+    args,
+    workingDirectory: dir,
     environment: {...Platform.environment, 'BD_JSON_ENVELOPE': '1'},
     includeParentEnvironment: false,
   );
   if (init.exitCode != 0) {
-    await resolved.delete(recursive: true);
-    fail('bd init failed (${init.exitCode}): ${init.stderr}\n${init.stdout}');
+    fail(
+      'bd ${args.join(' ')} failed (${init.exitCode}): '
+      '${init.stderr}\n${init.stdout}',
+    );
   }
-  return resolved;
 }
 
 /// Spawns `bin/space.dart` with [args] directly over `dart` (no `dart run`

@@ -23,12 +23,17 @@
 ///     contract, orchestrated over the RS-2/RS-4 SURVIVORS (not the deleted
 ///     `driveStation`); parked on the SIGINT/SIGTERM graceful path (D-R2).
 ///
-/// **The live work-driving arm is HELD for the human gate (Track J).** The
-/// engine's `WorkList`/kernel binding into this tree is the pending
-/// `runGrid`→kernel bridge; until it lands, `up` mounts the tree and guards the
-/// store, but spawns NO work — the control surface reports zero counts. `up`
-/// stays foreground-resident: no self-daemonization, no double-fork — the
-/// supervisor (launchd, RS-6) owns backgrounding.
+/// **Track J: the work binding is IN.** `up` assembles the off-tree machinery
+/// with `grid_sdk.buildStationWork` (controllers over the stores at their
+/// roots → the freshness barrier → the restart reconciler → the join bridge —
+/// the pinned ordering, ADR-0007 §4) and mounts the ARMED tree
+/// (`runGrid(delegate, onFlushed: work.afterFlush)`): each substation's
+/// `SubstationWork` establishes its `WorkList`, and the ready frontier
+/// reconciles (mount = spawn). Under `--dry-run` (the SAFE DEFAULT) every
+/// seam is inert — no spawn, no store write, no git — while the counts and
+/// the control surface are REAL. The first LIVE arm (`--no-dry-run`) stays
+/// the human gate. `up` stays foreground-resident: no self-daemonization, no
+/// double-fork — the supervisor (launchd, RS-6) owns backgrounding.
 library;
 
 import 'dart:async';
@@ -53,9 +58,20 @@ import 'package:grid_cli/grid_cli.dart'
         StationLockService,
         StationStatus,
         mintControlToken;
+import 'package:grid_assets/grid_assets.dart' show buildCodeRegistry, kCodeCircuit;
 import 'package:grid_runtime/grid_runtime.dart' show SystemProcessGroupController;
 import 'package:grid_sdk/grid_sdk.dart'
-    show GridHandle, GridStateStore, StoreLocator, StoreRefusal, runGrid;
+    show
+        CircuitResolver,
+        GridHandle,
+        GridStateStore,
+        StationWorkRuntime,
+        StoreLocator,
+        StoreRefusal,
+        SubstationWorkSpec,
+        buildLandOps,
+        buildStationWork,
+        runGrid;
 
 import 'space_delegate.dart';
 
@@ -91,6 +107,22 @@ class UpCommand extends Command<int> {
       ..addOption(
         'swift-base',
         help: 'A swift-infer server endpoint — sets the model target for pi.',
+      )
+      ..addFlag(
+        'land',
+        defaultsTo: false,
+        help:
+            'Arm PR-opening (land) on a LIVE run (ADR-0006 D3): the land ops '
+            'flow into each substation\'s GitHub asset. Refused with '
+            '--dry-run (a contradiction the operator must see, not a silent '
+            'no-op). Off = the commit-only arm.',
+      )
+      ..addOption(
+        'max-agents',
+        defaultsTo: '4',
+        help:
+            'The station-wide concurrency ceiling (tg-42f): the most work '
+            'beads mounted (agents live) at once across every substation.',
       );
   }
 
@@ -106,8 +138,8 @@ class UpCommand extends Command<int> {
       'drive set (no --bead, ever), guarded by the ONE-supervisor-per-store '
       'lock (RS-2) and observable over the read-only StationControl surface '
       '(RS-4). Foreground-resident (a supervisor owns backgrounding). Defaults '
-      'to --dry-run (observe-only); the LIVE work-driving arm is held for the '
-      'human gate (Track J).';
+      'to --dry-run (armed over INERT seams — no spawn, no write); the first '
+      'LIVE arm (--no-dry-run) is the human gate.';
 
   @override
   Future<int> run() async {
@@ -161,6 +193,21 @@ class UpCommand extends Command<int> {
       );
       return 64;
     }
+    final landArmed = results.flag('land');
+    if (landArmed && config.dryRun) {
+      err(
+        'space up: --land contradicts --dry-run — a dry run opens no PRs. '
+        'Drop --land, or arm live with --no-dry-run.',
+      );
+      return 64;
+    }
+    final int maxAgents;
+    try {
+      maxAgents = int.parse(results.option('max-agents')!);
+    } on FormatException {
+      err('space up: --max-agents must be an integer.');
+      return 64;
+    }
 
     // --- stores at roots (the discoverWorkspaces replacement). The grid state
     // store lives under `<grid-home>/.grid/`; a cwd-relative home re-imports
@@ -188,20 +235,8 @@ class UpCommand extends Command<int> {
       }
     }
 
-    // --- space_station AS A SEED: author the delegate. H2 is offline authoring
-    // — the live git machinery (provisioner / gitOps / prOpener) is held for
-    // the human gate (Track J); all null ⇒ the dry authoring the tree still
-    // mounts over (Track F).
-    final delegate = SpaceDelegate(
-      gridRoot: config.gridHome,
-      stationName: 'space',
-      substations: config.substations,
-      agentConfig: agentConfig,
-      harnesses: harnesses,
-    );
-
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
-    // Acquired before the tree mounts; a LIVE holder is a LOUD refusal (exit
+    // Acquired before anything stateful; a LIVE holder is a LOUD refusal (exit
     // 64). Caught generically so `up` never imports the kill-list refusal type.
     final bootTime = DateTime.now();
     final StationLockHandle stationLock;
@@ -217,12 +252,70 @@ class UpCommand extends Command<int> {
       return 64;
     }
 
-    // --- mount the tree: runGrid over the SpaceDelegate (the C/D-era pieces).
-    // A mount-time refusal (a malformed composition) unwinds the lock.
+    // --- the off-tree work machinery (Track J, the runGrid→engine bridge):
+    // controllers over the REAL stores at their roots, the join bridge, the
+    // bd chokepoint (a recording no-op under --dry-run), the restart
+    // reconciler. The code circuit + its capabilities are the grid_assets
+    // OPINION, injected here (the engine stays opinion-free).
+    final StationWorkRuntime workRuntime;
+    try {
+      workRuntime = await buildStationWork(
+        stateStore: GridStateStore.forGridRoot(config.gridHome),
+        substations: [
+          for (final s in config.substations)
+            SubstationWorkSpec(
+              name: s.name,
+              root: s.root.path,
+              prefix: s.prefix,
+            ),
+        ],
+        resolver: CircuitResolver((_) => kCodeCircuit),
+        registry: buildCodeRegistry(),
+        dryRun: config.dryRun,
+        maxConcurrentWork: maxAgents,
+      );
+    } on Object catch (e) {
+      await stationLock.release();
+      err('space up: $e');
+      return 1;
+    }
+
+    // The pinned start ordering (ADR-0007 §4): controllers → freshness barrier
+    // → restart-reconcile the survivors → the bridge follows — all BEFORE the
+    // tree mounts, so nothing blindly respawns.
+    try {
+      await workRuntime.start();
+    } on Object catch (e) {
+      await workRuntime.shutdown();
+      await stationLock.release();
+      err('space up: $e');
+      return 1;
+    }
+
+    // --- space_station AS A SEED: author the delegate, ARMED with the work
+    // wiring. The land ops flow into the substations' GitHub assets only when
+    // --land armed a live run (ADR-0006 D3) — never through station services.
+    final land = buildLandOps(armed: landArmed && !config.dryRun);
+    final delegate = SpaceDelegate(
+      gridRoot: config.gridHome,
+      stationName: 'space',
+      substations: config.substations,
+      agentConfig: agentConfig,
+      harnesses: harnesses,
+      wiring: workRuntime.wiring,
+      provisioner: workRuntime.git,
+      gitOps: land.gitOps,
+      prOpener: land.prOpener,
+    );
+
+    // --- mount the tree: runGrid over the SpaceDelegate. The armed WorkLists
+    // see the bridge's baseline and reconcile the ready frontier (mount =
+    // spawn — inert under --dry-run). A mount-time refusal unwinds everything.
     final GridHandle grid;
     try {
-      grid = runGrid(delegate);
+      grid = runGrid(delegate, onFlushed: workRuntime.afterFlush);
     } on Object catch (e) {
+      await workRuntime.shutdown();
       await stationLock.release();
       err('space up: $e');
       return 64;
@@ -238,10 +331,11 @@ class UpCommand extends Command<int> {
       control = await StationControl.start(
         port: config.controlPort,
         token: token,
-        view: () => _status(config, bootTime),
+        view: () => _status(config, bootTime, workRuntime),
       );
     } on Object catch (e) {
       grid.teardown();
+      await workRuntime.shutdown();
       await stationLock.release();
       err('space up: $e');
       return 1;
@@ -252,21 +346,28 @@ class UpCommand extends Command<int> {
     out(
       'mode: ${config.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
       'substations: {${config.substations.map((s) => s.name).join(', ')}}  ·  '
-      'work-driving: HELD (the runGrid→kernel bridge is the human gate, '
-      'Track J)',
+      'work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  ·  '
+      'land: ${land.prOpener != null ? 'armed' : 'off'}',
     );
     out(
       'agent scope: harness ${agentConfig.harness} → ${agentConfig.target}'
       '${model != null ? '  ·  model $model' : ''}',
     );
+    out(
+      'stores: read-path {${workRuntime.readPathName}}  ·  state partition: '
+      '${workRuntime.stateSubstation}',
+    );
     out('control: ${control.url}  ·  token: (see ${stationLock.path}, 0600)');
 
     // Dispose the control surface BEFORE releasing the lock (RS-4 scope fence —
     // a released lock naming a dead endpoint would mislead `space status`),
-    // then tear the tree down, then release LAST.
+    // then tear the tree down (unmount → effects kill), THEN the off-tree
+    // machinery (the bridge outlives the tree, never the reverse), then
+    // release LAST.
     Future<void> shutdown() async {
       await control.dispose();
       grid.teardown();
+      await workRuntime.shutdown();
       await stationLock.release();
     }
 
@@ -298,26 +399,37 @@ class UpCommand extends Command<int> {
     return 0;
   }
 
-  /// space's `/status` view (RS-4) — built directly (not `grid_cli`'s
-  /// `buildStationStatus`, which reads a live kernel's join bridge). H2 drives
-  /// no work: `ready`/`mounted`/`liveSessions` are 0 and there is no work
-  /// snapshot yet — they light up when the runGrid→kernel bridge lands.
-  StationStatus _status(SpaceStationConfig config, DateTime startedAt) =>
-      StationStatus(
-        substation: config.substations.map((s) => s.name).join(','),
-        stateStore: config.gridHome,
-        workRoot: config.substations
-            .map((s) => '${s.name}=${s.root.path}')
-            .join(', '),
-        dryRun: config.dryRun,
-        pid: pid,
-        startedAt: startedAt,
-        version: Platform.version,
-        ready: 0,
-        mounted: 0,
-        liveSessions: 0,
-        lastSyncAt: null,
-      );
+  /// space's `/status` view (RS-4): the counts read the work runtime's
+  /// PRODUCER-side latest join (what the bridge last pushed — never the
+  /// notifier's reactive state, D-H rule 2). `mounted` reports the live
+  /// (non-terminal) session count — post-A40 a live session ⇔ a mounted work
+  /// branch.
+  StationStatus _status(
+    SpaceStationConfig config,
+    DateTime startedAt,
+    StationWorkRuntime workRuntime,
+  ) {
+    final latest = workRuntime.latest;
+    final live = latest.sessionsByWorkBead.values
+        .where((s) => !s.isTerminal)
+        .length;
+    final capturedAt = latest.graph.capturedAt;
+    return StationStatus(
+      substation: config.substations.map((s) => s.name).join(','),
+      stateStore: config.gridHome,
+      workRoot: config.substations
+          .map((s) => '${s.name}=${s.root.path}')
+          .join(', '),
+      dryRun: config.dryRun,
+      pid: pid,
+      startedAt: startedAt,
+      version: Platform.version,
+      ready: latest.graph.readyIds.length,
+      mounted: live,
+      liveSessions: live,
+      lastSyncAt: capturedAt.millisecondsSinceEpoch == 0 ? null : capturedAt,
+    );
+  }
 
   void _out(String message) => stdout.writeln(message);
   void _err(String message) => stderr.writeln(message);
