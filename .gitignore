@@ -35,6 +35,9 @@ space
 .idea/
 
 # bd/harness integration scaffolding (generated per checkout — adopt deliberately, never by sweep)
-.claude/
+# bd-regenerated harness scaffolding stays ignored; deliberate assets are allowlisted
+.claude/*
+!.claude/skills
+!.claude/agents
 .codex/
 .agents/
