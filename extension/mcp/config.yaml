@@ -1,0 +1,43 @@
+# The Governor — station-operations AI assets, authored in the Dart/Flutter
+# "Packaged AI Assets" format (per flutter.dev/go/packaged-ai-assets, the
+# package:extension_discovery `extension/mcp/config.yaml` shape) — the same
+# convention as power_station's grid_assets manifest. Skills follow the
+# agentskills.io specification (SKILL.md frontmatter + body); the RFC keeps
+# skills in a resources-shaped holding pattern, so each is declared here as a
+# resource pointing at its SKILL.md. `.claude/` symlinks adopt the same files
+# for Claude Code sessions run from this repo.
+name: space_station
+version: 1
+
+resources:
+  - id: governor
+    description: >-
+      The governor agent — operator of a resident the_grid station: mandate,
+      operating loop, human gates, safety invariants, tool grammar.
+    path: agents/governor.md
+    visibility: public
+  - id: station-operations
+    description: >-
+      Boot/bounce/status/teardown, the silent-death runbook (ready > 0,
+      mounted 0), state-store seeding (types.custom), and the watch pattern.
+    path: skills/station-operations/SKILL.md
+    visibility: public
+  - id: intake-grooming
+    description: >-
+      The bead contract (validation_plan, driveable types, deps),
+      defer-until-blessed staging, staleness reconciliation, bd footguns.
+    path: skills/intake-grooming/SKILL.md
+    visibility: public
+  - id: gate-medicine
+    description: >-
+      Critique-artifact forensics, systemic-vs-genuine triage, the
+      rework-not-gate-close doctrine, hygiene sweeps for moot/duplicate gates
+      and orphaned sessions.
+    path: skills/gate-medicine/SKILL.md
+    visibility: public
+  - id: harvest-review
+    description: >-
+      Per-bead verification (delta, verdicts, plan re-run), keep/rework/stale
+      disposition, PR-with-receipts landing; merges stay with the human.
+    path: skills/harvest-review/SKILL.md
+    visibility: public
