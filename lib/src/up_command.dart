@@ -178,11 +178,19 @@ class UpCommand extends Command<int> {
       err('space up: ${e.message}');
       return 64;
     }
-    final model = results.option('model');
+    // Pin an EXPLICIT model — never inherit the `claude` CLI default. The
+    // default resolved to opus, then silently fell back to fable once the
+    // weekly opus limit blew (the grid spawns ~10 agents/bead; it obliterates a
+    // limit fast), eating fable quota nobody asked for. An explicit model gives
+    // every agent — the coding agent AND the committee critics, which ride the
+    // same base config — a known tier with no fallback surprise. Sonnet is the
+    // station default (graders don't need a frontier model and neither do most
+    // builds); override station-wide with --model.
+    final model = results.option('model') ?? 'sonnet';
     final agentConfig = AgentConfig(
       harness: results.option('harness') ?? 'claude',
       target: target,
-      params: {if (model != null) 'model': model},
+      params: {'model': model},
     );
     final harnesses = buildAgentHarnessRegistry();
     final invalid = harnesses.validate(agentConfig);
@@ -421,7 +429,7 @@ class UpCommand extends Command<int> {
     );
     out(
       'agent scope: harness ${agentConfig.harness} → ${agentConfig.target}'
-      '${model != null ? '  ·  model $model' : ''}',
+      '  ·  model $model',
     );
     out(
       'stores: read-path {${workRuntime.readPathName}}  ·  state partition: '
