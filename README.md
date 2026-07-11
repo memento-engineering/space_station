@@ -17,7 +17,7 @@ CLI-SDK ones (`watch`/`gate`/`demo` + `serve`/`lease`) plus the asset-exported
 ```sh
 dart pub get                              # needs the sibling checkouts + overrides
 dart compile exe bin/space.dart -o space  # the AOT station binary
-./space up --substation tg --state-workspace ../tgdog --dry-run
+./space up --grid-home .                   # arms the coded memento org (dry-run)
 ```
 
 ## The resident station (`up` / `down` / `status`)
@@ -35,21 +35,22 @@ no double-fork — a supervisor (launchd; the runbook is RS-6) owns
 backgrounding.
 
 ```sh
-./space up --substation tg --state-workspace ../tgdog --dry-run   # observe-only
-./space up --substation tg --state-workspace ../tgdog \
-  --root tg=../the_grid \
-  --root power_station=../power_station \
-  --root space_station=../space_station \
-  --root genesis=../genesis \
-  --no-dry-run
+./space up --grid-home . --dry-run                     # arm the coded org, observe-only
+./space up --grid-home . --substation the_grid@tg=/elsewhere/the_grid  # rebind one root
+./space up --grid-home . --no-dry-run                  # arm the coded org, LIVE (human gate)
 ```
 
-`--root <name>=<path>[@head]` is repeatable (tg-7gm): a name equal to an
-owned `--substation` becomes that substation's DEFAULT root; any OTHER name
-is an EXTRA root a bead opts into via its `metadata.grid.root` (e.g. a `tg`
-bead building `power_station` names `grid.root: power_station`). Bare
-`--root <path>` (no `=`) is the single-root shorthand, back-compatible:
-registers under the first `--substation`.
+**The roster is memento's org, hardcoded** (space-6ds;
+[`the_grid/docs/SCRATCH-memento-composition.md`](../the_grid/docs/SCRATCH-memento-composition.md)):
+`space_station` IS memento's grid instance, so `SpaceDelegate.build()` seats the
+five sibling repos — `genesis`, `the_grid`, `power_station`, `space_station`,
+`lenny` — at their umbrella-sibling `../<repo>` roots, resolved against the grid
+home. No-flag `space up` arms that coded base; a coded substation whose checkout
+isn't present is skipped LOUD (the org still arms). `--substation
+<name>[@<prefix>]=<root>` (repeatable) MERGES onto the base — a coded name rebinds
+that root, a new name appends one — never replaces it (TOML config, later, layers
+the same way). An OPERATOR-named substation with no work store is still a LOUD
+refusal.
 
 `down` and `status` are thin clients over the SAME `--state-workspace` `up`
 was given — they read the station lock and, for `status`, attach to the

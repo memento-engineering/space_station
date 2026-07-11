@@ -32,9 +32,15 @@ import 'package:test/test.dart';
 ///      `Stopped` message, exit 0, the lock released, AND the target process
 ///      confirmed exited) and no-ops cleanly (exit 0) when nothing is up. The
 ///      raw-OS-SIGTERM path is proven as its OWN case below.
-///  (f) booting with TWO named substations (v3: each a name AND its ONE root)
+///  (f) booting with TWO appended substations (v3: each a name AND its ONE
+///      root; space-6ds round 3: flags APPEND, so both names are non-coded)
 ///      reports BOTH under `GET /status`'s `station.workRoot`, proving the
 ///      parsed multi-substation config reaches the live control surface.
+///  (g) a NO-FLAG `up` over a fabricated umbrella (space-6ds Fork A/B: the
+///      memento roster hardcoded in `SpaceDelegate.build` IS the default)
+///      arms exactly the coded siblings that resolve work stores — skipping
+///      the absent ones LOUD — and reports the armed set under
+///      `station.workRoot`.
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
@@ -236,8 +242,8 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('up --dry-run with TWO named substations (v3: each a name AND its ONE '
-      'root) reports BOTH under GET /status\'s station.workRoot', () async {
+  test('up --dry-run with TWO appended substations (v3: each a name AND its '
+      'ONE root) reports BOTH under GET /status\'s station.workRoot', () async {
     final gridHome = await _bdInitGridHome('space-up-multi-home-');
     final rootA = await _bdInitWorkspace('space-up-multi-a-');
     final rootB = await _bdInitWorkspace('space-up-multi-b-');
@@ -254,7 +260,7 @@ void main() {
       '--substation',
       'smoketest=${rootA.path}',
       '--substation',
-      'power_station=${rootB.path}',
+      'smokemate=${rootB.path}',
       '--grid-home',
       gridHome.path,
       '--control-port',
@@ -281,7 +287,7 @@ void main() {
       workRoot,
       allOf(
         contains('smoketest=${rootA.path}'),
-        contains('power_station=${rootB.path}'),
+        contains('smokemate=${rootB.path}'),
       ),
       reason:
           'both substation roots must reach the live control surface\n'
@@ -289,6 +295,76 @@ void main() {
           'stdout: ${upIo.out}\nstderr: ${upIo.err}',
     );
   }, timeout: const Timeout(Duration(minutes: 1)));
+
+  test('NO-FLAG up over a fabricated umbrella arms the coded siblings that '
+      'resolve stores and skips the absent ones LOUD (space-6ds Fork A/B: '
+      'the coded memento roster is the default drive set)', () async {
+    // The umbrella: the grid home is a member directory whose SIBLINGS are the
+    // coded `../<repo>` roots. Two of the five (genesis, the_grid) get real
+    // bd stores; the other three are absent from this "checkout".
+    final umbrella = Directory(
+      (await Directory.systemTemp.createTemp(
+        'space-up-coded-umbrella-',
+      )).resolveSymbolicLinksSync(),
+    );
+    addTearDown(() => umbrella.delete(recursive: true));
+    final gridHome = Directory('${umbrella.path}/home')..createSync();
+    final runtimeDir = Directory('${gridHome.path}/.grid')..createSync();
+    await _bdInit(runtimeDir.path, args: const ['init', '--prefix', 'state']);
+    final genesisRoot = Directory('${umbrella.path}/genesis')..createSync();
+    await _bdInit(genesisRoot.path, args: const ['init']);
+    final theGridRoot = Directory('${umbrella.path}/the_grid')..createSync();
+    await _bdInit(theGridRoot.path, args: const ['init', '--prefix', 'tg']);
+    final lockPath = StationLockService.lockPath(gridHome.path);
+
+    final up = await _spawnSpace([
+      'up',
+      '--dry-run',
+      '--grid-home',
+      gridHome.path,
+      '--control-port',
+      '0',
+    ]);
+    final upIo = _CapturedIo(up);
+    addTearDown(() async {
+      if (await _isAlive(up.pid)) {
+        up.kill(ProcessSignal.sigkill);
+      }
+    });
+
+    final lock = await _untilLockAdvertised(lockPath);
+    final controlUrl = lock['controlUrl']! as String;
+    final token = lock['token']! as String;
+
+    final status = await _getJson(
+      Uri.parse('$controlUrl/status'),
+      token: token,
+    );
+    final station = status['station']! as Map<String, Object?>;
+    final workRoot = station['workRoot'] as String?;
+    expect(
+      workRoot,
+      allOf(
+        contains('genesis=${genesisRoot.path}'),
+        contains('the_grid=${theGridRoot.path}'),
+        isNot(contains('power_station=')),
+        isNot(contains('space_station=')),
+        isNot(contains('lenny=')),
+      ),
+      reason:
+          'the no-flag boot must arm EXACTLY the coded siblings with stores\n'
+          'full payload: $status\n'
+          'stdout: ${upIo.out}\nstderr: ${upIo.err}',
+    );
+    // The absent coded siblings were skipped LOUD, not silently dropped.
+    for (final absent in ['power_station', 'space_station', 'lenny']) {
+      expect(
+        upIo.out.toString(),
+        contains('skipping coded substation "$absent"'),
+        reason: 'stdout: ${upIo.out}\nstderr: ${upIo.err}',
+      );
+    }
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 /// `bd init`s a fresh, hermetic temp workspace (embedded Dolt — no server, no
