@@ -32,13 +32,15 @@ import 'package:test/test.dart';
 ///      `Stopped` message, exit 0, the lock released, AND the target process
 ///      confirmed exited) and no-ops cleanly (exit 0) when nothing is up. The
 ///      raw-OS-SIGTERM path is proven as its OWN case below.
-///  (f) booting with TWO named substations (v3: each a name AND its ONE root)
+///  (f) booting with TWO appended substations (v3: each a name AND its ONE
+///      root; space-6ds round 3: flags APPEND, so both names are non-coded)
 ///      reports BOTH under `GET /status`'s `station.workRoot`, proving the
 ///      parsed multi-substation config reaches the live control surface.
 ///  (g) a NO-FLAG `up` over a fabricated umbrella (space-6ds Fork A/B: the
-///      coded memento roster IS the default) arms exactly the coded siblings
-///      that resolve work stores — skipping the absent ones LOUD — and
-///      reports the armed set under `station.workRoot`.
+///      memento roster hardcoded in `SpaceDelegate.build` IS the default)
+///      arms exactly the coded siblings that resolve work stores — skipping
+///      the absent ones LOUD — and reports the armed set under
+///      `station.workRoot`.
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
@@ -240,8 +242,8 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('up --dry-run with TWO named substations (v3: each a name AND its ONE '
-      'root) reports BOTH under GET /status\'s station.workRoot', () async {
+  test('up --dry-run with TWO appended substations (v3: each a name AND its '
+      'ONE root) reports BOTH under GET /status\'s station.workRoot', () async {
     final gridHome = await _bdInitGridHome('space-up-multi-home-');
     final rootA = await _bdInitWorkspace('space-up-multi-a-');
     final rootB = await _bdInitWorkspace('space-up-multi-b-');
@@ -258,7 +260,7 @@ void main() {
       '--substation',
       'smoketest=${rootA.path}',
       '--substation',
-      'power_station=${rootB.path}',
+      'smokemate=${rootB.path}',
       '--grid-home',
       gridHome.path,
       '--control-port',
@@ -285,7 +287,7 @@ void main() {
       workRoot,
       allOf(
         contains('smoketest=${rootA.path}'),
-        contains('power_station=${rootB.path}'),
+        contains('smokemate=${rootB.path}'),
       ),
       reason:
           'both substation roots must reach the live control surface\n'

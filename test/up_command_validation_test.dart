@@ -10,12 +10,15 @@ import 'package:test/test.dart';
 /// merge, the exact-at-root work-store refusal). Every case here returns BEFORE
 /// the station lock is acquired or the tree mounts — no lock, no boot, no wait.
 ///
-/// space-6ds (`the_grid/docs/SCRATCH-memento-composition.md`): `--substation` is
-/// no longer required — no-flag `space up` arms the CODED memento roster (Fork A);
-/// a flag MERGES onto it (Fork B). Outside the umbrella the coded siblings do not
-/// resolve, so a hermetic (non-umbrella) grid home arms nothing — itself a LOUD
-/// refusal (exit 1). An OPERATOR-named substation with no store still refuses
-/// LOUD; a coded one absent from the checkout is skipped, not fatal.
+/// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md`):
+/// `--substation` is no longer required — no-flag `space up` arms the CODED
+/// memento roster, hardcoded in `SpaceDelegate.build` (Fork A); a flag
+/// APPENDS a new substation after it, and a flag naming a CODED substation is
+/// a LOUD refusal (Fork B as re-ruled: the org is forked, never overridden).
+/// Outside the umbrella the coded siblings do not resolve, so a hermetic
+/// (non-umbrella) grid home arms nothing — itself a LOUD refusal (exit 1). An
+/// APPENDED substation with no store still refuses LOUD; a coded one absent
+/// from the checkout is skipped, not fatal.
 ///
 /// Exercised over the real `space` CLI (`bin/space.dart`) because
 /// `Stdout`/`Stderr` cannot be faked in-process (no public constructor), so a
@@ -75,20 +78,22 @@ void main() {
   });
 
   group('v3 stores-at-roots arming (returns before the lock / tree mount)', () {
-    test('NO --grid-home is refused LOUD (exit 64) — v3 §0: no default grid home '
-        '(the roster now defaults to the coded org, but the home never does)',
-        () async {
-      final result = await _runUp([]);
-      expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        allOf(
-          contains('--grid-home'),
-          contains('required to ARM'),
-          contains('no default grid home'),
-        ),
-      );
-    });
+    test(
+      'NO --grid-home is refused LOUD (exit 64) — v3 §0: no default grid home '
+      '(the roster now defaults to the coded org, but the home never does)',
+      () async {
+        final result = await _runUp([]);
+        expect(result.exitCode, 64);
+        expect(
+          '${result.stderr}',
+          allOf(
+            contains('--grid-home'),
+            contains('required to ARM'),
+            contains('no default grid home'),
+          ),
+        );
+      },
+    );
 
     test('--grid-home present but NO --substation, OUTSIDE the umbrella: the '
         'coded siblings do not resolve, so nothing arms — a LOUD refusal (exit '
@@ -103,23 +108,26 @@ void main() {
       expect('${result.stderr}', contains('nothing to arm'));
     });
 
-    test('a --substation with no "=" (unpaired name) is a LOUD FormatException '
-        '— a config defect the operator sees immediately, not exit 64', () async {
-      final result = await _runUp([
-        '--grid-home',
-        '/tmp/space-up-unpaired',
-        '--substation',
-        'lonely',
-      ]);
-      expect(result.exitCode, isNot(0));
-      expect(
-        '${result.stderr}',
-        contains(
-          'FormatException: space up: --substation "lonely" must pair a name '
-          'with its ONE root',
-        ),
-      );
-    });
+    test(
+      'a --substation with no "=" (unpaired name) is a LOUD FormatException '
+      '— a config defect the operator sees immediately, not exit 64',
+      () async {
+        final result = await _runUp([
+          '--grid-home',
+          '/tmp/space-up-unpaired',
+          '--substation',
+          'lonely',
+        ]);
+        expect(result.exitCode, isNot(0));
+        expect(
+          '${result.stderr}',
+          contains(
+            'FormatException: space up: --substation "lonely" must pair a name '
+            'with its ONE root',
+          ),
+        );
+      },
+    );
 
     test('a --substation with an EMPTY "@" prefix is a LOUD FormatException — '
         'omit the "@" entirely when the prefix is the name', () async {
@@ -130,10 +138,7 @@ void main() {
         'the_grid@=/tmp/tg',
       ]);
       expect(result.exitCode, isNot(0));
-      expect(
-        '${result.stderr}',
-        contains('has an empty prefix after "@"'),
-      );
+      expect('${result.stderr}', contains('has an empty prefix after "@"'));
     });
 
     test('--land contradicts --dry-run — refused LOUD (exit 64), never a '
@@ -147,11 +152,32 @@ void main() {
         'foo=/tmp/a',
       ]);
       expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        contains('--land contradicts --dry-run'),
-      );
+      expect('${result.stderr}', contains('--land contradicts --dry-run'));
     });
+
+    test(
+      'a --substation naming a CODED substation is a LOUD FormatException '
+      '— the hardcoded roster is forked, never overridden (round 3)',
+      () async {
+        final result = await _runUp([
+          '--grid-home',
+          '/tmp/space-up-coded-name',
+          '--substation',
+          'power_station=/tmp/ps',
+        ]);
+        expect(result.exitCode, isNot(0));
+        expect(
+          '${result.stderr}',
+          allOf(
+            contains(
+              'FormatException: space up: --substation "power_station=/tmp/ps" '
+              'names the CODED substation "power_station"',
+            ),
+            contains('APPEND new substations only'),
+          ),
+        );
+      },
+    );
 
     test('registering the SAME --substation name twice is a LOUD FormatException '
         '(never a silent overwrite)', () async {
@@ -188,25 +214,27 @@ void main() {
       );
     });
 
-    test('an absolute substation root with NO `.beads/` work store is refused '
-        'LOUD (exit 1) — exact-at-root, no walk-up (grid_sdk StoreLocator)',
-        () async {
-      final result = await _runUp([
-        '--grid-home',
-        '/tmp/space-up-nostore',
-        '--substation',
-        'foo=/tmp/space-up-nonexistent-work-root-xyz',
-      ]);
-      expect(result.exitCode, 1);
-      expect(
-        '${result.stderr}',
-        allOf(
-          contains('space up:'),
-          contains('no work store'),
-          contains('/tmp/space-up-nonexistent-work-root-xyz'),
-        ),
-      );
-    });
+    test(
+      'an absolute substation root with NO `.beads/` work store is refused '
+      'LOUD (exit 1) — exact-at-root, no walk-up (grid_sdk StoreLocator)',
+      () async {
+        final result = await _runUp([
+          '--grid-home',
+          '/tmp/space-up-nostore',
+          '--substation',
+          'foo=/tmp/space-up-nonexistent-work-root-xyz',
+        ]);
+        expect(result.exitCode, 1);
+        expect(
+          '${result.stderr}',
+          allOf(
+            contains('space up:'),
+            contains('no work store'),
+            contains('/tmp/space-up-nonexistent-work-root-xyz'),
+          ),
+        );
+      },
+    );
   });
 }
 

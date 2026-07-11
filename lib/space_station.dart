@@ -47,7 +47,7 @@ import 'src/up_command.dart';
 
 // space_station authored as a Seed (Track G-space): the delegate the resident
 // verbs re-seat over is part of the public library surface.
-export 'src/space_delegate.dart' show SpaceDelegate, SpaceSubstation;
+export 'src/space_delegate.dart' show SpaceDelegate;
 
 /// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
 /// the power_station assets' exported Commands, with the COMPUTE asset's use

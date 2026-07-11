@@ -45,14 +45,10 @@ class DownCommand extends Command<int> {
         stderr.writeln(message);
         return code;
       case StateWorkspaceFound(:final home):
-        final result = await StationAttach().stop(
-          stateWorkspaceDir: home,
-        );
+        final result = await StationAttach().stop(stateWorkspaceDir: home);
         switch (result) {
           case AlreadyDown():
-            stdout.writeln(
-              'down: already down — no live station at $home.',
-            );
+            stdout.writeln('down: already down — no live station at $home.');
             return 0;
           case Stopped(:final pid):
             stdout.writeln(

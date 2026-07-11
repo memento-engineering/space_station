@@ -58,8 +58,10 @@ import 'package:grid_cli/grid_cli.dart'
         StationLockService,
         StationStatus,
         mintControlToken;
-import 'package:grid_assets/grid_assets.dart' show buildCodeRegistry, kCodeCircuit;
-import 'package:grid_runtime/grid_runtime.dart' show SystemProcessGroupController;
+import 'package:grid_assets/grid_assets.dart'
+    show buildCodeRegistry, kCodeCircuit;
+import 'package:grid_runtime/grid_runtime.dart'
+    show SystemProcessGroupController;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         CircuitResolver,
@@ -72,8 +74,17 @@ import 'package:grid_sdk/grid_sdk.dart'
         buildLandOps,
         buildStationWork,
         runGrid;
+import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
+
+/// One substation `up` armed — a name, its resolved ABSOLUTE root, and its
+/// work store's issue-id prefix. The off-tree work machinery (the store
+/// guard, `buildStationWork`'s specs, the `/status` view) runs BEFORE the
+/// tree mounts (the pinned ordering, ADR-0007 §4), so it carries the roster
+/// as plain values; the tree itself is authored independently, literally, in
+/// `SpaceDelegate.build` (space-6ds Fork A).
+typedef _ArmedSubstation = ({String name, String root, String prefix});
 
 /// `space up`: boots the resident station.
 class UpCommand extends Command<int> {
@@ -180,12 +191,12 @@ class UpCommand extends Command<int> {
       return 64;
     }
 
-    // --- space's OWN resident-station config (v3 stores-at-roots). The roster
-    // is the coded memento org with any --substation flags merged on
-    // (space-6ds); no-flag `space up` arms the coded base, so only a missing
-    // --grid-home is a LOUD arming refusal (never a `''` sentinel — v3 kills
-    // those). A malformed/duplicate --substation is an uncaught FormatException
-    // (a config defect the operator sees immediately).
+    // --- space's OWN resident-station config (v3 stores-at-roots). The coded
+    // memento roster is HARDCODED in SpaceDelegate.build (space-6ds); flags
+    // only APPEND new substations, so only a missing --grid-home is a LOUD
+    // arming refusal (never a `''` sentinel — v3 kills those). A malformed,
+    // duplicate, or coded-name --substation is an uncaught FormatException (a
+    // config defect the operator sees immediately).
     final config = spaceStationConfigFrom(results);
     if (config == null) {
       err(
@@ -223,29 +234,68 @@ class UpCommand extends Command<int> {
     }
     // Each substation's `.beads/` work store is looked for at its EXACT root, no
     // walk-up (grid_sdk StoreLocator). Provenance splits the guard (space-6ds
-    // Fork A/B): an OPERATOR-named substation (a `--substation` flag) whose store
-    // is absent is a LOUD refusal — their error; a CODED-roster substation not
-    // present in THIS checkout (a sibling not yet cloned/relocated — e.g. lenny)
-    // is skipped LOUD so the rest of the org still arms. `space up` arms exactly
-    // what resolves a store; nothing resolving is itself a LOUD refusal.
+    // Fork A/B): an APPENDED substation (a `--substation` flag) whose store is
+    // absent is a LOUD refusal — the operator's error; a CODED-roster substation
+    // not present in THIS checkout (a sibling not yet cloned/relocated — e.g.
+    // lenny) is skipped LOUD so the rest of the org still arms. `space up` arms
+    // exactly what resolves a store; nothing resolving is itself a LOUD refusal.
+    //
+    // The coded org, restated as OFF-TREE specs: the work machinery (the
+    // controllers `buildStationWork` builds, this guard, the /status view)
+    // runs BEFORE the tree mounts, so it cannot read the tree's seats — each
+    // `../<repo>` sibling is resolved against the grid home here exactly as
+    // the tree's literal seats resolve against the ambient GridRoot (tg-32r).
+    // Same five seats, same order, same prefixes as SpaceDelegate.build.
+    final coded = <_ArmedSubstation>[
+      (
+        name: 'genesis',
+        root: p.normalize(p.join(config.gridHome, '../genesis')),
+        prefix: 'genesis',
+      ),
+      (
+        name: 'the_grid',
+        root: p.normalize(p.join(config.gridHome, '../the_grid')),
+        prefix: 'tg',
+      ),
+      (
+        name: 'power_station',
+        root: p.normalize(p.join(config.gridHome, '../power_station')),
+        prefix: 'pow',
+      ),
+      (
+        name: 'space_station',
+        root: p.normalize(p.join(config.gridHome, '../space_station')),
+        prefix: 'space_station',
+      ),
+      (
+        name: 'lenny',
+        root: p.normalize(p.join(config.gridHome, '../lenny')),
+        prefix: 'lenny',
+      ),
+    ];
     final locator = StoreLocator();
-    final armed = <SpaceSubstation>[];
-    for (final s in config.substations) {
+    final armed = <_ArmedSubstation>[];
+    for (final s in coded) {
       try {
-        locator.locateWorkStore(root: s.root.path, substationName: s.name);
+        locator.locateWorkStore(root: s.root, substationName: s.name);
         armed.add(s);
+      } on StoreRefusal {
+        out(
+          'space up: skipping coded substation "${s.name}" — no work store at '
+          '${s.root} (not present in this checkout).',
+        );
+      }
+    }
+    for (final s in config.appended) {
+      try {
+        locator.locateWorkStore(root: s.root, substationName: s.name);
+        armed.add((name: s.name, root: s.root, prefix: s.prefix));
       } on ArgumentError catch (e) {
         err('space up: ${e.message}');
         return 64;
       } on StoreRefusal catch (e) {
-        if (config.operatorNames.contains(s.name)) {
-          err('space up: ${e.message}');
-          return 1;
-        }
-        out(
-          'space up: skipping coded substation "${s.name}" — no work store at '
-          '${s.root.path} (not present in this checkout).',
-        );
+        err('space up: ${e.message}');
+        return 1;
       }
     }
     if (armed.isEmpty) {
@@ -256,16 +306,6 @@ class UpCommand extends Command<int> {
       );
       return 1;
     }
-    // The ARMED roster (present-at-root only) is what the tree, the off-tree
-    // work machinery, and the control surface drive from here on.
-    final armedConfig = SpaceStationConfig(
-      gridHome: config.gridHome,
-      substations: armed,
-      operatorNames: config.operatorNames,
-      dryRun: config.dryRun,
-      controlPort: config.controlPort,
-      runFor: config.runFor,
-    );
 
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
     // Acquired before anything stateful; a LIVE holder is a LOUD refusal (exit
@@ -292,18 +332,14 @@ class UpCommand extends Command<int> {
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await buildStationWork(
-        stateStore: GridStateStore.forGridRoot(armedConfig.gridHome),
+        stateStore: GridStateStore.forGridRoot(config.gridHome),
         substations: [
-          for (final s in armedConfig.substations)
-            SubstationWorkSpec(
-              name: s.name,
-              root: s.root.path,
-              prefix: s.prefix,
-            ),
+          for (final s in armed)
+            SubstationWorkSpec(name: s.name, root: s.root, prefix: s.prefix),
         ],
         resolver: CircuitResolver((_) => kCodeCircuit),
         registry: buildCodeRegistry(),
-        dryRun: armedConfig.dryRun,
+        dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
       );
     } on Object catch (e) {
@@ -325,13 +361,15 @@ class UpCommand extends Command<int> {
     }
 
     // --- space_station AS A SEED: author the delegate, ARMED with the work
-    // wiring. The land ops flow into the substations' GitHub assets only when
-    // --land armed a live run (ADR-0006 D3) — never through station services.
-    final land = buildLandOps(armed: landArmed && !armedConfig.dryRun);
+    // wiring. The coded org is hardcoded in its build; only the operator's
+    // appended seats ride in. The land ops flow into the substations' GitHub
+    // assets only when --land armed a live run (ADR-0006 D3) — never through
+    // station services.
+    final land = buildLandOps(armed: landArmed && !config.dryRun);
     final delegate = SpaceDelegate(
-      gridRoot: armedConfig.gridHome,
+      gridRoot: config.gridHome,
       stationName: 'space',
-      substations: armedConfig.substations,
+      appended: config.appended,
       agentConfig: agentConfig,
       harnesses: harnesses,
       wiring: workRuntime.wiring,
@@ -361,9 +399,9 @@ class UpCommand extends Command<int> {
     final StationControl control;
     try {
       control = await StationControl.start(
-        port: armedConfig.controlPort,
+        port: config.controlPort,
         token: token,
-        view: () => _status(armedConfig, bootTime, workRuntime),
+        view: () => _status(config, armed, bootTime, workRuntime),
       );
     } on Object catch (e) {
       grid.teardown();
@@ -376,9 +414,9 @@ class UpCommand extends Command<int> {
 
     out('space up — space_station as a Seed (runGrid)');
     out(
-      'mode: ${armedConfig.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
-      'substations: {${armedConfig.substations.map((s) => s.name).join(', ')}}  '
-      '·  work-driving: ARMED (${armedConfig.dryRun ? 'inert seams' : 'live'})  '
+      'mode: ${config.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
+      'substations: {${armed.map((s) => s.name).join(', ')}}  '
+      '·  work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  '
       '·  land: ${land.prOpener != null ? 'armed' : 'off'}',
     );
     out(
@@ -403,7 +441,7 @@ class UpCommand extends Command<int> {
       await stationLock.release();
     }
 
-    final runFor = armedConfig.runFor;
+    final runFor = config.runFor;
     if (runFor != null) {
       await Future<void>.delayed(runFor);
       await shutdown();
@@ -438,6 +476,7 @@ class UpCommand extends Command<int> {
   /// branch.
   StationStatus _status(
     SpaceStationConfig config,
+    List<_ArmedSubstation> armed,
     DateTime startedAt,
     StationWorkRuntime workRuntime,
   ) {
@@ -447,11 +486,9 @@ class UpCommand extends Command<int> {
         .length;
     final capturedAt = latest.graph.capturedAt;
     return StationStatus(
-      substation: config.substations.map((s) => s.name).join(','),
+      substation: armed.map((s) => s.name).join(','),
       stateStore: config.gridHome,
-      workRoot: config.substations
-          .map((s) => '${s.name}=${s.root.path}')
-          .join(', '),
+      workRoot: armed.map((s) => '${s.name}=${s.root}').join(', '),
       dryRun: config.dryRun,
       pid: pid,
       startedAt: startedAt,
