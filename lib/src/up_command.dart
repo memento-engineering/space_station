@@ -180,16 +180,17 @@ class UpCommand extends Command<int> {
       return 64;
     }
 
-    // --- space's OWN resident-station config (v3 stores-at-roots). A missing
-    // --grid-home or an empty substation set is a LOUD arming refusal (never a
-    // `''` sentinel — v3 kills those); a malformed/duplicate --substation is an
-    // uncaught FormatException (a config defect the operator sees immediately).
+    // --- space's OWN resident-station config (v3 stores-at-roots). The roster
+    // is the coded memento org with any --substation flags merged on
+    // (space-6ds); no-flag `space up` arms the coded base, so only a missing
+    // --grid-home is a LOUD arming refusal (never a `''` sentinel — v3 kills
+    // those). A malformed/duplicate --substation is an uncaught FormatException
+    // (a config defect the operator sees immediately).
     final config = spaceStationConfigFrom(results);
     if (config == null) {
       err(
-        'space up: --grid-home (the state store / RS-2 lock home) AND at least '
-        'one --substation <name>=<root> are required to ARM — v3 §0: there is '
-        'no default root and no default substation.',
+        'space up: --grid-home (the state store / RS-2 lock home) is required '
+        'to ARM — v3 §0: there is no default grid home.',
       );
       return 64;
     }
@@ -220,20 +221,51 @@ class UpCommand extends Command<int> {
       err('space up: ${e.message}');
       return 64;
     }
-    // Each substation's `.beads/` work store is looked for at its EXACT root,
-    // no walk-up (grid_sdk StoreLocator). Absent ⇒ a LOUD boot refusal.
+    // Each substation's `.beads/` work store is looked for at its EXACT root, no
+    // walk-up (grid_sdk StoreLocator). Provenance splits the guard (space-6ds
+    // Fork A/B): an OPERATOR-named substation (a `--substation` flag) whose store
+    // is absent is a LOUD refusal — their error; a CODED-roster substation not
+    // present in THIS checkout (a sibling not yet cloned/relocated — e.g. lenny)
+    // is skipped LOUD so the rest of the org still arms. `space up` arms exactly
+    // what resolves a store; nothing resolving is itself a LOUD refusal.
     final locator = StoreLocator();
+    final armed = <SpaceSubstation>[];
     for (final s in config.substations) {
       try {
         locator.locateWorkStore(root: s.root.path, substationName: s.name);
+        armed.add(s);
       } on ArgumentError catch (e) {
         err('space up: ${e.message}');
         return 64;
       } on StoreRefusal catch (e) {
-        err('space up: ${e.message}');
-        return 1;
+        if (config.operatorNames.contains(s.name)) {
+          err('space up: ${e.message}');
+          return 1;
+        }
+        out(
+          'space up: skipping coded substation "${s.name}" — no work store at '
+          '${s.root.path} (not present in this checkout).',
+        );
       }
     }
+    if (armed.isEmpty) {
+      err(
+        'space up: no substation resolved a work store at its root — nothing to '
+        'arm. The coded roster resolves siblings of the grid home; run from the '
+        'memento umbrella or pass --substation <name>=<root>.',
+      );
+      return 1;
+    }
+    // The ARMED roster (present-at-root only) is what the tree, the off-tree
+    // work machinery, and the control surface drive from here on.
+    final armedConfig = SpaceStationConfig(
+      gridHome: config.gridHome,
+      substations: armed,
+      operatorNames: config.operatorNames,
+      dryRun: config.dryRun,
+      controlPort: config.controlPort,
+      runFor: config.runFor,
+    );
 
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
     // Acquired before anything stateful; a LIVE holder is a LOUD refusal (exit
@@ -260,9 +292,9 @@ class UpCommand extends Command<int> {
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await buildStationWork(
-        stateStore: GridStateStore.forGridRoot(config.gridHome),
+        stateStore: GridStateStore.forGridRoot(armedConfig.gridHome),
         substations: [
-          for (final s in config.substations)
+          for (final s in armedConfig.substations)
             SubstationWorkSpec(
               name: s.name,
               root: s.root.path,
@@ -271,7 +303,7 @@ class UpCommand extends Command<int> {
         ],
         resolver: CircuitResolver((_) => kCodeCircuit),
         registry: buildCodeRegistry(),
-        dryRun: config.dryRun,
+        dryRun: armedConfig.dryRun,
         maxConcurrentWork: maxAgents,
       );
     } on Object catch (e) {
@@ -295,11 +327,11 @@ class UpCommand extends Command<int> {
     // --- space_station AS A SEED: author the delegate, ARMED with the work
     // wiring. The land ops flow into the substations' GitHub assets only when
     // --land armed a live run (ADR-0006 D3) — never through station services.
-    final land = buildLandOps(armed: landArmed && !config.dryRun);
+    final land = buildLandOps(armed: landArmed && !armedConfig.dryRun);
     final delegate = SpaceDelegate(
-      gridRoot: config.gridHome,
+      gridRoot: armedConfig.gridHome,
       stationName: 'space',
-      substations: config.substations,
+      substations: armedConfig.substations,
       agentConfig: agentConfig,
       harnesses: harnesses,
       wiring: workRuntime.wiring,
@@ -329,9 +361,9 @@ class UpCommand extends Command<int> {
     final StationControl control;
     try {
       control = await StationControl.start(
-        port: config.controlPort,
+        port: armedConfig.controlPort,
         token: token,
-        view: () => _status(config, bootTime, workRuntime),
+        view: () => _status(armedConfig, bootTime, workRuntime),
       );
     } on Object catch (e) {
       grid.teardown();
@@ -344,10 +376,10 @@ class UpCommand extends Command<int> {
 
     out('space up — space_station as a Seed (runGrid)');
     out(
-      'mode: ${config.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
-      'substations: {${config.substations.map((s) => s.name).join(', ')}}  ·  '
-      'work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  ·  '
-      'land: ${land.prOpener != null ? 'armed' : 'off'}',
+      'mode: ${armedConfig.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
+      'substations: {${armedConfig.substations.map((s) => s.name).join(', ')}}  '
+      '·  work-driving: ARMED (${armedConfig.dryRun ? 'inert seams' : 'live'})  '
+      '·  land: ${land.prOpener != null ? 'armed' : 'off'}',
     );
     out(
       'agent scope: harness ${agentConfig.harness} → ${agentConfig.target}'
@@ -371,7 +403,7 @@ class UpCommand extends Command<int> {
       await stationLock.release();
     }
 
-    final runFor = config.runFor;
+    final runFor = armedConfig.runFor;
     if (runFor != null) {
       await Future<void>.delayed(runFor);
       await shutdown();
