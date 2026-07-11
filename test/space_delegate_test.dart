@@ -1,6 +1,5 @@
 import 'package:genesis_tree/genesis_tree.dart';
-import 'package:grid_assets/grid_assets.dart'
-    show AgentConfig, ProviderManaged;
+import 'package:grid_assets/grid_assets.dart' show AgentConfig, ProviderManaged;
 import 'package:grid_runtime/grid_runtime.dart'
     show PrOpener, PullRequestRef, PullRequestResult, RootCheckout;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
@@ -38,7 +37,10 @@ void main() {
             root: root('power_station', '/work/ps'),
           ),
         ],
-    agentConfig: const AgentConfig(harness: 'claude', target: ProviderManaged()),
+    agentConfig: const AgentConfig(
+      harness: 'claude',
+      target: ProviderManaged(),
+    ),
     prOpener: prOpener,
   );
 
@@ -57,7 +59,8 @@ void main() {
       );
     });
 
-    test('a single-substation station mounts clean', () {
+    test('an appended (non-coded) substation mounts clean over the literal '
+        'coded org (space-6ds: the five coded seats are always authored)', () {
       expect(
         () => _mount(
           _Author(
@@ -85,7 +88,9 @@ void main() {
         () => _mount(
           _Author(
             delegate(
-              substations: [SpaceSubstation(name: '', root: root('', '/work/x'))],
+              substations: [
+                SpaceSubstation(name: '', root: root('', '/work/x')),
+              ],
             ),
           ),
         ),
@@ -136,5 +141,6 @@ class _FakePrOpener implements PrOpener {
     required String baseBranch,
     required String title,
     String body = '',
-  }) async => PullRequestResult.opened(const PullRequestRef(url: 'https://x/pr/1'));
+  }) async =>
+      PullRequestResult.opened(const PullRequestRef(url: 'https://x/pr/1'));
 }

@@ -60,8 +60,11 @@ class SpaceSubstation {
   /// [prefix] is the work store's issue-id prefix — a SEPARATE axis from the
   /// name (Nico, 2026-07-08; `SUBSTATION-INIT.md` §2): `the_grid` (name) mints
   /// `tg-…` (prefix). Defaults to the name.
-  const SpaceSubstation({required this.name, required this.root, String? prefix})
-    : _prefix = prefix;
+  const SpaceSubstation({
+    required this.name,
+    required this.root,
+    String? prefix,
+  }) : _prefix = prefix;
 
   /// The project's name (its substation id / ownership token).
   final String name;
@@ -115,7 +118,11 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// The machine's name (the `Station` name — e.g. the host).
   final String stationName;
 
-  /// The projects space drives, fanned out as `Substation`s.
+  /// The EFFECTIVE roster VALUES (Fork B): the coded base with the operator's
+  /// `--substation` flags merged on, as `space up` resolved it. [build] routes
+  /// these into its LITERAL coded seats by name — an override rebinds a seat's
+  /// root/prefix in place, a new name appends after the org — it never authors
+  /// the roster from them.
   final List<SpaceSubstation> substations;
 
   /// The station-default agent scope (harness / model / target) — the ambient
@@ -155,48 +162,199 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// `RawAssetGrid(gridRoot) → Station(stationName) → HarnessProvider →
   /// Substations → Substation(Nest[GitGridAssets, GitHubGridAssets?])`.
   ///
-  /// **The roster is the memento-engineering org, hardcoded**
+  /// **The memento-engineering roster is authored HERE, literal and verbose**
   /// (`the_grid/docs/SCRATCH-memento-composition.md` §3, Fork A): space_station
-  /// IS memento's grid instance, so its five sibling repos are authored here as
-  /// LITERAL, named [sdk.Substation] seats — genesis, the_grid, power_station,
-  /// space_station, lenny — never discovered on disk, never injected wholesale
-  /// via a flag. Their roots ([mementoCodedRoster]) are the umbrella siblings
-  /// `../<repo>`, resolved absolute against the grid home. `--substation` flags
-  /// (and, later, TOML) MERGE onto this base by name — an override rebinds a
-  /// coded seat's root in place; a new name appends (Fork B, [mergeRoster]) —
-  /// they never replace or subset the coded roster. [substations] is that
-  /// already-merged effective roster (space `up` folds the flags before
-  /// constructing the delegate); [build] just seats it, coded names first.
+  /// IS memento's grid instance, so its five org repos — genesis, the_grid,
+  /// power_station, space_station, lenny — are written out below as direct
+  /// [sdk.Substation] calls, each rooted at its umbrella sibling `../<repo>`
+  /// (resolved absolute against the grid home) and each carrying its OWN
+  /// `assets:` slot to hang per-substation assets on. NOT a manifest, NOT a
+  /// for-loop, NOT filesystem discovery — the org is the tree.
+  ///
+  /// `--substation` flags (and, later, TOML) MERGE onto this base by name —
+  /// never replace it (Fork B): space `up` folds the flags onto the coded base
+  /// ([mergeRoster]) and hands the delegate the effective VALUES as
+  /// [substations]; each coded seat below reads its merged root/prefix from
+  /// there, so an override rebinds a coded seat IN PLACE and a NEW name
+  /// APPENDS after the org. A coded sibling `up` dropped (no work store in
+  /// this checkout) keeps its seat at the coded `../<repo>` root — the
+  /// authored org stands; with no store controller feeding it, that seat
+  /// drives no work.
   ///
   /// Each substation's git is a SUBSTATION-SCOPED asset (Track F: this is where
   /// `ServiceBundle` dissolves) resolved by tree position (bead → substation →
-  /// root), never a string-keyed map. The harness registry + station-default
-  /// [AgentConfig] mount STATION-scoped via [HarnessProvider], above the fan-out
-  /// so every substation's work inherits them.
+  /// root), never a string-keyed map; each seat's `Nest` child is
+  /// [sdk.SubstationWork] — the seat the engine's `WorkList` binds into when
+  /// the station is armed (Track J, tg-yl8/space-6nj). FOLLOW-ON (space-7uc):
+  /// the committee's rubric/extension asset root belongs in these `assets:`
+  /// slots too, so the critic resolves `grid_assets/extension` from the
+  /// DECLARED path rather than a cwd walk-up — that asset is authored in
+  /// `grid_assets` (power_station), so it lands with 7uc's change, not here.
+  /// The harness registry + station-default [AgentConfig] mount STATION-scoped
+  /// via [HarnessProvider], above the fan-out so every substation's work
+  /// inherits them.
   ///
   /// Mounted by `runGrid(this)` (`space up`) and exercised offline by
-  /// `test/space_delegate_test.dart`. Each substation's `Nest` child is
-  /// [sdk.SubstationWork] — the seat the engine's `WorkList` binds into when the
-  /// station is armed (Track J, tg-yl8/space-6nj).
+  /// `test/space_delegate_test.dart` / `test/memento_roster_test.dart`.
   @override
   Seed build(TreeContext context, sdk.GridConfiguration configuration) {
     final armedWiring = wiring;
-    // The effective roster keyed by name — the coded five are seated by name
-    // (Fork A: literal, greppable — the org is visible IN the tree), any other
-    // is an appended flag/TOML substation (Fork B).
-    final byName = {for (final s in substations) s.name: s};
-    final coded = mementoCodedNames;
+    final opener = prOpener;
+    // Fork B ROUTING, not roster authorship (the roster is the literal seats
+    // below): pluck each coded seat's effective value — the coded base with
+    // the operator's flags merged on, minus any sibling `up` dropped — out of
+    // [substations] by name; whatever is left is the append layer.
+    SpaceSubstation? genesis;
+    SpaceSubstation? theGrid;
+    SpaceSubstation? powerStation;
+    SpaceSubstation? spaceStation;
+    SpaceSubstation? lenny;
+    final appended = <SpaceSubstation>[];
+    for (final s in substations) {
+      switch (s.name) {
+        case 'genesis':
+          genesis = s;
+        case 'the_grid':
+          theGrid = s;
+        case 'power_station':
+          powerStation = s;
+        case 'space_station':
+          spaceStation = s;
+        case 'lenny':
+          lenny = s;
+        default:
+          appended.add(s);
+      }
+    }
     final substationFanOut = sdk.Substations(
       substations: [
-        // ── the memento-engineering coded roster (Fork A) — side-by-side org ──
-        if (byName['genesis'] != null) _seat(byName['genesis']!),
-        if (byName['the_grid'] != null) _seat(byName['the_grid']!),
-        if (byName['power_station'] != null) _seat(byName['power_station']!),
-        if (byName['space_station'] != null) _seat(byName['space_station']!),
-        if (byName['lenny'] != null) _seat(byName['lenny']!),
-        // ── the append layer (Fork B): --substation / TOML names not coded ──
-        for (final s in substations)
-          if (!coded.contains(s.name)) _seat(s),
+        // ── The memento-engineering org, HARDCODED (Fork A): five literal
+        // seats, one per repo, side-by-side umbrella siblings of the grid
+        // home. Assets hang on each seat individually. ──
+        sdk.Substation(
+          name: 'genesis',
+          root:
+              genesis?.root.path ?? p.normalize(p.join(gridRoot, '../genesis')),
+          prefix: genesis?.prefix ?? 'genesis',
+          assets: [
+            Nest(
+              children: [
+                GitGridAssets(
+                  provisioner: provisioner,
+                  gitOps: gitOps,
+                  defaultBranch: genesis?.root.defaultBranch ?? 'main',
+                  remote: genesis?.root.remote ?? 'origin',
+                ),
+                if (opener != null) GitHubGridAssets(prOpener: opener),
+              ],
+              child: const sdk.SubstationWork(),
+            ),
+          ],
+        ),
+        sdk.Substation(
+          name: 'the_grid',
+          root:
+              theGrid?.root.path ??
+              p.normalize(p.join(gridRoot, '../the_grid')),
+          prefix: theGrid?.prefix ?? 'tg',
+          assets: [
+            Nest(
+              children: [
+                GitGridAssets(
+                  provisioner: provisioner,
+                  gitOps: gitOps,
+                  defaultBranch: theGrid?.root.defaultBranch ?? 'main',
+                  remote: theGrid?.root.remote ?? 'origin',
+                ),
+                if (opener != null) GitHubGridAssets(prOpener: opener),
+              ],
+              child: const sdk.SubstationWork(),
+            ),
+          ],
+        ),
+        sdk.Substation(
+          name: 'power_station',
+          root:
+              powerStation?.root.path ??
+              p.normalize(p.join(gridRoot, '../power_station')),
+          prefix: powerStation?.prefix ?? 'pow',
+          assets: [
+            Nest(
+              children: [
+                GitGridAssets(
+                  provisioner: provisioner,
+                  gitOps: gitOps,
+                  defaultBranch: powerStation?.root.defaultBranch ?? 'main',
+                  remote: powerStation?.root.remote ?? 'origin',
+                ),
+                if (opener != null) GitHubGridAssets(prOpener: opener),
+              ],
+              child: const sdk.SubstationWork(),
+            ),
+          ],
+        ),
+        sdk.Substation(
+          name: 'space_station',
+          root:
+              spaceStation?.root.path ??
+              p.normalize(p.join(gridRoot, '../space_station')),
+          prefix: spaceStation?.prefix ?? 'space',
+          assets: [
+            Nest(
+              children: [
+                GitGridAssets(
+                  provisioner: provisioner,
+                  gitOps: gitOps,
+                  defaultBranch: spaceStation?.root.defaultBranch ?? 'main',
+                  remote: spaceStation?.root.remote ?? 'origin',
+                ),
+                if (opener != null) GitHubGridAssets(prOpener: opener),
+              ],
+              child: const sdk.SubstationWork(),
+            ),
+          ],
+        ),
+        sdk.Substation(
+          name: 'lenny',
+          root: lenny?.root.path ?? p.normalize(p.join(gridRoot, '../lenny')),
+          prefix: lenny?.prefix ?? 'lenny',
+          assets: [
+            Nest(
+              children: [
+                GitGridAssets(
+                  provisioner: provisioner,
+                  gitOps: gitOps,
+                  defaultBranch: lenny?.root.defaultBranch ?? 'main',
+                  remote: lenny?.root.remote ?? 'origin',
+                ),
+                if (opener != null) GitHubGridAssets(prOpener: opener),
+              ],
+              child: const sdk.SubstationWork(),
+            ),
+          ],
+        ),
+        // ── Fork B's append layer: `--substation`/TOML names beyond the
+        // coded org fan out AFTER it, in flag order. ──
+        for (final s in appended)
+          sdk.Substation(
+            name: s.name,
+            root: s.root.path,
+            prefix: s.prefix,
+            assets: [
+              Nest(
+                children: [
+                  GitGridAssets(
+                    provisioner: provisioner,
+                    gitOps: gitOps,
+                    defaultBranch: s.root.defaultBranch,
+                    remote: s.root.remote,
+                  ),
+                  if (opener != null) GitHubGridAssets(prOpener: opener),
+                ],
+                child: const sdk.SubstationWork(),
+              ),
+            ],
+          ),
       ],
     );
     return sdk.RawAssetGrid(
@@ -213,7 +371,10 @@ class SpaceDelegate extends sdk.GridDelegate {
               // stack above the fan-out (the runGrid→engine bridge, tg-yl8);
               // UNARMED (wiring null): H2's authoring-only shape.
               child: armedWiring != null
-                  ? sdk.StationWork(wiring: armedWiring, child: substationFanOut)
+                  ? sdk.StationWork(
+                      wiring: armedWiring,
+                      child: substationFanOut,
+                    )
                   : substationFanOut,
             ),
           ],
@@ -221,84 +382,70 @@ class SpaceDelegate extends sdk.GridDelegate {
       ],
     );
   }
-
-  /// Seats one substation [s]: an [sdk.Substation] whose per-project git is a
-  /// SUBSTATION-SCOPED asset ([GitGridAssets], + [GitHubGridAssets] when a live
-  /// [prOpener] armed land) folded above the engine's work seat
-  /// ([sdk.SubstationWork]). Identical for a coded seat and an appended one — the
-  /// only axes that differ are the name/root/prefix [s] carries.
-  ///
-  /// FOLLOW-ON (space-7uc): the committee's rubric/extension asset root is a
-  /// per-substation asset that belongs in this `assets:` slot too, so the critic
-  /// resolves `grid_assets/extension` from the DECLARED path rather than a cwd
-  /// walk-up anchored on a foreign work-substation worktree. That asset is
-  /// authored in `grid_assets` (power_station) — the critic must read it from the
-  /// tree — so it lands with 7uc's `grid_assets`-side change, not here.
-  Seed _seat(SpaceSubstation s) {
-    final opener = prOpener;
-    return sdk.Substation(
-      name: s.name,
-      root: s.root.path,
-      prefix: s.prefix,
-      assets: [
-        Nest(
-          children: [
-            GitGridAssets(
-              provisioner: provisioner,
-              gitOps: gitOps,
-              defaultBranch: s.root.defaultBranch,
-              remote: s.root.remote,
-            ),
-            if (opener != null) GitHubGridAssets(prOpener: opener),
-          ],
-          // The work seat (Track J): the engine's WorkList mounts here when the
-          // station is armed (an ambient work axis above); unarmed it mounts
-          // nothing — the authored tree stands.
-          child: const sdk.SubstationWork(),
-        ),
-      ],
-    );
-  }
 }
 
-/// The memento-engineering coded roster — the org's substations, in mount order,
-/// keyed by name → issue-id prefix (`null` ⇒ the prefix IS the name)
-/// (`the_grid/docs/SCRATCH-memento-composition.md` §1/§3, Fork A). This is the
-/// hardcoded base [SpaceDelegate.build] seats and [mergeRoster] folds flags onto
-/// — NOT a config file, NOT filesystem discovery. Adding a repo to the org (e.g.
-/// `decisions`/`expression` once they gain a bead store) is a one-line edit here
-/// plus its literal seat in [SpaceDelegate.build].
-const kMementoCoded = <String, String?>{
-  'genesis': null, // the substrate — driven directly (worktrees isolate)
-  'the_grid': 'tg', // the framework — self-host; `tg` is the shared Dolt server
-  'power_station': 'pow', // the asset packs — self-host
-  'space_station': 'space', // the runner — self-host; this IS the grid home
-  'lenny': null, // the debug harness (memento-engineering/lenny)
-};
-
-/// The coded roster's names (the [kMementoCoded] keys). [mergeRoster] treats a
-/// flag/TOML entry as an OVERRIDE when its name is one of these, else a new
-/// appended substation; [SpaceDelegate.build] uses it to fence the append layer.
-Set<String> get mementoCodedNames => kMementoCoded.keys.toSet();
-
-/// Builds the coded base roster resolved against [gridHome] (Fork A): each
-/// memento repo as its umbrella sibling `../<name>`, [p.normalize]d absolute
-/// against the grid home — baking in the opinion that the org repos sit
-/// side-by-side in the umbrella checkout. Prefixes come from [kMementoCoded]
-/// (a SEPARATE axis from the name — `the_grid` mints `tg-…`). The branch defaults
-/// to `main` (dry authoring never probes `origin/HEAD`; the live git arm assigns
-/// the probed default at root registration).
+/// The coded org as VALUES — the same five substations [SpaceDelegate.build]
+/// authors as literal seats, mirrored for the machinery a tree cannot feed:
+/// [mergeRoster]'s base, `space up`'s store guard, and `buildStationWork`'s
+/// work specs all need the roster off-tree, as data. Literal entries (Fork A:
+/// NOT a map, NOT a for-loop); each root is the umbrella sibling `../<repo>`,
+/// [p.normalize]d absolute against [gridHome] — the side-by-side opinion. The
+/// prefix is a SEPARATE axis from the name (`the_grid` mints `tg-…`); the
+/// branch defaults to `main` (dry authoring never probes `origin/HEAD`; the
+/// live git arm assigns the probed default at root registration).
+/// `memento_roster_test.dart` pins this mirror and the built tree together so
+/// they cannot drift. Adding a repo to the org (e.g. `decisions`/`expression`
+/// once they gain a bead store) is a literal entry here plus its literal seat
+/// in [SpaceDelegate.build].
 List<SpaceSubstation> mementoCodedRoster(String gridHome) => [
-  for (final entry in kMementoCoded.entries)
-    SpaceSubstation(
-      name: entry.key,
-      prefix: entry.value,
-      root: RootCheckout(
-        path: p.normalize(p.join(gridHome, '..', entry.key)),
-        defaultBranch: 'main',
-        substation: entry.key,
-      ),
+  // the substrate — driven directly (worktrees isolate under .grid/worktrees)
+  SpaceSubstation(
+    name: 'genesis',
+    root: RootCheckout(
+      path: p.normalize(p.join(gridHome, '../genesis')),
+      defaultBranch: 'main',
+      substation: 'genesis',
     ),
+  ),
+  // the framework — self-host; `tg` is the shared Dolt server (gc coexists)
+  SpaceSubstation(
+    name: 'the_grid',
+    prefix: 'tg',
+    root: RootCheckout(
+      path: p.normalize(p.join(gridHome, '../the_grid')),
+      defaultBranch: 'main',
+      substation: 'the_grid',
+    ),
+  ),
+  // the asset packs — self-host
+  SpaceSubstation(
+    name: 'power_station',
+    prefix: 'pow',
+    root: RootCheckout(
+      path: p.normalize(p.join(gridHome, '../power_station')),
+      defaultBranch: 'main',
+      substation: 'power_station',
+    ),
+  ),
+  // the runner — self-host; this IS the grid home
+  SpaceSubstation(
+    name: 'space_station',
+    prefix: 'space',
+    root: RootCheckout(
+      path: p.normalize(p.join(gridHome, '../space_station')),
+      defaultBranch: 'main',
+      substation: 'space_station',
+    ),
+  ),
+  // the debug harness (memento-engineering/lenny)
+  SpaceSubstation(
+    name: 'lenny',
+    root: RootCheckout(
+      path: p.normalize(p.join(gridHome, '../lenny')),
+      defaultBranch: 'main',
+      substation: 'lenny',
+    ),
+  ),
 ];
 
 /// Folds [overrides] (parsed `--substation` flags; later TOML) ONTO [base] (the

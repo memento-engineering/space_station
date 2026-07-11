@@ -8,11 +8,12 @@ import 'package:test/test.dart';
 
 /// space-6ds (`the_grid/docs/SCRATCH-memento-composition.md` §3): the coded
 /// memento roster (Fork A) + the `--substation`/TOML append/merge layer
-/// (Fork B). Pure + offline — the roster helpers ([mementoCodedRoster],
-/// [mergeRoster], [mementoCodedNames]) and the config assembly
-/// ([spaceStationConfigFrom]) are pure logic; the delegate's [SpaceDelegate.build]
-/// tree mounts in a bare genesis tree (the same tree `runGrid` mounts under
-/// `space up`).
+/// (Fork B). Pure + offline — the value layer ([mementoCodedRoster],
+/// [mergeRoster], [spaceStationConfigFrom]) is pure logic; the delegate's
+/// [SpaceDelegate.build] tree mounts in a bare genesis tree (the same tree
+/// `runGrid` mounts under `space up`) and its mounted [sdk.SubstationScope]s
+/// are walked to prove the roster is authored as LITERAL seats IN the tree —
+/// including that the tree and the value mirror cannot drift.
 void main() {
   // A grid home that looks like the umbrella sibling (space_station beside its
   // peers): the coded roots resolve to `<umbrella>/<repo>`.
@@ -20,49 +21,40 @@ void main() {
   const umbrella = '/home/memento';
 
   group('mementoCodedRoster — the coded org (Fork A)', () {
-    test('is the five memento repos, in mount order, rooted at umbrella siblings '
-        'with the right issue-id prefixes', () {
-      final roster = mementoCodedRoster(gridHome);
-      expect(
-        roster.map((s) => s.name),
-        ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
-        reason: 'the coded roster IS the memento-engineering org, in order',
-      );
-      // Roots are the umbrella siblings `../<name>`, resolved absolute.
-      expect(
-        {for (final s in roster) s.name: s.root.path},
-        {
-          'genesis': '$umbrella/genesis',
-          'the_grid': '$umbrella/the_grid',
-          'power_station': '$umbrella/power_station',
-          'space_station': '$umbrella/space_station',
-          'lenny': '$umbrella/lenny',
-        },
-      );
-      // Prefix is a SEPARATE axis from the name (the_grid mints `tg-…`).
-      expect(
-        {for (final s in roster) s.name: s.prefix},
-        {
-          'genesis': 'genesis',
-          'the_grid': 'tg',
-          'power_station': 'pow',
-          'space_station': 'space',
-          'lenny': 'lenny',
-        },
-      );
-    });
-
-    test('mementoCodedNames is exactly the coded roster names', () {
-      expect(
-        mementoCodedNames,
-        {'genesis', 'the_grid', 'power_station', 'space_station', 'lenny'},
-      );
-      expect(
-        mementoCodedNames,
-        mementoCodedRoster(gridHome).map((s) => s.name).toSet(),
-        reason: 'the name set and the roster must never drift',
-      );
-    });
+    test(
+      'is the five memento repos, in mount order, rooted at umbrella siblings '
+      'with the right issue-id prefixes',
+      () {
+        final roster = mementoCodedRoster(gridHome);
+        expect(
+          roster.map((s) => s.name),
+          ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
+          reason: 'the coded roster IS the memento-engineering org, in order',
+        );
+        // Roots are the umbrella siblings `../<name>`, resolved absolute.
+        expect(
+          {for (final s in roster) s.name: s.root.path},
+          {
+            'genesis': '$umbrella/genesis',
+            'the_grid': '$umbrella/the_grid',
+            'power_station': '$umbrella/power_station',
+            'space_station': '$umbrella/space_station',
+            'lenny': '$umbrella/lenny',
+          },
+        );
+        // Prefix is a SEPARATE axis from the name (the_grid mints `tg-…`).
+        expect(
+          {for (final s in roster) s.name: s.prefix},
+          {
+            'genesis': 'genesis',
+            'the_grid': 'tg',
+            'power_station': 'pow',
+            'space_station': 'space',
+            'lenny': 'lenny',
+          },
+        );
+      },
+    );
   });
 
   group('mergeRoster — the append/merge layer (Fork B)', () {
@@ -76,25 +68,31 @@ void main() {
       expect(merged.map((s) => s.root.path), base.map((s) => s.root.path));
     });
 
-    test('an override of a CODED name rebinds its root IN PLACE (same position, '
-        'the override wins) — never a duplicate, never a reorder', () {
-      final base = mementoCodedRoster(gridHome);
-      final merged = mergeRoster(base, [
-        SpaceSubstation(
-          name: 'the_grid',
-          prefix: 'tg',
-          root: root('the_grid', '/custom/tg'),
-        ),
-      ]);
-      // Order and count are the coded five — the merge is IN PLACE.
-      expect(
-        merged.map((s) => s.name),
-        ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
-      );
-      expect(merged.length, 5);
-      expect(merged[1].name, 'the_grid');
-      expect(merged[1].root.path, '/custom/tg', reason: 'the override won');
-    });
+    test(
+      'an override of a CODED name rebinds its root IN PLACE (same position, '
+      'the override wins) — never a duplicate, never a reorder',
+      () {
+        final base = mementoCodedRoster(gridHome);
+        final merged = mergeRoster(base, [
+          SpaceSubstation(
+            name: 'the_grid',
+            prefix: 'tg',
+            root: root('the_grid', '/custom/tg'),
+          ),
+        ]);
+        // Order and count are the coded five — the merge is IN PLACE.
+        expect(merged.map((s) => s.name), [
+          'genesis',
+          'the_grid',
+          'power_station',
+          'space_station',
+          'lenny',
+        ]);
+        expect(merged.length, 5);
+        expect(merged[1].name, 'the_grid');
+        expect(merged[1].root.path, '/custom/tg', reason: 'the override won');
+      },
+    );
 
     test('rebinding a coded root WITHOUT a prefix PRESERVES the coded prefix '
         '(power_station stays `pow`, not the name) — a field merge, not a '
@@ -172,52 +170,53 @@ void main() {
 
     test('no --substation ⇒ the effective roster IS the coded org (the '
         '"refuse with none" gate is retired)', () {
-      final config = spaceStationConfigFrom(
-        parse(['--grid-home', gridHome]),
-      );
+      final config = spaceStationConfigFrom(parse(['--grid-home', gridHome]));
       expect(config, isNotNull);
-      expect(
-        config!.substations.map((s) => s.name),
-        ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
-      );
+      expect(config!.substations.map((s) => s.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+      ]);
       expect(config.operatorNames, isEmpty);
     });
 
-    test('a --substation overriding a coded name merges (root rebound) and marks '
-        'the name operator-provided', () {
-      final config = spaceStationConfigFrom(
-        parse([
-          '--grid-home',
-          gridHome,
-          '--substation',
-          'the_grid@tg=/custom/tg',
-        ]),
-      )!;
-      expect(config.substations.length, 5, reason: 'in-place merge');
-      final tg = config.substations.firstWhere((s) => s.name == 'the_grid');
-      expect(tg.root.path, '/custom/tg');
-      expect(tg.prefix, 'tg');
-      expect(config.operatorNames, contains('the_grid'));
-    });
+    test(
+      'a --substation overriding a coded name merges (root rebound) and marks '
+      'the name operator-provided',
+      () {
+        final config = spaceStationConfigFrom(
+          parse([
+            '--grid-home',
+            gridHome,
+            '--substation',
+            'the_grid@tg=/custom/tg',
+          ]),
+        )!;
+        expect(config.substations.length, 5, reason: 'in-place merge');
+        final tg = config.substations.firstWhere((s) => s.name == 'the_grid');
+        expect(tg.root.path, '/custom/tg');
+        expect(tg.prefix, 'tg');
+        expect(config.operatorNames, contains('the_grid'));
+      },
+    );
 
     test('a --substation with a new name appends and is operator-provided', () {
       final config = spaceStationConfigFrom(
-        parse([
-          '--grid-home',
-          gridHome,
-          '--substation',
-          'tgdog=/work/td',
-        ]),
+        parse(['--grid-home', gridHome, '--substation', 'tgdog=/work/td']),
       )!;
       expect(config.substations.length, 6);
       expect(config.substations.last.name, 'tgdog');
       expect(config.operatorNames, {'tgdog'});
     });
 
-    test('a missing --grid-home is a null return (LOUD arming refusal upstream)',
-        () {
-      expect(spaceStationConfigFrom(parse(const [])), isNull);
-    });
+    test(
+      'a missing --grid-home is a null return (LOUD arming refusal upstream)',
+      () {
+        expect(spaceStationConfigFrom(parse(const [])), isNull);
+      },
+    );
 
     test('the same --substation name twice is a LOUD FormatException (a real '
         'duplicate — distinct from a coded-name MERGE)', () {
@@ -237,7 +236,7 @@ void main() {
     });
   });
 
-  group('SpaceDelegate.build — the coded roster seats into the tree', () {
+  group('SpaceDelegate.build — the LITERAL coded tree (Fork A)', () {
     SpaceDelegate delegate(List<SpaceSubstation> substations) => SpaceDelegate(
       gridRoot: gridHome,
       stationName: 'space',
@@ -248,16 +247,59 @@ void main() {
       ),
     );
 
-    test('the full coded org mounts clean (all five sibling roots resolve as a '
-        'valid v3 tree)', () {
+    test('the five seats are AUTHORED IN the tree: an EMPTY effective roster '
+        'still mounts the whole org at its ../<repo> siblings with the coded '
+        'prefixes — the roster is the tree, not threaded data', () {
+      final seats = _mountedSeats(_Author(delegate(const [])));
       expect(
-        () => _mount(_Author(delegate(mementoCodedRoster(gridHome)))),
-        returnsNormally,
+        seats.map((s) => s.name),
+        ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
+        reason: 'the org, in mount order, from the literal Substation() calls',
+      );
+      expect(
+        {for (final s in seats) s.name: s.root},
+        {
+          'genesis': '$umbrella/genesis',
+          'the_grid': '$umbrella/the_grid',
+          'power_station': '$umbrella/power_station',
+          'space_station': '$umbrella/space_station',
+          'lenny': '$umbrella/lenny',
+        },
+      );
+      expect(
+        {for (final s in seats) s.name: s.prefix},
+        {
+          'genesis': 'genesis',
+          'the_grid': 'tg',
+          'power_station': 'pow',
+          'space_station': 'space',
+          'lenny': 'lenny',
+        },
       );
     });
 
-    test('the coded base plus an appended flag substation mounts clean', () {
+    test('the tree and the value mirror cannot drift: seating the coded roster '
+        'reproduces exactly its names/roots/prefixes', () {
+      final roster = mementoCodedRoster(gridHome);
+      final seats = _mountedSeats(_Author(delegate(roster)));
+      expect(
+        [for (final s in seats) (s.name, s.root, s.prefix)],
+        [for (final s in roster) (s.name, s.root.path, s.prefix)],
+      );
+    });
+
+    test('a flag override REBINDS its coded seat in place (the coded prefix '
+        'survives a root-only rebind) and a NEW name APPENDS after the org — '
+        'Fork B routes into the literal tree', () {
       final roster = mergeRoster(mementoCodedRoster(gridHome), [
+        SpaceSubstation(
+          name: 'the_grid',
+          root: RootCheckout(
+            path: '/custom/tg',
+            substation: 'the_grid',
+            defaultBranch: 'main',
+          ),
+        ),
         SpaceSubstation(
           name: 'tgdog',
           root: RootCheckout(
@@ -267,27 +309,58 @@ void main() {
           ),
         ),
       ]);
-      expect(() => _mount(_Author(delegate(roster))), returnsNormally);
+      final seats = _mountedSeats(_Author(delegate(roster)));
+      expect(seats.map((s) => s.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'tgdog',
+      ]);
+      final tg = seats.firstWhere((s) => s.name == 'the_grid');
+      expect(tg.root, '/custom/tg', reason: 'the override root won, in place');
+      expect(tg.prefix, 'tg', reason: 'the coded prefix survived the rebind');
+      expect(seats.last.root, '/work/td');
     });
 
-    test('a single coded substation (only genesis) still seats — the literal '
-        'coded branch fires by name', () {
+    test('a coded sibling `up` dropped (no store in this checkout) keeps its '
+        'seat at the coded root — the authored org stands (only genesis '
+        'armed)', () {
+      final seats = _mountedSeats(
+        _Author(delegate(mementoCodedRoster(gridHome).take(1).toList())),
+      );
+      expect(seats.map((s) => s.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+      ]);
       expect(
-        () => _mount(
-          _Author(delegate(mementoCodedRoster(gridHome).take(1).toList())),
-        ),
-        returnsNormally,
+        seats.firstWhere((s) => s.name == 'lenny').root,
+        '$umbrella/lenny',
       );
     });
   });
 }
 
-/// Mounts [root] in a bare tree and flushes one build pass (the Track B/F
-/// template, mirroring `space_delegate_test.dart`).
-void _mount(Seed root) {
+/// Mounts [root] in a bare tree, flushes one build pass (the Track B/F
+/// template, mirroring `space_delegate_test.dart`), and walks the mounted
+/// branches collecting every provided [sdk.SubstationScope] in tree order —
+/// the seats [SpaceDelegate.build] actually authored.
+List<sdk.SubstationScope> _mountedSeats(Seed root) {
   final owner = TreeOwner();
-  owner.mountRoot(root);
+  final branch = owner.mountRoot(root);
   owner.flush();
+  final seats = <sdk.SubstationScope>[];
+  void walk(Branch b) {
+    if (b is InheritedBranch<sdk.SubstationScope>) seats.add(b.value);
+    b.visitChildren(walk);
+  }
+
+  walk(branch);
+  return seats;
 }
 
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the
