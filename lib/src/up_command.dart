@@ -273,7 +273,12 @@ class UpCommand extends Command<int> {
       (
         name: 'space_station',
         root: p.normalize(p.join(config.gridHome, '../space_station')),
-        prefix: 'space_station',
+        // The store mints `space-` ids, so the seat's PREFIX is `space` while
+        // its NAME stays `space_station`. Kept identical to the delegate's
+        // seat — a divergence here silently un-owns every `space-` bead
+        // (ownership matches name OR prefix), which is the self-host
+        // substation driving nothing at all.
+        prefix: 'space',
       ),
       (
         name: 'lenny',
