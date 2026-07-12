@@ -53,16 +53,16 @@ void main() {
           'lenny': '$umbrella/lenny',
         },
       );
-      // Prefix is a SEPARATE axis from the name only where the store mints
-      // differently (the_grid → `tg-…`, power_station → `pow-…`); the rest
-      // default to the name (round 3).
+      // Prefix is a SEPARATE axis from the name wherever the store mints
+      // differently (the_grid → `tg-…`, power_station → `pow-…`,
+      // space_station → `space-…`); the rest default to the name (round 3).
       expect(
         {for (final s in seats) s.name: s.prefix},
         {
           'genesis': 'genesis',
           'the_grid': 'tg',
           'power_station': 'pow',
-          'space_station': 'space_station',
+          'space_station': 'space',
           'lenny': 'lenny',
         },
       );

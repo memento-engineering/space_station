@@ -43,11 +43,13 @@ import 'package:args/command_runner.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
+        AgentRole,
         ModelTarget,
         OpenAiCompatible,
         ProviderManaged,
         SwiftInfer,
-        buildAgentHarnessRegistry;
+        buildAgentHarnessRegistry,
+        defaultModelFor;
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
@@ -59,12 +61,11 @@ import 'package:grid_cli/grid_cli.dart'
         StationStatus,
         mintControlToken;
 import 'package:grid_assets/grid_assets.dart'
-    show buildCodeRegistry, kCodeCircuit;
+    show CodeCircuitResolver, buildCodeRegistry, kCodeCircuit;
 import 'package:grid_runtime/grid_runtime.dart'
     show SystemProcessGroupController;
 import 'package:grid_sdk/grid_sdk.dart'
     show
-        CircuitResolver,
         GridHandle,
         GridStateStore,
         StationWorkRuntime,
@@ -105,9 +106,18 @@ class UpCommand extends Command<int> {
       ..addOption(
         'model',
         help:
-            'The model a managed tool selects (claude/copilot) or an '
-            'endpoint harness requests — rides AgentConfig.params, not the '
-            'target.',
+            'The model coding agents BUILD on — the station\'s BUILD-role rung '
+            '(rides AgentConfig.params, not the target). Absent: the build '
+            'role\'s asset default (opus).',
+      )
+      ..addOption(
+        'grader-model',
+        help:
+            'The model the committee\'s critics GRADE on — the station\'s '
+            'GRADE-role rung. Absent: the grade role\'s asset default '
+            '(sonnet). Separate from --model because the params model key is '
+            'also the harness TRANSPORT key, so one map cannot carry two '
+            'roles\' models at once.',
       )
       ..addOption(
         'openai-base',
@@ -178,11 +188,30 @@ class UpCommand extends Command<int> {
       err('space up: ${e.message}');
       return 64;
     }
+    // The station's two model RUNGS, split by role. Neither takes a `??`
+    // fallback here: an ABSENT flag means the station names NO model for that
+    // role, and the ladder (bead > station > asset) falls through to the role's
+    // ASSET default — opus to build, sonnet to grade (`defaultModelFor`). That
+    // is where the explicit pin now lives, so the incident that motivated it
+    // stays fixed: an unpinned `claude` resolved to opus and then SILENTLY fell
+    // back to fable once the weekly limit blew (the grid spawns ~10 agents/bead;
+    // it obliterates a limit fast). Every spawn still resolves an EXPLICIT model
+    // — by construction now, not by a guard.
+    //
+    // A `?? 'sonnet'` here would OUT-RANK both asset defaults and pin BOTH roles
+    // to sonnet: the all-sonnet station this change exists to end.
+    //
+    // The rungs are asymmetric on purpose: `params['model']` is simultaneously
+    // the harness TRANSPORT key every harness reads, so one map cannot carry two
+    // roles' models — the build rung stays there and the grade rung rides its
+    // own field.
     final model = results.option('model');
+    final graderModel = results.option('grader-model');
     final agentConfig = AgentConfig(
       harness: results.option('harness') ?? 'claude',
       target: target,
       params: {if (model != null) 'model': model},
+      graderModel: graderModel,
     );
     final harnesses = buildAgentHarnessRegistry();
     final invalid = harnesses.validate(agentConfig);
@@ -265,7 +294,12 @@ class UpCommand extends Command<int> {
       (
         name: 'space_station',
         root: p.normalize(p.join(config.gridHome, '../space_station')),
-        prefix: 'space_station',
+        // The store mints `space-` ids, so the seat's PREFIX is `space` while
+        // its NAME stays `space_station`. Kept identical to the delegate's
+        // seat — a divergence here silently un-owns every `space-` bead
+        // (ownership matches name OR prefix), which is the self-host
+        // substation driving nothing at all.
+        prefix: 'space',
       ),
       (
         name: 'lenny',
@@ -329,6 +363,16 @@ class UpCommand extends Command<int> {
     // bd chokepoint (a recording no-op under --dry-run), the restart
     // reconciler. The code circuit + its capabilities are the grid_assets
     // OPINION, injected here (the engine stays opinion-free).
+    //
+    // The resolver is the MIGRATION-AWARE one: it roots the frozen circuit
+    // SHAPE each session was MINTED under, so a pre-fold session surviving a
+    // station BOUNCE never re-enters the spec phase and spawns a spurious
+    // architect over a bead already mid-review. `kCodeCircuit` arrives as a
+    // constructor VALUE, not a hard import of it (config = VALUES in the tree,
+    // impls = DI). RETIREMENT is named in grid_assets' `circuit_migration.dart`:
+    // once no OPEN session carries a pre-fold cursor, this reverts to the plain
+    // shape-agnostic resolver and that file is deleted. This is scaffolding
+    // with an expiry, not a permanent seam.
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await buildStationWork(
@@ -337,7 +381,7 @@ class UpCommand extends Command<int> {
           for (final s in armed)
             SubstationWorkSpec(name: s.name, root: s.root, prefix: s.prefix),
         ],
-        resolver: CircuitResolver((_) => kCodeCircuit),
+        resolver: const CodeCircuitResolver(kCodeCircuit),
         registry: buildCodeRegistry(),
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
@@ -419,9 +463,17 @@ class UpCommand extends Command<int> {
       '·  work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  '
       '·  land: ${land.prOpener != null ? 'armed' : 'off'}',
     );
+    // Report each role's EFFECTIVE model through the SAME projection the ladder
+    // resolves with, so the banner cannot drift from what the spawners get.
+    final buildModel =
+        agentConfig.stationModelFor(AgentRole.build) ??
+        defaultModelFor(AgentRole.build);
+    final gradeModel =
+        agentConfig.stationModelFor(AgentRole.grade) ??
+        defaultModelFor(AgentRole.grade);
     out(
       'agent scope: harness ${agentConfig.harness} → ${agentConfig.target}'
-      '${model != null ? '  ·  model $model' : ''}',
+      '  ·  build model $buildModel  ·  grader model $gradeModel',
     );
     out(
       'stores: read-path {${workRuntime.readPathName}}  ·  state partition: '

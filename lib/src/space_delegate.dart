@@ -242,10 +242,15 @@ class SpaceDelegate extends sdk.GridDelegate {
                           ),
                         ],
                       ),
-                      // the runner — self-host; this IS the grid home
+                      // the runner — self-host; this IS the grid home. Its
+                      // store mints `space-` (NOT `space_station-`), so the
+                      // prefix MUST be set explicitly — the Substation default
+                      // (prefix ?? name) would own `space_station` and drive
+                      // nothing here (the old flag-arm passed `@space`).
                       sdk.Substation(
                         'space_station',
                         '../space_station',
+                        prefix: 'space',
                         assets: [
                           Nest(
                             children: [
