@@ -61,12 +61,11 @@ import 'package:grid_cli/grid_cli.dart'
         StationStatus,
         mintControlToken;
 import 'package:grid_assets/grid_assets.dart'
-    show buildCodeRegistry, kCodeCircuit;
+    show CodeCircuitResolver, buildCodeRegistry, kCodeCircuit;
 import 'package:grid_runtime/grid_runtime.dart'
     show SystemProcessGroupController;
 import 'package:grid_sdk/grid_sdk.dart'
     show
-        CircuitResolver,
         GridHandle,
         GridStateStore,
         StationWorkRuntime,
@@ -364,6 +363,16 @@ class UpCommand extends Command<int> {
     // bd chokepoint (a recording no-op under --dry-run), the restart
     // reconciler. The code circuit + its capabilities are the grid_assets
     // OPINION, injected here (the engine stays opinion-free).
+    //
+    // The resolver is the MIGRATION-AWARE one: it roots the frozen circuit
+    // SHAPE each session was MINTED under, so a pre-fold session surviving a
+    // station BOUNCE never re-enters the spec phase and spawns a spurious
+    // architect over a bead already mid-review. `kCodeCircuit` arrives as a
+    // constructor VALUE, not a hard import of it (config = VALUES in the tree,
+    // impls = DI). RETIREMENT is named in grid_assets' `circuit_migration.dart`:
+    // once no OPEN session carries a pre-fold cursor, this reverts to the plain
+    // shape-agnostic resolver and that file is deleted. This is scaffolding
+    // with an expiry, not a permanent seam.
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await buildStationWork(
@@ -372,7 +381,7 @@ class UpCommand extends Command<int> {
           for (final s in armed)
             SubstationWorkSpec(name: s.name, root: s.root, prefix: s.prefix),
         ],
-        resolver: CircuitResolver((_) => kCodeCircuit),
+        resolver: const CodeCircuitResolver(kCodeCircuit),
         registry: buildCodeRegistry(),
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
