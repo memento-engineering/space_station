@@ -82,31 +82,49 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-`space_station` is a single Dart package (`publish_to: none`). Its deps are sibling **path overrides**
-in the gitignored `pubspec_overrides.yaml` (the `grid_*` packages are unpublished — see
+`space_station` is a single Dart package (`publish_to: none`). Its deps are **today** sibling **path
+overrides** in the gitignored `pubspec_overrides.yaml` (the `grid_*` packages are unpublished — see
 [the_grid/docs/SCRATCH-pub-capability-and-repo-split.md](../the_grid/docs/SCRATCH-pub-capability-and-repo-split.md)).
+
+**Direction: git-tag version constraints (`space-td1`).** Path overrides couple space to the_grid's
+`main` — when `main` takes a breaking change, space stops compiling and the JIT station can't bounce or
+hot-reload until space migrates (the wedge that stalled the tkm/#56 arc). The move (genesis ADR-0001 D8;
+private repos support git-ref deps) is to pin each private dep to a released **git tag** and adopt a
+breaking change *deliberately* by bumping the ref — so `dart run bin/space.dart` always compiles from
+space's own source regardless of upstream `main`. This is also the mechanism behind stacked development
+(the_grid `tg-ugj`) and it supersedes the `tg-8uz` worktree-override hack.
 
 ```bash
 dart pub get                              # resolve (needs the sibling checkouts present)
 dart analyze && dart test                 # the house gate
-dart compile exe bin/space.dart -o space  # build the runner
 
-# Operate the resident station (governor):
-./space status                            # what the station is driving right now
-./space up --no-dry-run --land \          # ARM a LIVE station (builds + opens PRs)
+# Operate the resident station (governor) — ALWAYS JIT, never an AOT binary (see below):
+dart run bin/space.dart status            # what the station is driving right now
+dart run --enable-vm-service \            # ARM a LIVE station (builds + opens PRs); JIT keeps the VM
+  bin/space.dart up --no-dry-run --land \ #   service open for hot-reload + lenny debugging
   --grid-home . \
   --substation the_grid@tg=../the_grid \
   --substation power_station@pow=../power_station \
   --substation genesis=../genesis \
   --substation space_station@space=.
-./space down                              # tear down
+dart run bin/space.dart down              # tear down
 ```
+
+**JIT only — never AOT.** The resident station and every `space` command run under `dart run` (JIT),
+**never** a `dart compile exe` binary. JIT keeps the VM service open (hot-reload + lenny debugging) and
+guarantees you're running *current source*, not a stale compiled artifact. There is deliberately **no
+committed `./space` binary** — if you find one lying around, it's a build leftover; delete it, don't run
+it. For a grid op while the runner is mid-migration, still stay JIT: the operation belongs to *space's*
+composition, so run it through `dart run bin/space.dart <cmd>` — not through the_grid's `grid_cli`, which
+sidesteps space's actual station workflow.
 
 **`validation_plan` worktree gotcha.** space_station beads need an **absolute-cd** plan
 (`cd <abs>/space_station && dart analyze && dart test`) — a per-bead worktree can't `pub get` (the
 unpublished `grid_*` deps + the gitignored overrides are absent). the_grid/power_station beads use a
-**relative** plan (`cd packages/<pkg> && dart pub get && dart analyze && dart test`). `tg-8uz` is the
-fix (materialize overrides per-worktree).
+**relative** plan (`cd packages/<pkg> && dart pub get && dart analyze && dart test`). `tg-8uz`
+(materialize overrides per-worktree) was the stopgap fix; the **git-tag version constraints** direction
+(`space-td1`) is the real fix — a worktree resolving tagged deps just `pub get`s, no override
+materialization, and the absolute-cd hack retires with it.
 
 ## Architecture Overview
 

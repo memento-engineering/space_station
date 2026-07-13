@@ -7,7 +7,7 @@ description: >
   when a boot looks healthy but ready > 0 with mounted 0 and no output, or when
   preparing a fresh grid home — even if the symptom is just "nothing is
   happening."
-compatibility: Requires the compiled `space` binary, bd (beads CLI), dart, git.
+compatibility: Requires dart (the station runs JIT via `dart run`, never an AOT binary), bd (beads CLI), git.
 metadata:
   author: memento-engineering
 ---
@@ -18,8 +18,11 @@ metadata:
 
 From the grid home (the repo whose `.grid/` holds the state store and lock):
 
+Run the station **JIT — always `dart run`, never a `dart compile exe` binary** (JIT keeps the VM
+service open for hot-reload + lenny debugging and guarantees current source):
+
 ```
-./space up --no-dry-run \
+dart run --enable-vm-service bin/space.dart up --no-dry-run \
   --grid-home <abs path to grid home> \
   --substation '<name>[@<prefix>]=<abs work-repo root>' ...
   [--land] [--max-agents N]
@@ -41,8 +44,8 @@ existing you should see `mounted`/`live sessions` > 0, per-bead worktrees under
 ## Bounce / down
 
 ```
-./space down --state-workspace <grid home>    # scoped stop via the lock
-./space up ...                                 # same arming
+dart run bin/space.dart down --state-workspace <grid home>   # scoped stop via the lock
+dart run --enable-vm-service bin/space.dart up ...            # same arming, JIT
 ```
 
 Bounce whenever station-side state is latched (see the silent-death runbook) or
@@ -109,8 +112,14 @@ timeout heartbeat (~45min while work is in flight, ~3h idle). Scan gates via
 
 - The banner's "work-driving: ARMED" is derived from config, not from the tree
   actually driving — trust only effects.
-- A recompiled engine/sdk needs a recompiled `space` binary; `dart run` works
-  but a resident station should run the AOT binary.
+- **Run JIT, never AOT.** The resident station runs under `dart run` (JIT), never a
+  `dart compile exe` binary — JIT picks up landed engine/sdk changes on a bounce (or hot-reload)
+  without a compile step, keeps the VM service open, and never runs a stale artifact. If you find a
+  committed/leftover `./space` binary, delete it — don't run it. **Do not** reach for the_grid's
+  `grid_cli` as a substitute either: it bypasses space's own composition. When space's own source
+  won't JIT-compile (a breaking upstream dep in flight — see the git-tag-constraints direction,
+  `space-td1`), that's a wedge to SURFACE and clear by landing the migration, not to route around
+  with a stale binary or a foreign CLI.
 - The dry smoke CANNOT prove the write path (dry = no-op bd writer): the first
   live boot of any new composition is the only prover — treat it as an
   instrumented experiment, not a formality.
