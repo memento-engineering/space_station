@@ -25,14 +25,17 @@ service open for hot-reload + lenny debugging and guarantees current source):
 dart run --enable-vm-service bin/space.dart up --no-dry-run \
   --grid-home <abs path to grid home> \
   --substation '<name>[@<prefix>]=<abs work-repo root>' ...
-  [--land] [--max-agents N]
+  [--max-agents N]
 ```
 
 - One `--substation` per work repo; `@prefix` only when the store's issue-id
   prefix differs from the name (`the_grid@tg=…`). Names and prefixes must be
   disjoint across substations — assembly refuses collisions.
-- `--land` arms PR-opening; omit for a commit-only arm (agents commit to
-  `grid/<bead>` branches, humans land). `--land` + `--dry-run` is refused.
+- Delivery is a per-substation BINDING, not a flag (the_grid ADR-0000 A51): every coded
+  seat authors `GitHubGridAssets`, so a LIVE arm (`--no-dry-run`) pushes and opens a PR
+  per landed bead. `--dry-run` binds nothing — the commit-only posture (no `git`, no `gh`).
+  To make one substation commit-only, fork its seat in `SpaceDelegate.build`; there is no
+  land flag to omit.
 - The station is resident: it runs until `space down`. Run it in the
   background and read the banner from its log.
 
