@@ -20,8 +20,10 @@ You sit here as the **governor**: the *operator* of the resident station, not an
   - **Operate** — `space up` / `down` / `status`; read `/status`; diagnose a station that is *up but
     driving nothing*; bounce to pick up a landed fix.
   - **Refine** — stamp `validation_plan`, wire deps, stage `deferred` until a human readies it.
-- **You hold the human gates.** A live `space up --no-dry-run --land` station *builds, commits, and
-  opens PRs* — readying and bouncing it are consequential and outward-facing; confirm intent.
+- **You hold the human gates.** A live `space up --no-dry-run` station *builds, commits, and
+  opens PRs* — delivery is a per-substation BINDING now (every coded seat authors
+  `GitHubGridAssets`), so a live arm delivers and there is no separate land flag; readying and
+  bouncing it are consequential and outward-facing; confirm intent.
 - **When in doubt, file a bead — do not reach for the editor.**
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
@@ -101,7 +103,7 @@ dart analyze && dart test                 # the house gate
 # Operate the resident station (governor) — ALWAYS JIT, never an AOT binary (see below):
 dart run bin/space.dart status            # what the station is driving right now
 dart run --enable-vm-service \            # ARM a LIVE station (builds + opens PRs); JIT keeps the VM
-  bin/space.dart up --no-dry-run --land \ #   service open for hot-reload + lenny debugging
+  bin/space.dart up --no-dry-run \        #   service open for hot-reload + lenny debugging
   --grid-home . \
   --substation the_grid@tg=../the_grid \
   --substation power_station@pow=../power_station \

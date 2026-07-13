@@ -41,6 +41,10 @@ import 'package:test/test.dart';
 ///      arms exactly the coded siblings that resolve work stores — skipping
 ///      the absent ones LOUD — and reports the armed set under
 ///      `station.workRoot`.
+///  (h) a `--dry-run` arm binds NO delivery: the banner reports
+///      `delivery: none (commit-only)`, so the inert posture constructs no
+///      real `git`/`gh` machinery (the retired `--land` flag's job, now a
+///      per-substation binding — the_grid ADR-0000 A51).
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
@@ -152,6 +156,16 @@ void main() {
       await File(lockPath).exists(),
       isFalse,
       reason: '`down`\'s graceful stop released the lock',
+    );
+
+    // --- (h) a DRY-RUN arm binds NO delivery ------------------------------
+    // The retired station-level land flag is gone. Delivery is a per-substation
+    // BINDING now, and a dry run hands its seats NO halves — so no real `git`
+    // and no `gh` is ever constructed, and the tree binds no DeliveryMethod.
+    expect(
+      upIo.out.toString(),
+      contains('delivery: none (commit-only)'),
+      reason: 'stdout: ${upIo.out}\nstderr: ${upIo.err}',
     );
 
     // --- (d, fallback half) `status` falls back once nothing is up -------
