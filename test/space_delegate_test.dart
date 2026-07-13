@@ -13,7 +13,8 @@ import 'package:test/test.dart';
 /// as the dry authoring where the layout still resolves — Track F/pow-72b),
 /// the same tree `runGrid(SpaceDelegate())` mounts under `space up`. The
 /// Track F assets themselves (a bare GitGridAssets sourcing its halves from
-/// context, canLand, worktree layout) are proven in power_station; this
+/// context, the delivery binding, worktree layout) are proven in power_station;
+/// this
 /// proves space COMPOSES them into a valid v3 tree with the memento org
 /// hardcoded in it (space-6ds — see `memento_roster_test.dart` for the
 /// roster/append coverage).
@@ -40,8 +41,10 @@ void main() {
       expect(() => _mount(_Author(delegate())), returnsNormally);
     });
 
-    test('the land arm (a PR opener) mounts GitHubGridAssets under each '
-        'substation, clean', () {
+    test('a PR opener DI-d into each seat mounts GitHubGridAssets clean (the '
+        'delivery BINDING itself also needs the commit/push half — '
+        'GitHubGridAssets binds a method only with BOTH, and power_station '
+        'proves that)', () {
       expect(
         () => _mount(_Author(delegate(prOpener: _FakePrOpener()))),
         returnsNormally,
@@ -99,8 +102,9 @@ class _Author extends StatelessSeed {
       delegate.build(context, const sdk.GridConfiguration());
 }
 
-/// A non-throwing PR opener (the land arm only needs a non-null opener to
-/// enrich each substation's git bundle with land).
+/// A non-throwing PR opener. The offline delegate DI-s only this half, which is
+/// enough to mount `GitHubGridAssets` under every seat; the delivery BINDING
+/// needs the commit/push half too (power_station proves that seam).
 class _FakePrOpener implements PrOpener {
   @override
   Future<PullRequestResult> open({
