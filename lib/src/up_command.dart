@@ -63,7 +63,7 @@ import 'package:grid_cli/grid_cli.dart'
 import 'package:grid_assets/grid_assets.dart'
     show CodeCircuitResolver, buildCodeRegistry, kCodeCircuit;
 import 'package:grid_runtime/grid_runtime.dart'
-    show SystemProcessGroupController;
+    show GhPrOpener, GitOps, SystemGitRunner, SystemProcessGroupController;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         GridHandle,
@@ -72,8 +72,8 @@ import 'package:grid_sdk/grid_sdk.dart'
         StoreLocator,
         StoreRefusal,
         SubstationWorkSpec,
-        buildLandOps,
         buildStationWork,
+        ghRunner,
         runGrid;
 import 'package:path/path.dart' as p;
 
@@ -129,15 +129,6 @@ class UpCommand extends Command<int> {
         'swift-base',
         help: 'A swift-infer server endpoint — sets the model target for pi.',
       )
-      ..addFlag(
-        'land',
-        defaultsTo: false,
-        help:
-            'Arm PR-opening (land) on a LIVE run (ADR-0006 D3): the land ops '
-            'flow into each substation\'s GitHub asset. Refused with '
-            '--dry-run (a contradiction the operator must see, not a silent '
-            'no-op). Off = the commit-only arm.',
-      )
       ..addOption(
         'max-agents',
         defaultsTo: '4',
@@ -159,8 +150,9 @@ class UpCommand extends Command<int> {
       'drive set (no --bead, ever), guarded by the ONE-supervisor-per-store '
       'lock (RS-2) and observable over the read-only StationControl surface '
       '(RS-4). Foreground-resident (a supervisor owns backgrounding). Defaults '
-      'to --dry-run (armed over INERT seams — no spawn, no write); the first '
-      'LIVE arm (--no-dry-run) is the human gate.';
+      'to --dry-run (armed over INERT seams — no spawn, no write, no delivery '
+      'bound); a LIVE arm (--no-dry-run) also BINDS each coded substation\'s '
+      'GitHub delivery — it pushes and opens PRs — and stays the human gate.';
 
   @override
   Future<int> run() async {
@@ -231,14 +223,6 @@ class UpCommand extends Command<int> {
       err(
         'space up: --grid-home (the state store / RS-2 lock home) is required '
         'to ARM — v3 §0: there is no default grid home.',
-      );
-      return 64;
-    }
-    final landArmed = results.flag('land');
-    if (landArmed && config.dryRun) {
-      err(
-        'space up: --land contradicts --dry-run — a dry run opens no PRs. '
-        'Drop --land, or arm live with --no-dry-run.',
       );
       return 64;
     }
@@ -406,10 +390,20 @@ class UpCommand extends Command<int> {
 
     // --- space_station AS A SEED: author the delegate, ARMED with the work
     // wiring. The coded org is hardcoded in its build; only the operator's
-    // appended seats ride in. The land ops flow into the substations' GitHub
-    // assets only when --land armed a live run (ADR-0006 D3) — never through
-    // station services.
-    final land = buildLandOps(armed: landArmed && !config.dryRun);
+    // appended seats ride in.
+    //
+    // DELIVERY IS A BINDING, NOT AN ARM (the_grid ADR-0000 A51). A substation
+    // BINDS a `DeliveryMethod` on its `ServiceBundle`, and binding NONE is the
+    // commit-only posture — a real posture, not an unarmed one. space's coded
+    // seats author `GitHubGridAssets`, which binds a `GitHubPrDelivery` iff it
+    // receives BOTH halves (commit/push `GitOps` + a `PrOpener`). ADR-0006 D3
+    // is preserved: the bound method pushes and opens a PR from the per-bead
+    // branch, and nothing auto-merges.
+    //
+    // The runner's only say is the DRY/LIVE posture it already owns. A LIVE arm
+    // hands the real halves over; `--dry-run` constructs NEITHER — no `git`, no
+    // `gh` — so the tree binds no delivery and the dry run stays inert.
+    final live = !config.dryRun;
     final delegate = SpaceDelegate(
       gridRoot: config.gridHome,
       stationName: 'space',
@@ -418,8 +412,8 @@ class UpCommand extends Command<int> {
       harnesses: harnesses,
       wiring: workRuntime.wiring,
       provisioner: workRuntime.git,
-      gitOps: land.gitOps,
-      prOpener: land.prOpener,
+      gitOps: live ? GitOps(SystemGitRunner()) : null,
+      prOpener: live ? GhPrOpener(ghRunner) : null,
     );
 
     // --- mount the tree: runGrid over the SpaceDelegate. The armed WorkLists
@@ -448,7 +442,7 @@ class UpCommand extends Command<int> {
         view: () => _status(config, armed, bootTime, workRuntime),
       );
     } on Object catch (e) {
-      grid.teardown();
+      await grid.teardown();
       await workRuntime.shutdown();
       await stationLock.release();
       err('space up: $e');
@@ -461,7 +455,7 @@ class UpCommand extends Command<int> {
       'mode: ${config.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
       'substations: {${armed.map((s) => s.name).join(', ')}}  '
       '·  work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  '
-      '·  land: ${land.prOpener != null ? 'armed' : 'off'}',
+      '·  delivery: ${live ? 'BOUND (GitHub PR)' : 'none (commit-only)'}',
     );
     // Report each role's EFFECTIVE model through the SAME projection the ladder
     // resolves with, so the banner cannot drift from what the spawners get.
@@ -488,7 +482,7 @@ class UpCommand extends Command<int> {
     // release LAST.
     Future<void> shutdown() async {
       await control.dispose();
-      grid.teardown();
+      await grid.teardown();
       await workRuntime.shutdown();
       await stationLock.release();
     }
