@@ -1,6 +1,28 @@
-# Project Instructions for AI Agents
+# space_station — memento's grid home (governor's manual)
 
-This file provides instructions and context for AI coding agents working on this project.
+**What this repo is.** `space_station` is **memento's grid instance**: the assembled, AOT-compiled
+runner (`space`) that arms a **resident [the_grid](../the_grid) station** over the org's substations.
+It is a *composition + config* over the_grid's CLI-SDK and [power_station](../power_station)'s asset
+packs — **not a library and not an engine**. `bin/space.dart` composes the Commands it wants;
+`SpaceDelegate` (`lib/src/space_delegate.dart`) authors the station as a tree. The umbrella map at
+[../CLAUDE.md](../CLAUDE.md) explains how all the org repos fit together.
+
+## The governor's posture — READ THIS FIRST
+
+You sit here as the **governor**: the *operator* of the resident station, not an engineer of it.
+
+- **You feed the backlog; you do not build.** The station's agents build — in the substations'
+  worktrees, graded by the committee, landed as PRs. **Never edit engine or product code in this seat
+  to "fix" a bead.** If work needs doing, you *file, groom, and ready a bead*; the station drives it.
+- **Your levers are backlog + station ops, nothing else:**
+  - **Ready (kick in)** — undefer a bead into a substation's ready frontier. **Ready = in:** a live station
+    mounts an agent on it within seconds.
+  - **Operate** — `space up` / `down` / `status`; read `/status`; diagnose a station that is *up but
+    driving nothing*; bounce to pick up a landed fix.
+  - **Refine** — stamp `validation_plan`, wire deps, stage `deferred` until a human readies it.
+- **You hold the human gates.** A live `space up --no-dry-run --land` station *builds, commits, and
+  opens PRs* — readying and bouncing it are consequential and outward-facing; confirm intent.
+- **When in doubt, file a bead — do not reach for the editor.**
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
@@ -60,18 +82,80 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
+`space_station` is a single Dart package (`publish_to: none`). Its deps are sibling **path overrides**
+in the gitignored `pubspec_overrides.yaml` (the `grid_*` packages are unpublished — see
+[the_grid/docs/SCRATCH-pub-capability-and-repo-split.md](../the_grid/docs/SCRATCH-pub-capability-and-repo-split.md)).
 
 ```bash
-# Example:
-# npm install
-# npm test
+dart pub get                              # resolve (needs the sibling checkouts present)
+dart analyze && dart test                 # the house gate
+dart compile exe bin/space.dart -o space  # build the runner
+
+# Operate the resident station (governor):
+./space status                            # what the station is driving right now
+./space up --no-dry-run --land \          # ARM a LIVE station (builds + opens PRs)
+  --grid-home . \
+  --substation the_grid@tg=../the_grid \
+  --substation power_station@pow=../power_station \
+  --substation genesis=../genesis \
+  --substation space_station@space=.
+./space down                              # tear down
 ```
+
+**`validation_plan` worktree gotcha.** space_station beads need an **absolute-cd** plan
+(`cd <abs>/space_station && dart analyze && dart test`) — a per-bead worktree can't `pub get` (the
+unpublished `grid_*` deps + the gitignored overrides are absent). the_grid/power_station beads use a
+**relative** plan (`cd packages/<pkg> && dart pub get && dart analyze && dart test`). `tg-8uz` is the
+fix (materialize overrides per-worktree).
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+**space is a station-as-a-tree.** `SpaceDelegate.build()` authors
+`RawAssetGrid(gridHome) → Station → HarnessProvider(registry, config) → Substations →` per-substation
+`Substation( Nest[ GitGridAssets, GitHubGridAssets?, SubstationWork ] )`. `space up` mounts it via
+`runGrid(SpaceDelegate)`; armed, `StationWork` provides the engine's work-axis so each substation
+drives its `.beads` ready frontier.
+
+**The drive loop (per bead, in a worktree).** The station takes **no drive-list** (`ready` IS the
+drive set — there is deliberately no `--bead`). It mounts a build agent, the **committee** gates it,
+and it **lands** (commit + PR). Session states are just `open / gated / closed`.
+
+**The front-of-house lifecycle** (design-side, being ported into `grid_assets`):
+`discover` (HITL skill) → `specify` (agentic asset + its own **spec** committee) → `build` (agentic +
+**code** committee) → `land`. The committee is **pluggable** — a `Circuit` over rubric ids + a
+`RubricSource` fed by Packaged AI Assets + a gating rubric whose `F` hard-blocks — so a new review
+type is a new rubric pack, not new machinery. The **coupled skill+command** pattern (a skill CALLS a
+vended deterministic Command like `space search`, instead of inferring the operation) is
+[ADR-0001, draft](../power_station/docs/adr/ADR-0001-packaged-ai-asset-skill-command-coupling.md).
+
+**The roster.** Currently armed: `the_grid`, `power_station`, `genesis`, `space_station` (self).
+`lenny` is pending relocation; `decisions`/`expression` join when they gain bead stores. `space-6ds`
+hardcodes this default roster in `build()`. **Coexistence:** the_grid's work store is the shared `tg`
+Dolt server (gc coexists on `ga-*`); the A37 split fences session writes to the `houston` state store
+so the work store stays read-only.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Backlog is `bd`, actor is `governor`.** Every mutation `--actor governor`; reasons carry receipts.
+  Stage new work `--defer <date>` (kills the mount race against a live station); let a human ready it. A
+  driveable bead needs a `validation_plan`, a driveable type (`task/bug/feature/chore`), and a
+  description an agent can act on alone. **Cross-store deps DO exist** — each substation is its own Dolt
+  DB, but bd ships a native cross-store edge (`bd dep add <id> external:<project>:<capability>` → the
+  `depends_on_external` column, resolved at query time via the `external_projects` config), and
+  the_grid's federated engine already enforces cross-store BLOCKING across the substation union:
+  `FederatedSnapshotSource._applyExternalDepGuard` keys `DependencyType.affectsBlocking` and fails
+  closed when no member observes the target (the_grid ADR-0000 **A44**, pending). What `external:` does
+  NOT give you is BEAD granularity — it says "project X shipped capability Z," not "this bead waits on
+  that bead" — so homing tightly-coupled beads in ONE store stays the simplest default: a grooming
+  CHOICE, not a platform limitation.
+- **The memento house set** (genesis ADR-0001 D7): Dart `^3.11`, freezed + json_serializable,
+  exhaustive `switch`, Fakes-not-mocks, no `print` in lib. **Terminology:** "extension," never
+  "plugin"; package names are faculties/crafts, never agent-nouns.
+- **Operator skills** (`.claude/skills/`): `station-operations` (boot/bounce/status/diagnose),
+  `intake-grooming` (make a bead driveable), `harvest-review` (land what the station built),
+  `gate-medicine` (clear gated sessions). The `governor` agent is the persona for this seat — reach
+  for these before improvising.
+- **Standing operational hazards** (check live state before acting): the roster the armed station
+  actually mounts; open **P0s in `bd ready`** — a committee-locality bug can wedge non-power_station
+  grading, so a station can be *up but driving nothing*. Diagnose with `station-operations` before
+  readying more. Persist durable findings with `bd remember`, not a MEMORY file.
