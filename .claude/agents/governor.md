@@ -1,1 +1,0 @@
-../../extension/agents/governor.md
