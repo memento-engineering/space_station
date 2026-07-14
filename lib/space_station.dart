@@ -7,7 +7,9 @@
 /// `federated_grid_assets` (AL-5c, D-A9 — moved out of `grid_cli`), plus the
 /// asset-exported [DartCommand] from the DART domain, plus memento's OWN
 /// resident verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`):
-/// `up`/`down`/`status`.
+/// `up`/`down`/`status`, plus the SEARCH asset's exported `search` Command,
+/// composed with space's own resident-station context (`SpaceDelegate`) — the
+/// coupled skill+command pattern (power_station ADR-0001).
 ///
 /// Track G-space / H2 (tg-33n → tg-r81): the resident station is **authored as
 /// a Seed** — [SpaceDelegate], a `grid_sdk` `GridDelegate` subclass carrying
@@ -42,12 +44,16 @@ import 'package:grid_cli/grid_cli.dart'
     show DemoCommand, GateCommand, ReworkCommand, WatchCommand;
 
 import 'src/down_command.dart';
+import 'src/search_command.dart';
 import 'src/status_command.dart';
 import 'src/up_command.dart';
 
 // space_station authored as a Seed (Track G-space): the delegate the resident
 // verbs re-seat over is part of the public library surface.
 export 'src/space_delegate.dart' show SpaceDelegate;
+// The composition site of the VENDED `search` Command — exported so a test
+// (or a Flutter app) can build the seat with its seams injected.
+export 'src/search_command.dart' show buildSpaceSearchCommand;
 
 /// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
 /// the power_station assets' exported Commands, with the COMPUTE asset's use
@@ -61,6 +67,13 @@ CommandRunner<int> buildRunner() =>
       ..addCommand(UpCommand())
       ..addCommand(DownCommand())
       ..addCommand(StatusCommand())
+      // The SEARCH asset's exported CLI component, COMPOSED with space's
+      // resident-station context — `space search <query>`: the deterministic,
+      // read-only (A37) cross-store search the `discover` skill CALLS instead
+      // of reinventing it by inference (the coupled skill+command pattern,
+      // power_station ADR-0001). The logic is the asset's; this is the
+      // last-mile composition.
+      ..addCommand(buildSpaceSearchCommand())
       // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
       // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
       // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
