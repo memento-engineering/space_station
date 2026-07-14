@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@429556d — do not edit; run `space assets install`
+# generated from grid_assets@a09cfb6 — do not edit; run `space assets install`
 name: gate-medicine
 description: >
   Diagnose and clear gated the_grid sessions: read the worktree critique
@@ -7,7 +7,7 @@ description: >
   with a rework round — never a bare gate-close. Use when a session parks at
   review/route, when gate beads open in the state store, when several sessions
   gate at once, or when sessions and gates look stuck, orphaned, or duplicated.
-compatibility: Requires the `space` binary, bd (beads CLI), dart, git.
+compatibility: Requires dart + the `space` runner, bd (beads CLI), git.
 metadata:
   author: memento-engineering
 ---
