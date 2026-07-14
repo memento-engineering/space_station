@@ -43,6 +43,7 @@ import 'package:grid_assets/grid_assets.dart'
 import 'package:grid_cli/grid_cli.dart'
     show DemoCommand, GateCommand, ReloadCommand, ReworkCommand, WatchCommand;
 
+import 'src/assets_command.dart';
 import 'src/down_command.dart';
 import 'src/search_command.dart';
 import 'src/status_command.dart';
@@ -51,6 +52,9 @@ import 'src/up_command.dart';
 // space_station authored as a Seed (Track G-space): the delegate the resident
 // verbs re-seat over is part of the public library surface.
 export 'src/space_delegate.dart' show SpaceDelegate;
+// The composition site of the VENDED `assets` Command group — exported so a
+// test (or a Flutter app) can build the seat with its seams injected.
+export 'src/assets_command.dart' show buildSpaceAssetsCommand;
 // The composition site of the VENDED `search` Command — exported so a test
 // (or a Flutter app) can build the seat with its seams injected.
 export 'src/search_command.dart' show buildSpaceSearchCommand;
@@ -82,6 +86,15 @@ CommandRunner<int> buildRunner() =>
       // power_station ADR-0001). The logic is the asset's; this is the
       // last-mile composition.
       ..addCommand(buildSpaceSearchCommand())
+      // The ASSETS domain's exported Command group, COMPOSED with space's
+      // resident-station context — `space assets install`: the operator leg of
+      // overlay delivery. It overlays the vended `station_overlay` onto THIS
+      // repo's root, path-preserving and provenance-stamped, so the operator's
+      // own manual (the skills, the governor agent-def, the harness settings)
+      // is GENERATED from grid_assets rather than hand-copied here. NEVER
+      // folded into `up` — installing the manual is an explicit act, the same
+      // reason auto-reload was rejected.
+      ..addCommand(buildSpaceAssetsCommand())
       // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
       // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
       // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
