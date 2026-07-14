@@ -41,7 +41,7 @@ import 'package:grid_assets/grid_assets.dart'
         computeDispatchHandler,
         kComputeKind;
 import 'package:grid_cli/grid_cli.dart'
-    show DemoCommand, GateCommand, ReworkCommand, WatchCommand;
+    show DemoCommand, GateCommand, ReloadCommand, ReworkCommand, WatchCommand;
 
 import 'src/down_command.dart';
 import 'src/search_command.dart';
@@ -67,6 +67,14 @@ CommandRunner<int> buildRunner() =>
       ..addCommand(UpCommand())
       ..addCommand(DownCommand())
       ..addCommand(StatusCommand())
+      // The operator's EXPLICIT hot-reload trigger. `reload` talks to the
+      // RESIDENT station over the VM service it advertised in its lock — it
+      // starts no second station and watches no file. Generic and
+      // asset-agnostic (it carries its own --grid-home/--restart flags and
+      // injects its own client), so it is composed BARE — contrast `search`
+      // below, which is curried with space's station context because the
+      // ASSET's Command needs it.
+      ..addCommand(ReloadCommand())
       // The SEARCH asset's exported CLI component, COMPOSED with space's
       // resident-station context — `space search <query>`: the deterministic,
       // read-only (A37) cross-store search the `discover` skill CALLS instead

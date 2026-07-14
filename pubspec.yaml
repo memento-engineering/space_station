@@ -17,6 +17,10 @@ dependencies:
   grid_assets: any
   grid_cli: any
   grid_engine: any
+  # The dev-mode host: `GridExplorationHost` (the sole registrar of
+  # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
+  # so `space reload` has an extension to invoke.
+  grid_exploration: any
   grid_runtime: any
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3

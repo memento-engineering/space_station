@@ -62,6 +62,9 @@ import 'package:grid_cli/grid_cli.dart'
         mintControlToken;
 import 'package:grid_assets/grid_assets.dart'
     show CodeCircuitResolver, buildCodeRegistry, kCodeCircuit;
+// The RUN-MODE probe: this process's own VM-service URI (JIT) or null (AOT) —
+// the WHOLE dev-mode gate.
+import 'package:grid_exploration/grid_exploration.dart' show stationVmServiceUri;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, SystemGitRunner, SystemProcessGroupController;
 import 'package:grid_sdk/grid_sdk.dart'
@@ -77,6 +80,7 @@ import 'package:grid_sdk/grid_sdk.dart'
         runGrid;
 import 'package:path/path.dart' as p;
 
+import 'dev_mode.dart';
 import 'space_delegate.dart';
 
 /// One substation `up` armed — a name, its resolved ABSOLUTE root, and its
@@ -404,7 +408,18 @@ class UpCommand extends Command<int> {
     // hands the real halves over; `--dry-run` constructs NEITHER — no `git`, no
     // `gh` — so the tree binds no delivery and the dry run stays inert.
     final live = !config.dryRun;
-    final delegate = SpaceDelegate(
+
+    // The RUN MODE is the WHOLE dev-mode gate: a JIT station launched with
+    // `--enable-vm-service` reports a VM service; an AOT binary reports none.
+    // No hostname allowlist, no env var, no flag, no config — and no filesystem
+    // watcher: `space reload` is the EXPLICIT trigger.
+    final vmServiceUri = await stationVmServiceUri();
+
+    // Authored through a FACTORY so a hot-RESTART can re-run it on a fresh
+    // delegate. `runGrid`'s own contract: a JIT station passes a factory, an AOT
+    // station omits it and `hotRestart` then refuses LOUD — so the factory is
+    // armed on the SAME gate, and nothing else.
+    SpaceDelegate buildDelegate() => SpaceDelegate(
       gridRoot: config.gridHome,
       stationName: 'space',
       appended: config.appended,
@@ -421,7 +436,11 @@ class UpCommand extends Command<int> {
     // spawn — inert under --dry-run). A mount-time refusal unwinds everything.
     final GridHandle grid;
     try {
-      grid = runGrid(delegate, onFlushed: workRuntime.afterFlush);
+      grid = runGrid(
+        buildDelegate(),
+        onFlushed: workRuntime.afterFlush,
+        delegateFactory: vmServiceUri == null ? null : buildDelegate,
+      );
     } on Object catch (e) {
       await workRuntime.shutdown();
       await stationLock.release();
@@ -450,6 +469,34 @@ class UpCommand extends Command<int> {
     }
     await stationLock.updateControl(controlUrl: control.url, token: token);
 
+    // --- the DEV-MODE seat, JIT only: the exploration host — the SOLE registrar
+    // — carrying the OPTIONAL ReassembleTool, so `ext.exploration.grid.reload`
+    // exists and `space reload` re-composes THIS running station (no second
+    // process). The lock then advertises the VM-service URI so the client can
+    // find it; the lock is 0600 because that URI carries the service auth code.
+    // No VM service ⇒ no seat, no tool, no advertisement, and `space reload`
+    // refuses LOUD.
+    final DevModeSeat? devMode;
+    try {
+      devMode = await armDevMode(
+        vmServiceUri: vmServiceUri,
+        grid: grid,
+        latest: () => workRuntime.latest.graph,
+        readPath: () => workRuntime.readPathName,
+      );
+    } on Object catch (e) {
+      await control.dispose();
+      await grid.teardown();
+      await workRuntime.shutdown();
+      await stationLock.release();
+      err('space up: $e');
+      return 1;
+    }
+    if (devMode != null) {
+      devMode.register();
+      await stationLock.updateVmService(devMode.vmServiceUri);
+    }
+
     out('space up — space_station as a Seed (runGrid)');
     out(
       'mode: ${config.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
@@ -474,6 +521,13 @@ class UpCommand extends Command<int> {
       '${workRuntime.stateSubstation}',
     );
     out('control: ${control.url}  ·  token: (see ${stationLock.path}, 0600)');
+    out(
+      devMode == null
+          ? 'dev mode: OFF (no VM service) — `space reload` is unavailable; arm '
+                'it JIT: `dart run --enable-vm-service bin/space.dart up …`'
+          : 'dev mode: JIT — VM service ${devMode.vmServiceUri}  ·  '
+                '`space reload` ARMED (ext.exploration.grid.reload registered)',
+    );
 
     // Dispose the control surface BEFORE releasing the lock (RS-4 scope fence —
     // a released lock naming a dead endpoint would mislead `space status`),
@@ -481,6 +535,9 @@ class UpCommand extends Command<int> {
     // machinery (the bridge outlives the tree, never the reverse), then
     // release LAST.
     Future<void> shutdown() async {
+      // The dev-mode host stops answering the wire FIRST — it re-composes the
+      // tree, so it must not outlive it.
+      await devMode?.dispose();
       await control.dispose();
       await grid.teardown();
       await workRuntime.shutdown();

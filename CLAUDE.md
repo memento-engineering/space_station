@@ -120,6 +120,17 @@ it. For a grid op while the runner is mid-migration, still stay JIT: the operati
 composition, so run it through `dart run bin/space.dart <cmd>` — not through the_grid's `grid_cli`, which
 sidesteps space's actual station workflow.
 
+**`space reload` — the EXPLICIT hot-reload trigger.** JIT-from-source is the default dev operating
+mode (the mac studio dogfoods from source), so a landed change activates **without a down/up bounce**:
+`dart run bin/space.dart reload --grid-home .` connects to the RESIDENT station over the VM service it
+advertised in its 0600 `.grid/station.lock`, swaps the sources, and re-composes the tree — live
+sessions are ADOPTED, never killed. `--restart` re-runs the delegate factory instead of the master
+build. The trigger is EXPLICIT and operator-driven: there is deliberately **no file-watcher and no
+auto-reload** (an auto-reload-on-save would fire mid-build on a station that is committing and opening
+PRs). Arming it is the **run mode alone** — a station booted JIT with `--enable-vm-service` registers
+`ext.exploration.grid.reload` (the `up` banner then reads `dev mode: JIT … ARMED`); an AOT binary
+registers nothing, reports `dev mode: OFF`, and `space reload` refuses LOUD.
+
 **`validation_plan` worktree gotcha.** space_station beads need an **absolute-cd** plan
 (`cd <abs>/space_station && dart analyze && dart test`) — a per-bead worktree can't `pub get` (the
 unpublished `grid_*` deps + the gitignored overrides are absent). the_grid/power_station beads use a
