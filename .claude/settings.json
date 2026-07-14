@@ -1,0 +1,16 @@
+{
+  "$generated": "generated from grid_assets@429556d — do not edit; run `space assets install`",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bd prime --hook-json",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  }
+}
