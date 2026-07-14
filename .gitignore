@@ -39,5 +39,6 @@ space
 .claude/*
 !.claude/skills
 !.claude/agents
+!.claude/settings.json
 .codex/
 .agents/
