@@ -45,6 +45,15 @@ import 'package:test/test.dart';
 ///      `delivery: none (commit-only)`, so the inert posture constructs no
 ///      real `git`/`gh` machinery (the retired `--land` flag's job, now a
 ///      per-substation binding — the_grid ADR-0000 A51).
+///  (i) a LIVE arm (`--no-dry-run`) BINDS delivery: the banner reports
+///      `delivery: BOUND (GitHub PR)` (never the dry run's
+///      `none (commit-only)`), `GET /status` reports the live posture
+///      (`station.dryRun == false`) with NOTHING mounted, and the live
+///      resident still drains gracefully. The live half of the per-substation
+///      delivery binding (the_grid ADR-0000 A51) — the branch that shipped
+///      with no runtime witness. Hermetic: an EMPTY store has no ready work
+///      and `--max-agents 0` admits none, so the bound halves are constructed
+///      but never exercised (no `git`, no `gh`, no agent).
 void main() {
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
@@ -378,6 +387,118 @@ void main() {
         reason: 'stdout: ${upIo.out}\nstderr: ${upIo.err}',
       );
     }
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('a LIVE arm (--no-dry-run) BINDS delivery: the banner reports '
+      '`delivery: BOUND (GitHub PR)`, /status reports the live posture with '
+      'NOTHING mounted, and the resident still drains gracefully — the live '
+      'half of the per-substation binding (the_grid ADR-0000 A51)', () async {
+    final gridHome = await _bdInitGridHome('space-up-live-home-');
+    final subRoot = await _bdInitWorkspace('space-up-live-sub-');
+    addTearDown(() async {
+      await gridHome.delete(recursive: true);
+      await subRoot.delete(recursive: true);
+    });
+    final lockPath = StationLockService.lockPath(gridHome.path);
+
+    // The ONE branch that constructs real delivery halves — hermetic on three
+    // independent fences, so a LIVE arm here spawns no agent and runs no
+    // `git`/`gh`:
+    //   1. the freshly bd-init'd substation has NO ready work (asserted on
+    //      /status below), so the reconcile mounts nothing;
+    //   2. `--max-agents 0` is a ZERO admission ceiling — a non-null station
+    //      cap floors `slotsAvailable` at `max(0, 0 - live)` — so nothing can
+    //      mount even if a later fixture seeded a ready bead;
+    //   3. BINDING execs nothing: `GitOps`/`GhPrOpener` are const ctors and
+    //      `SystemGitRunner` only copies the environment.
+    // The coded roster resolves `../<repo>` against this temp grid home, so
+    // every coded seat is skipped LOUD and only `smoketest` arms.
+    final up = await _spawnSpace([
+      'up',
+      '--no-dry-run',
+      '--max-agents',
+      '0',
+      '--substation',
+      'smoketest=${subRoot.path}',
+      '--grid-home',
+      gridHome.path,
+      '--control-port',
+      '0',
+    ]);
+    final upIo = _CapturedIo(up);
+    addTearDown(() async {
+      if (await _isAlive(up.pid)) {
+        up.kill(ProcessSignal.sigkill);
+      }
+    });
+
+    final lock = await _untilLockAdvertised(lockPath);
+    final status = await _getJson(
+      Uri.parse('${lock['controlUrl']! as String}/status'),
+      token: lock['token']! as String,
+    );
+
+    // The live posture at the CONTROL surface — a witness independent of the
+    // banner — plus the proof the arm mounted NOTHING, so the bound halves
+    // were constructed and never called.
+    final station = status['station']! as Map<String, Object?>;
+    expect(
+      station['dryRun'],
+      isFalse,
+      reason: 'the live arm reports the LIVE posture\nfull payload: $status',
+    );
+    final work = status['work']! as Map<String, Object?>;
+    expect(
+      work['ready'],
+      0,
+      reason: 'the empty store has no ready work\nfull payload: $status',
+    );
+    expect(
+      work['mounted'],
+      0,
+      reason:
+          'a live arm with no ready work mounts NOTHING — no agent, no git, '
+          'no gh\nfull payload: $status',
+    );
+
+    // A LIVE arm BINDS delivery. `live` (== !dryRun) gates BOTH the constructed
+    // halves (`GitOps` + `GhPrOpener`) and this banner, so the banner IS the
+    // posture: wired backwards, a `--no-dry-run` arm would print the dry run's
+    // `none (commit-only)` and both matchers below would fail.
+    final banner = upIo.out.toString();
+    expect(
+      banner,
+      allOf(
+        contains('delivery: BOUND (GitHub PR)'),
+        isNot(contains('delivery: none (commit-only)')),
+        contains('mode: LIVE'),
+        contains('work-driving: ARMED (live)'),
+      ),
+      reason: 'stdout: $banner\nstderr: ${upIo.err}',
+    );
+
+    // The live resident drains on the same graceful path the dry-run one does
+    // (a settle margin past the signal-listener attach, as the SIGTERM case
+    // above). The lock's absence afterwards is the observable consequence of
+    // `shutdown()` releasing it LAST, after tearing the tree down.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
+    final exitCode = await up.exitCode.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        up.kill(ProcessSignal.sigkill);
+        fail(
+          'the LIVE up did not exit after SIGTERM.\n'
+          'stdout: ${upIo.out}\nstderr: ${upIo.err}',
+        );
+      },
+    );
+    expect(exitCode, 0, reason: 'graceful drain.\nstderr: ${upIo.err}');
+    expect(
+      await File(lockPath).exists(),
+      isFalse,
+      reason: 'the live resident released the lock on the graceful path',
+    );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
