@@ -55,8 +55,8 @@ void main() {
   }
 
   test('`assets install` overlays onto the root SpaceDelegate authors, binds '
-      '{{runner}} to `space` and {{gridHome}} to that root, and stamps the '
-      'provenance header on line 2', () async {
+      '{{runner}} to `dart run bin/space.dart` and {{gridHome}} to that root, '
+      'and stamps the provenance header on line 2', () async {
     final h = harness();
     expect(await h.runner.run(['assets', 'install', '--no-diff']), 0);
 
@@ -64,10 +64,13 @@ void main() {
     expect(
       body.split('\n')[1],
       '# generated from grid_assets@deadbee — do not edit; run '
-          '`space assets install`',
+          '`dart run bin/space.dart assets install`',
       reason: 'the YAML stamp lands UNDER the frontmatter opener (A26(1))',
     );
-    expect(body, contains('`space up --grid-home ${seat.path}`'));
+    expect(
+      body,
+      contains('`dart run bin/space.dart up --grid-home ${seat.path}`'),
+    );
     expect(body, isNot(contains('{{')), reason: 'no hole survives the render');
   });
 

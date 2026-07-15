@@ -22,10 +22,52 @@ library;
 import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart'
-    show AgentConfig, AssetsCommand, OverlayInstallService, ProviderManaged;
+    show
+        AgentConfig,
+        AssetsCommand,
+        OverlayInstallReport,
+        OverlayInstallService,
+        ProviderManaged;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
+
+/// The verb the vended operator skills' `{{runner}}` holes render to. space is
+/// JIT-only — there is deliberately no `space` binary (`CLAUDE.md`: "JIT only —
+/// never AOT"), so the installed manual must teach `dart run bin/space.dart`
+/// invocations, NEVER the runner's own executable name (`space`, the vended
+/// `kDefaultOverlayRunner` the install reads off `runner.executableName`).
+const String kSpaceRunner = 'dart run bin/space.dart';
+
+/// The vended [OverlayInstallService] with the ONE space-specific override: it
+/// FORCES the overlay's `{{runner}}` arg to space's JIT invocation
+/// ([kSpaceRunner]) before the materializer renders and stamps.
+///
+/// The vended `AssetsInstallCommand.run()` binds `runner` off
+/// `runner.executableName` (`space`); space cannot rename its `CommandRunner`
+/// without corrupting every other command's usage banner, so it overrides the
+/// value at the single seam it owns — the injected service. A THIN forward (one
+/// arg rewritten, everything else passed through), not a re-implementation.
+class _SpaceOverlayInstallService extends OverlayInstallService {
+  const _SpaceOverlayInstallService();
+
+  @override
+  Future<OverlayInstallReport> install({
+    required List<String> overlayRoots,
+    required String targetRoot,
+    required String sourceRef,
+    Map<String, String> args = const {},
+    bool check = false,
+  }) => super.install(
+    overlayRoots: overlayRoots,
+    targetRoot: targetRoot,
+    sourceRef: sourceRef,
+    // run() set args['runner'] = runner.executableName ('space'); overwrite it
+    // with space's JIT invocation. gridHome (and any other arg) rides through.
+    args: {...args, 'runner': kSpaceRunner},
+    check: check,
+  );
+}
 
 /// Builds the VENDED `assets` Command group curried with space's
 /// resident-station context ([SpaceDelegate]).
@@ -38,7 +80,7 @@ import 'space_delegate.dart';
 /// runs). [out]/[err] default to the process sinks.
 AssetsCommand buildSpaceAssetsCommand({
   String Function() gridHomeDefault = _currentDirectory,
-  OverlayInstallService service = const OverlayInstallService(),
+  OverlayInstallService service = const _SpaceOverlayInstallService(),
   Future<List<String>> Function(String gridHome)? roots,
   String Function(String overlayRoot)? sourceRef,
   StringSink? out,
