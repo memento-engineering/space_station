@@ -1,4 +1,5 @@
 ---
+# generated from grid_assets@429556d — do not edit; run `space assets install`
 name: intake-grooming
 description: >
   Shape work beads so a resident the_grid station can drive them: the required

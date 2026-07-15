@@ -99,6 +99,7 @@ space's own source regardless of upstream `main`. This is also the mechanism beh
 ```bash
 dart pub get                              # resolve (needs the sibling checkouts present)
 dart analyze && dart test                 # the house gate
+dart run bin/space.dart assets install --check   # the operator assets match their vended source
 
 # Operate the resident station (governor) — ALWAYS JIT, never an AOT binary (see below):
 dart run bin/space.dart status            # what the station is driving right now
@@ -182,10 +183,15 @@ so the work store stays read-only.
 - **The memento house set** (genesis ADR-0001 D7): Dart `^3.11`, freezed + json_serializable,
   exhaustive `switch`, Fakes-not-mocks, no `print` in lib. **Terminology:** "extension," never
   "plugin"; package names are faculties/crafts, never agent-nouns.
-- **Operator skills** (`.claude/skills/`): `station-operations` (boot/bounce/status/diagnose),
-  `intake-grooming` (make a bead driveable), `harvest-review` (land what the station built),
-  `gate-medicine` (clear gated sessions). The `governor` agent is the persona for this seat — reach
-  for these before improvising.
+- **Operator assets are GENERATED, never hand-edited.** `.claude/skills/` (`station-operations` —
+  boot/bounce/status/diagnose; `intake-grooming` — make a bead driveable; `harvest-review` — land
+  what the station built; `gate-medicine` — clear gated sessions; `discover`), `.claude/agents/governor.md`
+  and `.claude/settings.json` are INSTALLED from `grid_assets`' vended `station_overlay` —
+  `dart run bin/space.dart assets install` — and each carries a `generated from grid_assets@<ref>`
+  stamp. The authored home is [power_station](../power_station), not here: to change a skill, change
+  it there and re-install. `assets install --check` is part of the house gate and FAILS on an
+  out-of-band edit. The `governor` agent is the persona for this seat — reach for these before
+  improvising.
 - **Standing operational hazards** (check live state before acting): the roster the armed station
   actually mounts; open **P0s in `bd ready`** — a committee-locality bug can wedge non-power_station
   grading, so a station can be *up but driving nothing*. Diagnose with `station-operations` before

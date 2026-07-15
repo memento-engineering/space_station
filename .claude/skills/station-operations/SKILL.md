@@ -1,13 +1,14 @@
 ---
+# generated from grid_assets@1182361 — do not edit; run `dart run bin/space.dart assets install`
 name: station-operations
 description: >
-  Operate the resident the_grid station: boot (space up), bounce, tear down,
-  read /status, seed a grid home's state store, and diagnose a station that is
-  up but driving nothing. Use when starting, restarting, or arming the station,
-  when a boot looks healthy but ready > 0 with mounted 0 and no output, or when
-  preparing a fresh grid home — even if the symptom is just "nothing is
-  happening."
-compatibility: Requires dart (the station runs JIT via `dart run`, never an AOT binary), bd (beads CLI), git.
+  Operate the resident the_grid station: boot (dart run bin/space.dart up), bounce, tear
+  down, read /status, seed a grid home's state store, and diagnose a station
+  that is up but driving nothing. Use when starting, restarting, or arming the
+  station, when a boot looks healthy but ready > 0 with mounted 0 and no
+  output, or when preparing a fresh grid home — even if the symptom is just
+  "nothing is happening."
+compatibility: Requires dart + the `dart run bin/space.dart` runner (the station runs JIT via `dart run`, never an AOT binary), bd (beads CLI), git.
 metadata:
   author: memento-engineering
 ---
@@ -18,12 +19,9 @@ metadata:
 
 From the grid home (the repo whose `.grid/` holds the state store and lock):
 
-Run the station **JIT — always `dart run`, never a `dart compile exe` binary** (JIT keeps the VM
-service open for hot-reload + lenny debugging and guarantees current source):
-
 ```
-dart run --enable-vm-service bin/space.dart up --no-dry-run \
-  --grid-home <abs path to grid home> \
+dart run bin/space.dart up --no-dry-run \
+  --grid-home /Users/nico/development/engineering.memento/space_station \
   --substation '<name>[@<prefix>]=<abs work-repo root>' ...
   [--max-agents N]
 ```
@@ -31,24 +29,23 @@ dart run --enable-vm-service bin/space.dart up --no-dry-run \
 - One `--substation` per work repo; `@prefix` only when the store's issue-id
   prefix differs from the name (`the_grid@tg=…`). Names and prefixes must be
   disjoint across substations — assembly refuses collisions.
-- Delivery is a per-substation BINDING, not a flag (the_grid ADR-0000 A51): every coded
-  seat authors `GitHubGridAssets`, so a LIVE arm (`--no-dry-run`) pushes and opens a PR
-  per landed bead. `--dry-run` binds nothing — the commit-only posture (no `git`, no `gh`).
-  To make one substation commit-only, fork its seat in `SpaceDelegate.build`; there is no
-  land flag to omit.
-- The station is resident: it runs until `space down`. Run it in the
+- Delivery is a per-substation BINDING, not a flag (the_grid ADR-0000 A51): every
+  coded seat authors `GitHubGridAssets`, so a LIVE arm (`--no-dry-run`) pushes and
+  opens a PR per landed bead. `--dry-run` binds nothing (the commit-only posture).
+  There is no land flag to omit.
+- The station is resident: it runs until `dart run bin/space.dart down`. Run it in the
   background and read the banner from its log.
 
-Verify the boot with effects, not the banner: `space status --state-workspace
-<grid home>` should show `station: UP`, and within a minute of ready work
+Verify the boot with effects, not the banner: `dart run bin/space.dart status --state-workspace
+/Users/nico/development/engineering.memento/space_station` should show `station: UP`, and within a minute of ready work
 existing you should see `mounted`/`live sessions` > 0, per-bead worktrees under
 `<work-repo>/.grid/worktrees/<substation>/<bead>`, and real agent processes.
 
 ## Bounce / down
 
 ```
-dart run bin/space.dart down --state-workspace <grid home>   # scoped stop via the lock
-dart run --enable-vm-service bin/space.dart up ...            # same arming, JIT
+dart run bin/space.dart down --state-workspace /Users/nico/development/engineering.memento/space_station    # scoped stop via the lock
+dart run bin/space.dart up ...                                 # same arming
 ```
 
 Bounce whenever station-side state is latched (see the silent-death runbook) or
@@ -70,11 +67,11 @@ group — never pkill by name.
 The station prints nothing when every session mint fails — the failure is
 latched per-scope with no retry. Work the chain from the store outward:
 
-1. **Sessions:** `bd -C <grid home>/.grid export --include-infra` — zero beads
+1. **Sessions:** `bd -C /Users/nico/development/engineering.memento/space_station/.grid export --include-infra` — zero beads
    at all means no write ever landed (also check `.beads/last-touched` exists).
 2. **The mint seam:** `session` is NOT a core bd issue type. A state store
    seeded by bare `bd init` refuses `bd create -t session` ("invalid issue
-   type"). Fix: add to `<grid home>/.grid/.beads/config.yaml`:
+   type"). Fix: add to `/Users/nico/development/engineering.memento/space_station/.grid/.beads/config.yaml`:
 
    ```yaml
    types:
@@ -94,7 +91,7 @@ latched per-scope with no retry. Work the chain from the store outward:
 
 ## Seeding a fresh grid home
 
-- State store lives EXACTLY at `<grid home>/.grid/.beads` (never walk-up — a
+- State store lives EXACTLY at `/Users/nico/development/engineering.memento/space_station/.grid/.beads` (never walk-up — a
   dual-role repo's root `.beads` is a WORK store; binding it lands sessions in
   the work source).
 - bd derives the minted id prefix from the store's `dolt_database` name — name
@@ -108,21 +105,17 @@ Run a background loop rather than polling by hand. Exit (and re-engage the
 governor) on ANY of: an open gate bead in the state store, live sessions
 returning to zero after being live ("harvest time"), station not UP, or a
 timeout heartbeat (~45min while work is in flight, ~3h idle). Scan gates via
-`bd -C <grid home>/.grid export --include-infra` filtered to open
+`bd -C /Users/nico/development/engineering.memento/space_station/.grid export --include-infra` filtered to open
 `issue_type: gate` — never `bd show` in the loop.
 
 ## Gotchas
 
 - The banner's "work-driving: ARMED" is derived from config, not from the tree
   actually driving — trust only effects.
-- **Run JIT, never AOT.** The resident station runs under `dart run` (JIT), never a
-  `dart compile exe` binary — JIT picks up landed engine/sdk changes on a bounce (or hot-reload)
-  without a compile step, keeps the VM service open, and never runs a stale artifact. If you find a
-  committed/leftover `./space` binary, delete it — don't run it. **Do not** reach for the_grid's
-  `grid_cli` as a substitute either: it bypasses space's own composition. When space's own source
-  won't JIT-compile (a breaking upstream dep in flight — see the git-tag-constraints direction,
-  `space-td1`), that's a wedge to SURFACE and clear by landing the migration, not to route around
-  with a stale binary or a foreign CLI.
+- A landed engine/sdk change is picked up by re-running from source on a bounce or
+  hot-reload — there is no recompile step. Run the `dart run bin/space.dart` station JIT (via
+  `dart run`), never a compiled binary: a binary loses the VM service, hot-reload,
+  and the current-source guarantee (space is JIT-only — see its CLAUDE.md).
 - The dry smoke CANNOT prove the write path (dry = no-op bd writer): the first
   live boot of any new composition is the only prover — treat it as an
   instrumented experiment, not a formality.
