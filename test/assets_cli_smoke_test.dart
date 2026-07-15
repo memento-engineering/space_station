@@ -17,6 +17,7 @@ void main() {
     '.claude/skills/gate-medicine/SKILL.md',
     '.claude/skills/harvest-review/SKILL.md',
     '.claude/skills/intake-grooming/SKILL.md',
+    '.claude/skills/release/SKILL.md',
     '.claude/skills/station-operations/SKILL.md',
   ];
 
@@ -35,7 +36,7 @@ void main() {
       ], workingDirectory: Directory.current.path);
 
   test('`space assets install --root <seat>` materializes the REAL vended '
-      'station_overlay — five operator skills, the governor agent-def and the '
+      'station_overlay — six operator skills, the governor agent-def and the '
       'harness settings, each provenance-stamped; --check is then CURRENT (0) '
       'and LOUD on drift (1)', () async {
     final seat = Directory.systemTemp.createTempSync('space-assets-seat-');

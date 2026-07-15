@@ -26,6 +26,7 @@ void main() {
     '.claude/skills/gate-medicine/SKILL.md',
     '.claude/skills/harvest-review/SKILL.md',
     '.claude/skills/intake-grooming/SKILL.md',
+    '.claude/skills/release/SKILL.md',
     '.claude/skills/station-operations/SKILL.md',
   ];
 

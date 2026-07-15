@@ -51,12 +51,14 @@ void main() {
     // the CORRECTED content and would false-positive on the fix:
     //   * bare `AOT` — the corrected manual legitimately says "never an AOT
     //     binary"; the narrower `run the AOT binary` (the removed lure) is used.
-    //   * `./space` — the overlay writes commands as `./{{runner}}`, which
-    //     RENDERS to `./space` at install time, so it appears in the corrected
-    //     restart/rework examples too (present in BOTH stale and corrected — not
-    //     a regression marker). What installing the stale content actually
-    //     REVERTED was the AOT BUILD step, the AOT LURE, and the retired
-    //     `--land` flag — the three below, each genuinely purged by the fix.
+    //   * bare `space` — the governor agent-def uses `space up|down|status|
+    //     rework` as a hardcoded verb SHORTHAND with an inline `dart run
+    //     bin/space.dart …` clarification (no `{{runner}}` hole), so bare
+    //     `space` is not a regression marker.
+    // `./space` IS fenced (below): power_station #39 dropped the `./` binary
+    // prefix from the vended `{{runner}}` invocations and space binds
+    // `{{runner}}` to `dart run bin/space.dart`, so the compiled-binary
+    // `./space` invocation renders NOWHERE in the corrected tree.
     const retired = <String, String>{
       'compile exe':
           'the AOT build step — there is deliberately no committed `space` '
@@ -66,6 +68,11 @@ void main() {
       '--land':
           'the retired land arming flag — delivery is a per-substation '
               'binding (the_grid ADR-0000 A51)',
+      './space':
+          'the compiled-binary invocation — space runs JIT via '
+              '`dart run bin/space.dart`, never a `./space` binary; the overlay '
+              'dropped the `./` prefix (power_station #39) and space binds '
+              '{{runner}} to the JIT invocation',
     };
 
     final hits = <String>[
