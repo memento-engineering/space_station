@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@a09cfb6 — do not edit; run `space assets install`
+# generated from grid_assets@1182361 — do not edit; run `dart run bin/space.dart assets install`
 name: gate-medicine
 description: >
   Diagnose and clear gated the_grid sessions: read the worktree critique
@@ -7,7 +7,7 @@ description: >
   with a rework round — never a bare gate-close. Use when a session parks at
   review/route, when gate beads open in the state store, when several sessions
   gate at once, or when sessions and gates look stuck, orphaned, or duplicated.
-compatibility: Requires dart + the `space` runner, bd (beads CLI), git.
+compatibility: Requires dart + the `dart run bin/space.dart` runner, bd (beads CLI), git.
 metadata:
   author: memento-engineering
 ---
@@ -57,7 +57,7 @@ stale data and re-gates immediately — the critique dir's unchanged mtimes are
 the tell. The only fresh-round path is the rework re-key:
 
 ```
-./space rework <bead-id> \
+dart run bin/space.dart rework <bead-id> \
   --grid-root /Users/nico/development/engineering.memento/space_station --prefix <state-store prefix> \
   --note "<honest operator finding>" --note-root <work repo root>
 ```
