@@ -1,5 +1,5 @@
 import 'package:genesis_tree/genesis_tree.dart';
-import 'package:grid_assets/grid_assets.dart' show AgentConfig, ProviderManaged;
+import 'package:grid_assets/grid_assets.dart' show AgentConfig;
 import 'package:grid_runtime/grid_runtime.dart'
     show PrOpener, PullRequestRef, PullRequestResult;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
@@ -27,10 +27,7 @@ void main() {
     gridRoot: gridRoot,
     stationName: 'space',
     appended: appended,
-    agentConfig: const AgentConfig(
-      harness: 'claude',
-      target: ProviderManaged(),
-    ),
+    agentConfig: const AgentConfig(harness: 'claude'),
     prOpener: prOpener,
   );
 
@@ -77,7 +74,7 @@ void main() {
 
   group('SpaceDelegate — the station-default agent scope', () {
     test('harnesses defaults to the first-party claude set', () {
-      expect(delegate().harnesses.ids, contains('claude'));
+      expect(delegate().harnesses.names, contains('claude'));
     });
   });
 }

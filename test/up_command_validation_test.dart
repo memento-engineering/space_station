@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 /// RS-5b / H2 (tg-r81): offline coverage for `UpCommand`'s boot-eager
-/// validation + v3 arming branches (`up_command.dart`'s `run()`) — the
-/// `--openai-base`/`--swift-base` mutual exclusion, a malformed endpoint url,
-/// the boot-eager `AgentHarnessRegistry.validate` legality check, and the
-/// stores-at-roots arming gates (`--grid-home`, the coded roster + `--substation`
-/// merge, the exact-at-root work-store refusal). Every case here returns BEFORE
-/// the station lock is acquired or the tree mounts — no lock, no boot, no wait.
+/// validation + v3 arming branches (`up_command.dart`'s `run()`) — that the
+/// DELETED machine-fact endpoint flags (`--openai-base`/`--swift-base`) are
+/// gone (ADR-0002 D4: WHERE inference runs is the named environment's own
+/// property, and an endpoint is a site-binding machine-fact, never argv), and
+/// the stores-at-roots arming gates (`--grid-home`, the coded roster +
+/// `--substation` merge, the exact-at-root work-store refusal). Every case here
+/// returns BEFORE the station lock is acquired or the tree mounts — no lock, no
+/// boot, no wait.
 ///
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md`):
 /// `--substation` is no longer required — no-flag `space up` arms the CODED
@@ -31,49 +33,21 @@ import 'package:test/test.dart';
 /// `RootSpec`, no `--workspace` axis. A substation is a name AND its ONE root,
 /// paired in `--substation <name>=<root>`.
 void main() {
-  group('boot-eager agent-scope validation (returns before any config)', () {
-    test(
-      '--openai-base + --swift-base together is refused LOUD (exit 64)',
-      () async {
-        final result = await _runUp([
-          '--openai-base',
-          'http://localhost:1234',
-          '--swift-base',
-          'http://localhost:5678',
-        ]);
-        expect(result.exitCode, 64);
-        expect(
-          '${result.stderr}',
-          contains('space up: pass --openai-base OR --swift-base, not both.'),
-        );
-      },
-    );
-
-    test('a malformed --openai-base url is refused LOUD (exit 64)', () async {
-      final result = await _runUp(['--openai-base', 'not-a-url']);
+  group('deleted machine-fact endpoint flags (ADR-0002 D4)', () {
+    // WHERE inference runs is a property of the named environment, and an
+    // endpoint is a site-binding machine-fact (D3) — never argv. The old
+    // --openai-base/--swift-base flags and the harness×target legality table
+    // are DELETED (no deprecation). The flags no longer parse.
+    test('--openai-base is gone — rejected as an unknown option (exit 64)', () async {
+      final result = await _runUp(['--openai-base', 'http://localhost:1234']);
       expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        contains('space up: --openai-base is not an absolute url: "not-a-url"'),
-      );
+      expect('${result.stderr}', contains('openai-base'));
     });
 
-    test('a harness x target combo the registry rejects is refused LOUD (exit '
-        '64) — the boot-eager AgentHarnessRegistry.validate check', () async {
-      final result = await _runUp([
-        '--harness',
-        'claude',
-        '--swift-base',
-        'http://localhost:4321',
-      ]);
+    test('--swift-base is gone — rejected as an unknown option (exit 64)', () async {
+      final result = await _runUp(['--swift-base', 'http://localhost:5678']);
       expect(result.exitCode, 64);
-      expect(
-        '${result.stderr}',
-        allOf(
-          contains('space up: harness "claude" cannot reach'),
-          contains('fail-closed'),
-        ),
-      );
+      expect('${result.stderr}', contains('swift-base'));
     });
   });
 

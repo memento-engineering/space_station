@@ -44,11 +44,7 @@ import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
         AgentRole,
-        ModelTarget,
-        OpenAiCompatible,
-        ProviderManaged,
-        SwiftInfer,
-        buildAgentHarnessRegistry,
+        buildBuiltinEnvironmentRegistry,
         defaultModelFor;
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
@@ -124,16 +120,6 @@ class UpCommand extends Command<int> {
             'roles\' models at once.',
       )
       ..addOption(
-        'openai-base',
-        help:
-            'An OpenAI-compatible inference endpoint (e.g. a llama.cpp '
-            'server) — sets the model target for pi/opencode.',
-      )
-      ..addOption(
-        'swift-base',
-        help: 'A swift-infer server endpoint — sets the model target for pi.',
-      )
-      ..addOption(
         'max-agents',
         defaultsTo: '4',
         help:
@@ -167,23 +153,11 @@ class UpCommand extends Command<int> {
     // --- the station-default agent scope (D-C rung 1) + boot-eager
     // validation (OQ-c moment 1: a misconfigured MACHINE fails loud before
     // any tree mounts; a misconfigured BEAD fails per-work at resolution).
-    final openaiBase = results.option('openai-base');
-    final swiftBase = results.option('swift-base');
-    if (openaiBase != null && swiftBase != null) {
-      err('space up: pass --openai-base OR --swift-base, not both.');
-      return 64;
-    }
-    final ModelTarget target;
-    try {
-      target = openaiBase != null
-          ? OpenAiCompatible(_parseBase(openaiBase, '--openai-base'))
-          : swiftBase != null
-          ? SwiftInfer(_parseBase(swiftBase, '--swift-base'))
-          : const ProviderManaged();
-    } on FormatException catch (e) {
-      err('space up: ${e.message}');
-      return 64;
-    }
+    // WHERE inference runs is no longer an operator flag: it is a property of
+    // the named environment (ADR-0002 D1/D3), and an endpoint machine-fact is
+    // the site binding's (bead pow-ebf.6/pow-2eg), never argv (D4 deleted
+    // --openai-base/--swift-base). The station default arms a providerManaged
+    // harness (claude), which needs no endpoint.
     // The station's two model RUNGS, split by role. Neither takes a `??`
     // fallback here: an ABSENT flag means the station names NO model for that
     // role, and the ladder (bead > station > asset) falls through to the role's
@@ -205,14 +179,32 @@ class UpCommand extends Command<int> {
     final graderModel = results.option('grader-model');
     final agentConfig = AgentConfig(
       harness: results.option('harness') ?? 'claude',
-      target: target,
       params: {if (model != null) 'model': model},
       graderModel: graderModel,
     );
-    final harnesses = buildAgentHarnessRegistry();
-    final invalid = harnesses.validate(agentConfig);
-    if (invalid != null) {
-      err('space up: $invalid');
+    // Boot-eager (OQ-c moment 1): the STATION-DEFAULT environment must name an
+    // armed, self-consistent environment — a misconfigured MACHINE fails loud
+    // before any tree mounts (a misconfigured BEAD fails per-work at
+    // resolution). We validate the default environment ALONE, not the whole
+    // builtin set: `pi` carries an openAiCompatible target whose endpoint is a
+    // site-binding machine-fact (ADR-0002 D3), and the site-binding mount is
+    // not wired yet (bead pow-ebf.6/pow-2eg) — a whole-registry validate would
+    // refuse every `up` on pi's unbound endpoint. The default (claude) is
+    // providerManaged and needs no endpoint.
+    final harnesses = buildBuiltinEnvironmentRegistry();
+    if (!harnesses.names.contains(agentConfig.harness)) {
+      err(
+        'space up: harness "${agentConfig.harness}" names no armed environment '
+        '(armed: ${harnesses.names.join(', ')}).',
+      );
+      return 64;
+    }
+    final selfCheck = harnesses.resolve(agentConfig.harness).validate();
+    if (selfCheck != null) {
+      err(
+        'space up: environment "${agentConfig.harness}" is misconfigured: '
+        '$selfCheck',
+      );
       return 64;
     }
 
@@ -513,7 +505,8 @@ class UpCommand extends Command<int> {
         agentConfig.stationModelFor(AgentRole.grade) ??
         defaultModelFor(AgentRole.grade);
     out(
-      'agent scope: harness ${agentConfig.harness} → ${agentConfig.target}'
+      'agent scope: environment ${agentConfig.harness} '
+      '(${harnesses.resolve(agentConfig.harness).target})'
       '  ·  build model $buildModel  ·  grader model $gradeModel',
     );
     out(
@@ -605,12 +598,4 @@ class UpCommand extends Command<int> {
 
   void _out(String message) => stdout.writeln(message);
   void _err(String message) => stderr.writeln(message);
-}
-
-Uri _parseBase(String raw, String flag) {
-  final uri = Uri.tryParse(raw);
-  if (uri == null || !uri.hasScheme) {
-    throw FormatException('$flag is not an absolute url: "$raw"');
-  }
-  return uri;
 }

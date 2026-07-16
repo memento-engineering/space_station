@@ -48,12 +48,12 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
-        AgentHarnessRegistry,
+        EnvironmentRegistry,
         GitGridAssets,
         GitHubGridAssets,
         GitServices,
         HarnessProvider,
-        buildAgentHarnessRegistry;
+        buildBuiltinEnvironmentRegistry;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, StationGitService;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
@@ -77,12 +77,12 @@ class SpaceDelegate extends sdk.GridDelegate {
     required this.stationName,
     required this.agentConfig,
     this.appended = const [],
-    AgentHarnessRegistry? harnesses,
+    EnvironmentRegistry? harnesses,
     this.wiring,
     this.provisioner,
     this.gitOps,
     this.prOpener,
-  }) : harnesses = harnesses ?? buildAgentHarnessRegistry();
+  }) : harnesses = harnesses ?? buildBuiltinEnvironmentRegistry();
 
   /// The station's home (absolute): the `RawAssetGrid` root the [build] tree
   /// roots at; the grid's state store lives under `<gridRoot>/.grid/` (Q5a).
@@ -102,9 +102,10 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// rung of the agent-config ladder (ADR-0008 D10).
   final AgentConfig agentConfig;
 
-  /// The station's harness DI registry (which coding harnesses the machine can
-  /// run).
-  final AgentHarnessRegistry harnesses;
+  /// The station's environment registry (which named inference environments —
+  /// claude/copilot/pi/opencode/codex — the machine can run). Passed as the
+  /// `HarnessProvider.registry`.
+  final EnvironmentRegistry harnesses;
 
   /// The station's shared worktree-provisioning service (leased per
   /// substation); null ⇒ provisioning no-ops (offline / dry-run). Provided to
