@@ -30,7 +30,7 @@ library;
 import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart'
-    show AgentConfig, ProviderManaged, SearchCommand, StationSearchService;
+    show AgentConfig, SearchCommand, StationSearchService;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
@@ -66,10 +66,7 @@ SearchCommand buildSpaceSearchCommand({
         // Search reads stores; it spawns no agent. The station-default agent
         // scope is the delegate's required ambient rung (ADR-0008 D10) — this
         // authoring-only mount never reads it.
-        agentConfig: const AgentConfig(
-          harness: 'claude',
-          target: ProviderManaged(),
-        ),
+        agentConfig: const AgentConfig(harness: 'claude'),
       );
     },
     service: service,

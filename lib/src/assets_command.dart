@@ -26,8 +26,7 @@ import 'package:grid_assets/grid_assets.dart'
         AgentConfig,
         AssetsCommand,
         OverlayInstallReport,
-        OverlayInstallService,
-        ProviderManaged;
+        OverlayInstallService;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
@@ -108,10 +107,7 @@ AssetsCommand buildSpaceAssetsCommand({
         // Installing reads asset packs and writes files; it spawns no agent.
         // The station-default agent scope is the delegate's required ambient
         // rung (ADR-0008 D10) — this authoring-only mount never reads it.
-        agentConfig: const AgentConfig(
-          harness: 'claude',
-          target: ProviderManaged(),
-        ),
+        agentConfig: const AgentConfig(harness: 'claude'),
       );
     },
     service: service,

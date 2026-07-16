@@ -1,6 +1,6 @@
 import 'package:args/args.dart';
 import 'package:genesis_tree/genesis_tree.dart';
-import 'package:grid_assets/grid_assets.dart' show AgentConfig, ProviderManaged;
+import 'package:grid_assets/grid_assets.dart' show AgentConfig;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station/src/space_delegate.dart';
 import 'package:test/test.dart';
@@ -25,10 +25,7 @@ void main() {
         gridRoot: gridHome,
         stationName: 'space',
         appended: appended,
-        agentConfig: const AgentConfig(
-          harness: 'claude',
-          target: ProviderManaged(),
-        ),
+        agentConfig: const AgentConfig(harness: 'claude'),
       );
 
   group('SpaceDelegate.build — the hardcoded memento org (Fork A)', () {
