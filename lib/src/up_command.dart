@@ -97,11 +97,21 @@ class UpCommand extends Command<int> {
       ..addOption(
         'harness',
         defaultsTo: 'claude',
-        allowed: ['claude', 'copilot', 'pi', 'opencode'],
+        allowed: ['claude', 'copilot', 'pi', 'opencode', 'codex'],
         help:
-            'The agentic harness coding work runs on (the station default; a '
+            'The AMBIENT agentic harness (the station default for every role; a '
             'bead may override via its grid.agent envelope, a step via '
-            'params).',
+            'params). --build-harness overrides just the BUILD role.',
+      )
+      ..addOption(
+        'build-harness',
+        allowed: ['claude', 'copilot', 'pi', 'opencode', 'codex'],
+        help:
+            'Override the harness for the BUILD role ONLY (role → env, ADR-0002 '
+            'the ladder): builders run on this environment while grade/gather '
+            'stay on the ambient --harness. Absent: the build role uses the '
+            'ambient harness. E.g. --build-harness codex arms coders on codex '
+            'while the committee keeps grading on claude.',
       )
       ..addOption(
         'model',
@@ -177,10 +187,16 @@ class UpCommand extends Command<int> {
     // own field.
     final model = results.option('model');
     final graderModel = results.option('grader-model');
+    // --build-harness arms JUST the BUILD role on its own environment (role →
+    // env, ADR-0002 the ladder); grade/gather keep the ambient --harness.
+    final buildHarness = results.option('build-harness');
     final agentConfig = AgentConfig(
       harness: results.option('harness') ?? 'claude',
       params: {if (model != null) 'model': model},
       graderModel: graderModel,
+      roleEnvironments: {
+        if (buildHarness != null) AgentRole.build: buildHarness,
+      },
     );
     // Boot-eager (OQ-c moment 1): the STATION-DEFAULT environment must name an
     // armed, self-consistent environment — a misconfigured MACHINE fails loud
@@ -206,6 +222,24 @@ class UpCommand extends Command<int> {
         '$selfCheck',
       );
       return 64;
+    }
+    // Same boot-eager check for the BUILD-role override, when armed.
+    if (buildHarness != null) {
+      if (!harnesses.names.contains(buildHarness)) {
+        err(
+          'space up: --build-harness "$buildHarness" names no armed environment '
+          '(armed: ${harnesses.names.join(', ')}).',
+        );
+        return 64;
+      }
+      final buildSelfCheck = harnesses.resolve(buildHarness).validate();
+      if (buildSelfCheck != null) {
+        err(
+          'space up: build environment "$buildHarness" is misconfigured: '
+          '$buildSelfCheck',
+        );
+        return 64;
+      }
     }
 
     // --- space's OWN resident-station config (v3 stores-at-roots). The coded
