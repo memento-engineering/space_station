@@ -86,7 +86,11 @@ StateWorkspaceResult resolveStateWorkspace({
     );
   }
   final workspace = BeadsWorkspace.discover(start: runtimeDir);
-  if (workspace == null || workspace.root != runtimeDir) {
+  final expectedRoot = p.canonicalize(runtimeDir);
+  final discoveredRoot = workspace == null
+      ? null
+      : p.canonicalize(workspace.root);
+  if (workspace == null || !p.equals(discoveredRoot!, expectedRoot)) {
     return StateWorkspaceRefusal(
       'space $verb: could not parse the grid state store at '
       '$runtimeDir/.beads (resolved: ${workspace?.root ?? 'nothing'})',
