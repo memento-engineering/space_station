@@ -105,11 +105,11 @@ dart run bin/space.dart assets install --check   # the operator assets match the
 dart run bin/space.dart status            # what the station is driving right now
 dart run --enable-vm-service \            # ARM a LIVE station (builds + opens PRs); JIT keeps the VM
   bin/space.dart up --no-dry-run \        #   service open for hot-reload + lenny debugging
-  --grid-home . \
-  --substation the_grid@tg=../the_grid \
-  --substation power_station@pow=../power_station \
-  --substation genesis=../genesis \
-  --substation space_station@space=.
+  --grid-home "$(pwd)"                    # ABSOLUTE path required (relative = loud refusal).
+                                          # NO --substation flags for the memento roster: it is
+                                          # CODED in SpaceDelegate.build() (space-6ds; currently
+                                          # genesis, the_grid, power_station, space_station, lenny)
+                                          # and naming a coded seat REFUSES; flags APPEND only.
 dart run bin/space.dart down              # tear down
 ```
 
