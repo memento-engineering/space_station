@@ -105,13 +105,15 @@ class UpCommand extends Command<int> {
       )
       ..addOption(
         'build-harness',
+        defaultsTo: 'codex',
         allowed: ['claude', 'copilot', 'pi', 'opencode', 'codex'],
         help:
-            'Override the harness for the BUILD role ONLY (role → env, ADR-0002 '
-            'the ladder): builders run on this environment while grade/gather '
-            'stay on the ambient --harness. Absent: the build role uses the '
-            'ambient harness. E.g. --build-harness codex arms coders on codex '
-            'while the committee keeps grading on claude.',
+            'The harness for the BUILD role ONLY (role → env, ADR-0002 the '
+            'ladder): builders run on this environment while grade/gather '
+            'stay on the ambient --harness. Defaults to codex — the coded '
+            'station posture is codex builds under a claude committee; pass '
+            '--build-harness claude to collapse build onto the ambient '
+            'harness.',
       )
       ..addOption(
         'model',
