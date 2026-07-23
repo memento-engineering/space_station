@@ -20,83 +20,91 @@ dependencies:
   args: ^2.6.0
   beads_dart:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/the_grid.git
-      ref: beads_dart-v0.1.0
+      tag_pattern: beads_dart-v{{version}}
       path: packages/beads_dart
+    version: ^0.1.0
   dart_grid_assets:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/power_station.git
-      ref: dart_grid_assets-v0.1.0
+      tag_pattern: dart_grid_assets-v{{version}}
       path: packages/dart_grid_assets
+    version: ^0.1.0
   federated_grid_assets:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/power_station.git
-      ref: federated_grid_assets-v0.1.0
+      tag_pattern: federated_grid_assets-v{{version}}
       path: packages/federated_grid_assets
+    version: ^0.1.0
   genesis_tree: ^0.1.3
   grid_assets:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/power_station.git
-      ref: grid_assets-v0.1.0
+      tag_pattern: grid_assets-v{{version}}
       path: packages/grid_assets
+    version: ^0.1.0
   grid_cli:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/the_grid.git
-      ref: grid_cli-v0.1.0
+      tag_pattern: grid_cli-v{{version}}
       path: packages/grid_cli
+    version: ^0.1.0
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.
   grid_exploration:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/the_grid.git
-      ref: grid_exploration-v0.1.0
+      tag_pattern: grid_exploration-v{{version}}
       path: packages/grid_exploration
+    version: ^0.1.0
   grid_runtime:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/the_grid.git
-      ref: grid_runtime-v0.1.0
+      tag_pattern: grid_runtime-v{{version}}
       path: packages/grid_runtime
+    version: ^0.1.0
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
   # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
   grid_sdk:
     # Release pin (power_station ADR-0003 D1, space-td1): a producer
-    # change is adopted DELIBERATELY by bumping the ref — space always
+    # change is adopted DELIBERATELY by bumping the version constraint — space always
     # compiles from its own source regardless of upstream main. Dev
     # co-editing rides the gitignored pubspec_overrides.yaml (D5).
     git:
       url: git@github.com:memento-engineering/the_grid.git
-      ref: grid_sdk-v0.1.0
+      tag_pattern: grid_sdk-v{{version}}
       path: packages/grid_sdk
+    version: ^0.1.0
   path: ^1.9.0
 
 dev_dependencies:

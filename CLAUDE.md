@@ -98,17 +98,20 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 `space_station` is a **pub workspace** (`publish_to: none` throughout): the root `pubspec.yaml`
 lists the members (`apps/space`, `packages/space_station_assets`) + inline melos scripts.
 
-**Deps are RELEASE PINS (`space-td1`, LANDED; power_station ADR-0003).** Every private dep is
-pinned to a per-package **git tag** (`git: {url, ref: <package>-v<version>, path}` — pub's standard
-[git-packages](https://dart.dev/tools/pub/dependencies#git-packages) form); genesis packages
-resolve HOSTED from pub.dev. A plain checkout `dart pub get`s with **no sibling checkouts and no
+**Deps are RELEASE-TAG constraints (`space-td1`, LANDED; power_station ADR-0003).** Every private
+dep uses pub's [git-packages](https://dart.dev/tools/pub/dependencies#git-packages) `tag_pattern`
+form — `git: {url, tag_pattern: <package>-v{{version}}, path}` plus a normal `version:` constraint,
+so pub feeds the matching release tags to the VERSION SOLVER (Dart 3.9+); genesis packages resolve
+HOSTED from pub.dev. A plain checkout `dart pub get`s with **no sibling checkouts and no
 overrides** — space always compiles from its own source regardless of any producer's `main` (the
 wedge class that stalled the tkm/#56 arc is closed), and a breaking upstream change is adopted
-*deliberately* by bumping refs. For **local co-development** the gitignored, machine-local
+*deliberately* by bumping version constraints (patch/minor releases inside the constraint adopt on
+the next `pub upgrade`). For **local co-development** the gitignored, machine-local
 `pubspec_overrides.yaml` at the workspace root path-overrides the pins (ADR-0003 D5 — the org-dev
 escape hatch; it needs the sibling checkouts). One rule when touching deps: pub unifies git deps by
-**ref string**, so every declaration of the same package (across members and producers) must carry
-the identical `{url, ref, path}`.
+**descriptor**, so every declaration of the same package (across members and producers) must carry
+the identical `{url, tag_pattern, path}` — mixed forms (a bare `ref:`, a `path:` sibling) do not
+unify with it.
 
 ```bash
 dart pub get                              # resolves from the release tags (no siblings needed)
