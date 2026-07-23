@@ -1,3 +1,10 @@
+> **HISTORICAL TRACK RECORD — pre-workspace layout.** This doc narrates the
+> Track G build arc as it happened. Paths (`lib/src/...`, `bin/space.dart`) and
+> the AOT validation steps describe the repo BEFORE the 2026-07 workspace
+> restructure (`apps/space` + `packages/space_station_assets`) and before the
+> JIT-only posture; read it as history, not as current instructions. Current
+> guidance lives in CLAUDE.md / README.md.
+
 # Track G-space (tg-33n) — `space` becomes a `GridDelegate`; the hand-mirror dies
 
 Executes the **space half** of Track G in `the_grid/docs/GRID-SDK-BUILD-ORDER.md`

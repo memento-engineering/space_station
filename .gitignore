@@ -18,6 +18,18 @@ pubspec.lock
 # committed binary; JIT only). Anchored: `apps/space/` must stay tracked.
 /space
 
+# Machine-local tool state (gh CLI device ids and the like) — never tracked.
+.local/
+
+# Harness-local settings (the tracked .claude/settings.json is the INSTALLED
+# operator manual; the .local variant is per-machine).
+.claude/settings.local.json
+
+# OS / editor droppings.
+.DS_Store
+*.swp
+*~
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

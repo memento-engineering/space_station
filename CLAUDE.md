@@ -1,16 +1,22 @@
 # space_station — memento's grid home (governor's manual)
 
 **What this repo is.** `space_station` is **memento's grid instance**: the JIT runner (`space`) that
-arms a **resident [the_grid](../the_grid) station** over the org's substations. It is a *composition
-+ config* over the_grid's CLI-SDK and [power_station](../power_station)'s asset packs — **not an
+arms a **resident `the_grid` station** over the org's substations. It is a *composition
++ config* over the_grid's CLI-SDK and `power_station`'s asset packs — **not an
 engine**. It is a **pub workspace**: the thin runner app lives at `apps/space` (`bin/space.dart`
 just drives), and the reusable composition lives at `packages/space_station_assets` —
 `buildRunner()` assembles the Commands, `SpaceDelegate`
 (`packages/space_station_assets/lib/src/space_delegate.dart`) authors the station as a tree. The
 assets package is the **extend-don't-fork seam**: a downstream station (an IC's private station,
 e.g. lunar) imports `space_station_assets` and composes on top — it never forks this repo. This
-repo is the **gold standard for what a station repo should resemble.** The umbrella map at
-[../CLAUDE.md](../CLAUDE.md) explains how all the org repos fit together.
+repo is the **gold standard for what a station repo should resemble.**
+
+> **Org-internal references.** memento develops in an *umbrella checkout* — the org's repos cloned
+> side-by-side under one directory. Paths like `../the_grid` and cross-repo doc citations
+> (`the_grid/docs/…`, `power_station/docs/adr/…`, the umbrella map one level up) refer to those
+> sibling checkouts and resolve only inside that layout; on GitHub they are intentionally not
+> links. Nothing in *building or running this repo* needs the siblings — deps resolve from release
+> tags (see Build & Test).
 
 ## The governor's posture — READ THIS FIRST
 
@@ -90,22 +96,22 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 ## Build & Test
 
 `space_station` is a **pub workspace** (`publish_to: none` throughout): the root `pubspec.yaml`
-lists the members (`apps/space`, `packages/space_station_assets`) + inline melos scripts; the
-gitignored, machine-local `pubspec_overrides.yaml` stays at the **workspace root** (workspace-level
-overrides). Deps are **today** sibling **path overrides** (the `grid_*` packages are unpublished —
-see
-[the_grid/docs/SCRATCH-pub-capability-and-repo-split.md](../the_grid/docs/SCRATCH-pub-capability-and-repo-split.md)).
+lists the members (`apps/space`, `packages/space_station_assets`) + inline melos scripts.
 
-**Direction: git-tag version constraints (`space-td1`).** Path overrides couple space to the_grid's
-`main` — when `main` takes a breaking change, space stops compiling and the JIT station can't bounce or
-hot-reload until space migrates (the wedge that stalled the tkm/#56 arc). The move (genesis ADR-0001 D8;
-private repos support git-ref deps) is to pin each private dep to a released **git tag** and adopt a
-breaking change *deliberately* by bumping the ref — so `dart run space:space` always compiles from
-space's own source regardless of upstream `main`. This is also the mechanism behind stacked development
-(the_grid `tg-ugj`) and it supersedes the `tg-8uz` worktree-override hack.
+**Deps are RELEASE PINS (`space-td1`, LANDED; power_station ADR-0003).** Every private dep is
+pinned to a per-package **git tag** (`git: {url, ref: <package>-v<version>, path}` — pub's standard
+[git-packages](https://dart.dev/tools/pub/dependencies#git-packages) form); genesis packages
+resolve HOSTED from pub.dev. A plain checkout `dart pub get`s with **no sibling checkouts and no
+overrides** — space always compiles from its own source regardless of any producer's `main` (the
+wedge class that stalled the tkm/#56 arc is closed), and a breaking upstream change is adopted
+*deliberately* by bumping refs. For **local co-development** the gitignored, machine-local
+`pubspec_overrides.yaml` at the workspace root path-overrides the pins (ADR-0003 D5 — the org-dev
+escape hatch; it needs the sibling checkouts). One rule when touching deps: pub unifies git deps by
+**ref string**, so every declaration of the same package (across members and producers) must carry
+the identical `{url, ref, path}`.
 
 ```bash
-dart pub get                              # resolve the workspace (needs the sibling checkouts present)
+dart pub get                              # resolves from the release tags (no siblings needed)
 dart analyze                              # workspace-wide, from the root
 (cd packages/space_station_assets && dart test)   # the composition suite
 (cd apps/space && dart test)              # the process-level CLI smokes
@@ -143,14 +149,12 @@ PRs). Arming it is the **run mode alone** — a station booted JIT with `--enabl
 `ext.exploration.grid.reload` (the `up` banner then reads `dev mode: JIT … ARMED`); an AOT binary
 registers nothing, reports `dev mode: OFF`, and `space reload` refuses LOUD.
 
-**`validation_plan` worktree gotcha.** space_station beads need an **absolute-cd** plan
-(`cd <abs>/space_station && dart analyze && cd packages/space_station_assets && dart test && cd
-../../apps/space && dart test`) — a per-bead worktree can't `pub get` (the unpublished `grid_*` deps
-+ the gitignored overrides are absent). the_grid/power_station beads use a
-**relative** plan (`cd packages/<pkg> && dart pub get && dart analyze && dart test`). `tg-8uz`
-(materialize overrides per-worktree) was the stopgap fix; the **git-tag version constraints** direction
-(`space-td1`) is the real fix — a worktree resolving tagged deps just `pub get`s, no override
-materialization, and the absolute-cd hack retires with it.
+**`validation_plan` shape.** With the release pins landed (`space-td1`), a per-bead worktree
+resolves from the tags and just `dart pub get`s — the old absolute-cd hack (and the `tg-8uz`
+override-materialization stopgap) is RETIRED. space_station beads use the same **relative** plan
+shape as everyone else: `dart pub get && dart analyze && (cd packages/space_station_assets && dart
+test) && (cd apps/space && dart test)`. (Existing beads stamped with the old absolute-cd plan still
+run; re-stamp on next refinement.)
 
 ## Architecture Overview
 
@@ -170,13 +174,14 @@ and it **lands** (commit + PR). Session states are just `open / gated / closed`.
 `RubricSource` fed by Packaged AI Assets + a gating rubric whose `F` hard-blocks — so a new review
 type is a new rubric pack, not new machinery. The **coupled skill+command** pattern (a skill CALLS a
 vended deterministic Command like `space search`, instead of inferring the operation) is
-[ADR-0001, draft](../power_station/docs/adr/ADR-0001-packaged-ai-asset-skill-command-coupling.md).
+`ADR-0001, draft`.
 
-**The roster.** Currently armed: `the_grid`, `power_station`, `genesis`, `space_station` (self).
-`lenny` is pending relocation; `decisions`/`expression` join when they gain bead stores. `space-6ds`
-hardcodes this default roster in `build()`. **Coexistence:** the_grid's work store is the shared `tg`
-Dolt server (gc coexists on `ga-*`); the A37 split fences session writes to the `houston` state store
-so the work store stays read-only.
+**The roster.** The coded drive set is the five memento org seats — `genesis`, `the_grid`,
+`power_station`, `space_station` (self), `lenny` — authored as literal seats in
+`SpaceDelegate.substations()` (space-6ds; the subclass override point a downstream station
+composes). `decisions`/`expression` join when they gain bead stores. **Coexistence:** the_grid's
+work store is the shared `tg` Dolt server (gc coexists on `ga-*`); the A37 split fences session
+writes to the `houston` state store so the work store stays read-only.
 
 ## Conventions & Patterns
 
@@ -200,7 +205,7 @@ so the work store stays read-only.
   what the station built; `gate-medicine` — clear gated sessions; `discover`), `.claude/agents/governor.md`
   and `.claude/settings.json` are INSTALLED from `grid_assets`' vended `station_overlay` —
   `dart run space:space assets install` — and each carries a `generated from grid_assets@<ref>`
-  stamp. The authored home is [power_station](../power_station), not here: to change a skill, change
+  stamp. The authored home is `power_station`, not here: to change a skill, change
   it there and re-install. `assets install --check` is part of the house gate and FAILS on an
   out-of-band edit. The `governor` agent is the persona for this seat — reach for these before
   improvising.

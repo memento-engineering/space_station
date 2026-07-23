@@ -10,6 +10,7 @@ description: >-
   downstream station (an IC's private station) imports and extends it instead
   of forking.
 publish_to: none
+repository: https://github.com/memento-engineering/space_station
 resolution: workspace
 
 environment:

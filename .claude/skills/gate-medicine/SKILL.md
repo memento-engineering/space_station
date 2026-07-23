@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@cf7f0c0 — do not edit; run `dart run space:space assets install`
 name: gate-medicine
 description: >
   Diagnose and clear gated the_grid sessions: read the worktree critique
@@ -58,7 +58,7 @@ the tell. The only fresh-round path is the rework re-key:
 
 ```
 dart run space:space rework <bead-id> \
-  --grid-root /Users/nico/development/engineering.memento/space_station --prefix <state-store prefix> \
+  --grid-root "$(pwd)" --prefix <state-store prefix> \
   --note "<honest operator finding>" --note-root <work repo root>
 ```
 

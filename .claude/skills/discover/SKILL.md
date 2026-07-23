@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@cf7f0c0 — do not edit; run `dart run space:space assets install`
 name: discover
 description: >
   The grid home's front door — the ONLY human-in-the-loop stage. Dispatches on
@@ -56,7 +56,7 @@ yours to do with normal tools — the command covers the bead stores, not the
 repos.
 
 Store roots in the report are as the station authored them — resolve a
-relative `root` against the grid home (`/Users/nico/development/engineering.memento/space_station`).
+relative `root` against the grid home (the directory you run from).
 
 ## Dispatch
 
@@ -103,7 +103,7 @@ research first, file only on confirmation.
 
 - **Target store: the substation whose repo the work would change** (the
   search report's `root` for that seat is your `cd` target). No clear owner →
-  **the grid home's own store** (`/Users/nico/development/engineering.memento/space_station`). Cross-store deps do not
+  **the grid home's own store** (`.grid/.beads` under it). Cross-store deps do not
   exist — coupled beads home together in ONE store.
 - **Ephemeral + staged, never ready:** a live station mounts a ready bead
   within seconds — a half-designed bead must never enter the frontier.

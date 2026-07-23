@@ -23,14 +23,14 @@ lenny debugging) and guarantees current source.
 ## Assemble
 
 ```sh
-dart pub get                       # needs the sibling checkouts + overrides
+dart pub get                       # resolves from the release tags (no siblings needed)
 dart run space:space up --grid-home "$(pwd)"   # arms the coded memento org (dry-run)
 ```
 
 ## The resident station (`up` / `down` / `status`)
 
 `up` is THE resident verb (RS-5b —
-[`the_grid/docs/SCRATCH-resident-station.md`](../the_grid/docs/SCRATCH-resident-station.md)):
+`the_grid/docs/SCRATCH-resident-station.md` (org-internal)):
 validated agent scope, discovered workspaces, live wiring, the code asset's
 registry + git `SourceControl` (per registered root, tg-7gm) — ALWAYS
 resident — the ready frontier of the owned substation IS the drive set
@@ -44,21 +44,22 @@ backgrounding.
 ```sh
 space() { dart run space:space "$@"; }     # (illustrative shorthand — always JIT)
 space up --grid-home "$(pwd)" --dry-run                     # arm the coded org, observe-only
-space up --grid-home "$(pwd)" --substation the_grid@tg=/elsewhere/the_grid  # rebind one root
+space up --grid-home "$(pwd)" --substation extra=/work/extra  # APPEND a seat (coded names refuse)
 space up --grid-home "$(pwd)" --no-dry-run                  # arm the coded org, LIVE (human gate)
 ```
 
-**The roster is memento's org, hardcoded** (space-6ds;
-[`the_grid/docs/SCRATCH-memento-composition.md`](../the_grid/docs/SCRATCH-memento-composition.md)):
-`space_station` IS memento's grid instance, so `SpaceDelegate.build()` seats the
-five sibling repos — `genesis`, `the_grid`, `power_station`, `space_station`,
-`lenny` — at their umbrella-sibling `../<repo>` roots, resolved against the grid
-home. No-flag `space up` arms that coded base; a coded substation whose checkout
-isn't present is skipped LOUD (the org still arms). `--substation
-<name>[@<prefix>]=<root>` (repeatable) MERGES onto the base — a coded name rebinds
-that root, a new name appends one — never replaces it (TOML config, later, layers
-the same way). An OPERATOR-named substation with no work store is still a LOUD
-refusal.
+**The roster is memento's org, authored in code** (space-6ds;
+`the_grid/docs/SCRATCH-memento-composition.md`, org-internal): `space_station`
+IS memento's grid instance, so `SpaceDelegate.substations()` — the delegate's
+roster BUILD HOOK — seats the five sibling repos (`genesis`, `the_grid`,
+`power_station`, `space_station`, `lenny`) at their umbrella-sibling `../<repo>`
+roots, resolved against the grid home. A downstream station SUBCLASSES the
+delegate and overrides the hook (extend, never fork). No-flag `space up` arms
+the coded base; a coded substation whose checkout isn't present is skipped LOUD
+(the org still arms). `--substation <name>[@<prefix>]=<root>` (repeatable)
+APPENDS a new seat after the roster — a coded name on a flag is REFUSED (the
+roster changes in code, never by config). An operator-named substation with no
+work store is still a LOUD refusal.
 
 `down` and `status` are thin clients over the SAME `--state-workspace` `up`
 was given — they read the station lock and, for `status`, attach to the
@@ -100,10 +101,10 @@ hot-reloads.
 ### 2. Install
 
 Copy the template into `~/Library/LaunchAgents/`, fill in every `CHANGE_ME`
-placeholder (the `space` binary path, `--state-workspace`, `--substation`,
-every named `--root <name>=<path>`, `WorkingDirectory`, and both log paths —
-**launchd does not expand `~` or `$HOME`**, so the log paths need your real
-home directory), lint it, then bootstrap it into your GUI session:
+placeholder (the `dart` binary path, the `--grid-home` repo path,
+`WorkingDirectory`, and both log paths — **launchd does not expand `~` or
+`$HOME`**, so the log paths need your real home directory), lint it, then
+bootstrap it into your GUI session:
 
 ```sh
 mkdir -p ~/Library/Logs/space_station

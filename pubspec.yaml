@@ -5,6 +5,7 @@ description: >-
   downstream stations (e.g. a private IC station) import and extend instead of
   forking.
 publish_to: none
+repository: https://github.com/memento-engineering/space_station
 
 environment:
   sdk: ^3.11.0

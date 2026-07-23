@@ -4,6 +4,7 @@ description: >-
   space_station_assets (the reusable composition: SpaceDelegate + the
   station's Commands). Run it from the workspace root: `dart run space:space`.
 publish_to: none
+repository: https://github.com/memento-engineering/space_station
 resolution: workspace
 
 environment:
