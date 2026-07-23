@@ -5,25 +5,33 @@ import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
 import 'package:test/test.dart';
 
-/// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3): the
-/// memento org is HARDCODED as five literal [sdk.Substation] seats in
-/// [SpaceDelegate.build] (Fork A) and `--substation` flags APPEND new seats
-/// after it — no merge, no override-by-name (Fork B as re-ruled: to change a
-/// coded seat you fork the build). Pure + offline: the delegate's tree mounts
-/// in a bare genesis tree (the same tree `runGrid` mounts under `space up`)
-/// and its mounted [sdk.SubstationScope]s are walked to prove the roster is
-/// authored IN the tree — literal seats, never threaded config values.
+/// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
+/// evolved): the memento org is authored as five literal seats in
+/// [SpaceDelegate.substations] (the roster BUILD HOOK) and `--substation`
+/// flags APPEND new seats after it — no merge, no override-by-name (Fork B
+/// as re-ruled: the roster changes in CODE — space edits [substations]; a
+/// downstream station SUBCLASSES and overrides it). Pure + offline: the
+/// delegate's tree mounts in a bare genesis tree (the same tree `runGrid`
+/// mounts under `space up`) and its mounted [sdk.SubstationScope]s are
+/// walked to prove the roster is authored IN the tree — literal seats, never
+/// threaded config values.
 void main() {
   // A grid home that looks like the umbrella sibling (space_station beside its
   // peers): each literal `../<repo>` seat resolves against the ambient
   // GridRoot (tg-32r) to `<umbrella>/<repo>`.
   const gridHome = '/home/memento/space_station';
   const umbrella = '/home/memento';
+  const codedNames = {
+    'genesis',
+    'the_grid',
+    'power_station',
+    'space_station',
+    'lenny',
+  };
 
   SpaceDelegate delegate({List<sdk.Substation> appended = const []}) =>
       SpaceDelegate(
         gridRoot: gridHome,
-        stationName: 'space',
         appended: appended,
         agentConfig: const AgentConfig(harness: 'claude'),
       );
@@ -91,18 +99,53 @@ void main() {
     });
   });
 
+  group('the SUBCLASS extension seam — a downstream station overrides the '
+      'delegate hooks (extend, never fork)', () {
+    test('an overridden substations() composes super\'s org (at the '
+        'overridden umbrella) plus the downstream seats, and stationName '
+        're-identifies the station', () {
+      final downstream = _DownstreamDelegate(gridRoot: '/home/me/my_station');
+      expect(downstream.stationName, 'downstream');
+      final seats = _mountedSeats(_Author(downstream));
+      expect(seats.map((s) => s.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'mine',
+      ]);
+      // The org resolves at the OVERRIDDEN umbrella (relative to the
+      // downstream grid home), the downstream seat at its own root — both
+      // through the SAME seat() stack.
+      expect(seats.first.root, '/home/me/memento/genesis');
+      expect(seats.last.root, '/home/me/mine');
+      expect(seats.last.prefix, 'mn');
+    });
+
+    test('codedRosterOf enumerates the subclass roster through one OWNED '
+        'offline mount (construct → mount → dispose)', () {
+      final scopes = codedRosterOf(_DownstreamDelegate.new);
+      expect(scopes.map((s) => s.name), contains('mine'));
+      expect(scopes, hasLength(6));
+    });
+  });
+
   group(
     'spaceStationConfigFrom — flags APPEND onto the coded org (Fork B)',
     () {
       ArgResults parse(List<String> args) {
         final parser = ArgParser();
-        addSpaceStationFlags(parser);
+        addSpaceStationFlags(parser, codedNames: codedNames.toList());
         return parser.parse(args);
       }
 
       test('no --substation ⇒ nothing appended (the coded org needs no flags — '
           'the "refuse with none" gate stays retired)', () {
-        final config = spaceStationConfigFrom(parse(['--grid-home', gridHome]));
+        final config = spaceStationConfigFrom(
+          parse(['--grid-home', gridHome]),
+          codedNames: codedNames,
+        );
         expect(config, isNotNull);
         expect(config!.appended, isEmpty);
       });
@@ -111,6 +154,7 @@ void main() {
           'composes into the delegate tree after the org', () {
         final config = spaceStationConfigFrom(
           parse(['--grid-home', gridHome, '--substation', 'tgdog@td=/work/td']),
+          codedNames: codedNames,
         )!;
         final seat = config.appended.single;
         expect(seat.name, 'tgdog');
@@ -133,7 +177,7 @@ void main() {
       });
 
       test('a flag naming a CODED substation is a LOUD FormatException — the '
-          'org is hardcoded and forked, never overridden (round 3)', () {
+          'roster is code, never overridden by config (round 3)', () {
         expect(
           () => spaceStationConfigFrom(
             parse([
@@ -142,6 +186,7 @@ void main() {
               '--substation',
               'the_grid@tg=/custom/tg',
             ]),
+            codedNames: codedNames,
           ),
           throwsFormatException,
         );
@@ -161,6 +206,7 @@ void main() {
                 '--substation',
                 'tgdog=/work/b',
               ]),
+              codedNames: codedNames,
             ),
             throwsFormatException,
           );
@@ -170,7 +216,10 @@ void main() {
       test(
         'a missing --grid-home is a null return (LOUD arming refusal upstream)',
         () {
-          expect(spaceStationConfigFrom(parse(const [])), isNull);
+          expect(
+            spaceStationConfigFrom(parse(const []), codedNames: codedNames),
+            isNull,
+          );
         },
       );
     },
@@ -205,4 +254,37 @@ class _Author extends StatelessSeed {
   @override
   Seed build(TreeContext context) =>
       delegate.build(context, const sdk.GridConfiguration());
+}
+
+/// The downstream-station shape, in miniature (the lunar pattern): a
+/// [SpaceDelegate] SUBCLASS whose constructor mirrors the base via
+/// super-parameters (so `.new` satisfies `SpaceDelegateFactory`) and whose
+/// hooks re-identify the station, re-point the org umbrella, and COMPOSE the
+/// inherited roster with its own seats.
+class _DownstreamDelegate extends SpaceDelegate {
+  _DownstreamDelegate({
+    super.gridRoot = '/home/me/my_station',
+    super.agentConfig,
+    super.appended,
+    super.harnesses,
+    super.wiring,
+    super.provisioner,
+    super.gitOps,
+    super.prOpener,
+  });
+
+  @override
+  String get stationName => 'downstream';
+
+  @override
+  String get umbrella => '../memento';
+
+  @override
+  List<sdk.Substation> substations(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [
+    ...super.substations(context, configuration),
+    seat(context, 'mine', '../mine', prefix: 'mn'),
+  ];
 }

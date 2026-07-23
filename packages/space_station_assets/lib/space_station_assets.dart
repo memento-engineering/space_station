@@ -53,10 +53,13 @@ import 'src/status_command.dart';
 import 'src/up_command.dart';
 
 // space_station authored as a Seed (Track G-space): the delegate the resident
-// verbs re-seat over is part of the public library surface, along with the
-// roster currency a downstream station composes its own drive set from.
+// verbs re-seat over is part of the public library surface. A downstream
+// station SUBCLASSES SpaceDelegate (the substations()/seat()/stationName/
+// umbrella override points) and hands its constructor tear-off to
+// [buildRunner] as a SpaceDelegateFactory. codedRosterOf is the owned
+// (construct → mount → dispose) roster enumeration over that factory.
 export 'src/space_delegate.dart'
-    show SpaceDelegate, SubstationSpec, mementoRoster;
+    show SpaceDelegate, SpaceDelegateFactory, codedRosterOf;
 // The composition site of the VENDED `assets` Command group — exported so a
 // test (or a Flutter app) can build the seat with its seams injected.
 // kSpaceRunner rides along so a downstream runner can reference the canonical
@@ -76,20 +79,21 @@ export 'src/search_command.dart' show buildSpaceSearchCommand;
 /// [runnerInvocation] is the JIT invocation its installed manual teaches
 /// (`dart run lunar:lunar`) — threaded into the composed `assets` seat so the
 /// vended `{{runner}}` holes render to the DOWNSTREAM runner, not space's;
-/// [roster] and [stationName] re-seat the resident verbs (`up`) and the
-/// station-context compositions (`search`/`assets`) over the DOWNSTREAM
-/// station's own coded drive set ([mementoRoster] absent — space's posture).
+/// [delegateFactory] is the station-authorship seam — the constructor
+/// tear-off of the station's [SpaceDelegate] SUBCLASS (identity, roster and
+/// seat stacks live on the class as override points), threaded into the
+/// resident verbs (`up`) and the station-context compositions
+/// (`search`/`assets`). Absent, the base [SpaceDelegate] — space's posture.
 CommandRunner<int> buildRunner({
   String name = 'space',
   String description = "memento's grid station",
   String runnerInvocation = kSpaceRunner,
-  List<SubstationSpec>? roster,
-  String stationName = 'space',
+  SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
 }) => CommandRunner<int>(name, description)
   ..addCommand(WatchCommand())
   // memento's OWN resident verbs (RS-5b): the composed resident station
   // (up) + the thin StationAttach renders over it (down/status).
-  ..addCommand(UpCommand(roster: roster, stationName: stationName))
+  ..addCommand(UpCommand(delegateFactory: delegateFactory))
   ..addCommand(DownCommand())
   ..addCommand(StatusCommand())
   // The operator's EXPLICIT hot-reload trigger. `reload` talks to the
@@ -106,9 +110,7 @@ CommandRunner<int> buildRunner({
   // of reinventing it by inference (the coupled skill+command pattern,
   // power_station ADR-0001). The logic is the asset's; this is the
   // last-mile composition.
-  ..addCommand(
-    buildSpaceSearchCommand(roster: roster, stationName: stationName),
-  )
+  ..addCommand(buildSpaceSearchCommand(delegateFactory: delegateFactory))
   // The ASSETS domain's exported Command group, COMPOSED with space's
   // resident-station context — `space assets install`: the operator leg of
   // overlay delivery. It overlays the vended `station_overlay` onto THIS
@@ -120,8 +122,7 @@ CommandRunner<int> buildRunner({
   ..addCommand(
     buildSpaceAssetsCommand(
       runnerInvocation: runnerInvocation,
-      roster: roster,
-      stationName: stationName,
+      delegateFactory: delegateFactory,
     ),
   )
   // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives

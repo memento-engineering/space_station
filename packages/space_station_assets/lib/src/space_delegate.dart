@@ -31,21 +31,21 @@
 /// fixtures) keeps H2's authoring-only shape — the tree stands, drives no
 /// work. `--dry-run` (the default) arms the tree over INERT seams.
 ///
-/// ## space-6ds — the roster is CODE, defaulting to the memento org
+/// ## space-6ds — the roster is CODE: the [SpaceDelegate.substations] hook
 ///
 /// space_station IS memento's grid instance
 /// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the five
 /// org substations — genesis, the_grid, power_station, space_station, lenny —
-/// are authored in Dart as [mementoRoster], the ONE definition both this
-/// delegate's [build] and `space up`'s off-tree machinery consume (the old
-/// hand-kept mirror in `up_command.dart` is gone — the divergence it risked
-/// silently un-owned beads). A seat roots at its umbrella sibling `../<repo>`
-/// (the SDK resolves a relative root against the ambient `GridRoot` — tg-32r)
-/// or at an ABSOLUTE root. NO overriding by config (round 3): a `--substation`
-/// flag APPENDS a new substation after the roster; changing the roster is a
-/// CODE change — space edits [mementoRoster], and a DOWNSTREAM station
-/// (extend-don't-fork) passes its OWN [SubstationSpec] list instead.
-/// No-flag `space up` arms the org.
+/// are authored as literal seats in [SpaceDelegate.substations], the ONE
+/// definition both [SpaceDelegate.build] and `space up`'s off-tree machinery
+/// consume (the old hand-kept mirror in `up_command.dart` is gone — the
+/// divergence it risked silently un-owned beads). A seat roots at its
+/// umbrella sibling (the SDK resolves a relative root against the ambient
+/// `GridRoot` — tg-32r) or at an ABSOLUTE root. NO overriding by config
+/// (round 3): a `--substation` flag APPENDS a new substation after the
+/// roster; changing the roster is a CODE change — space edits [substations]
+/// here, and a DOWNSTREAM station (extend-don't-fork) SUBCLASSES the delegate
+/// and overrides it. No-flag `space up` arms the org.
 library;
 
 import 'package:args/args.dart';
@@ -58,102 +58,128 @@ import 'package:grid_assets/grid_assets.dart'
         GitHubGridAssets,
         GitServices,
         HarnessProvider,
-        buildBuiltinEnvironmentRegistry;
+        buildBuiltinEnvironmentRegistry,
+        mountedRosterOf;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, StationGitService;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 
-/// One substation seat, AS DATA: its [name], its [root] — relative (resolved
-/// against the grid home / the tree's ambient `GridRoot`, tg-32r) or ABSOLUTE
-/// (used as-is; how a downstream station seats repos outside its umbrella) —
-/// and the work store's issue-id [prefix] (defaults to the name).
+/// The factory signature the runner compositions construct a station's
+/// delegate through — [SpaceDelegate.new] satisfies it, and so does a
+/// downstream subclass's tear-off (`LunarDelegate.new`) whose constructor
+/// mirrors the base via super-parameters. This is the ONE seam the composed
+/// commands (`up`/`search`/`assets`) receive: WHICH delegate class a station
+/// authors is the station's choice; WHEN and with what boot state it is
+/// constructed is the command's.
+typedef SpaceDelegateFactory =
+    SpaceDelegate Function({
+      required String gridRoot,
+      AgentConfig? agentConfig,
+      List<sdk.Substation> appended,
+      EnvironmentRegistry? harnesses,
+      sdk.StationWorkWiring? wiring,
+      StationGitService? provisioner,
+      GitOps? gitOps,
+      PrOpener? prOpener,
+    });
+
+/// Enumerates the CODED roster of the station [factory] authors — an offline
+/// authoring mount of one delegate at [gridRoot], walked for its
+/// [sdk.SubstationScope]s (the vended `mountedRosterOf`), with the
+/// enumeration delegate DISPOSED before returning.
 ///
-/// The spec is the ONE roster currency: [SpaceDelegate.build] folds each spec
-/// into its literal [sdk.Substation] seat (the standard
-/// `Nest[GitGridAssets → GitHubGridAssets] → SubstationWork` stack, delivery
-/// threaded), and `space up`'s off-tree machinery (the store guard,
-/// `buildStationWork`'s specs, the `/status` view) reads the SAME list — so
-/// the tree and the machinery cannot diverge.
-class SubstationSpec {
-  /// Creates a spec. [prefix] names the store's issue-id prefix when it
-  /// differs from [name] (names ≠ prefixes — e.g. the_grid's store mints
-  /// `tg-`).
-  const SubstationSpec(this.name, this.root, {String? prefix})
-    : _prefix = prefix;
-
-  /// The substation's name.
-  final String name;
-
-  /// The substation's ONE root (v3 §0) — its `.beads/` work store lives at
-  /// `<root>/.beads/`. Relative ⇒ resolved against the grid home; absolute ⇒
-  /// used as-is.
-  final String root;
-
-  final String? _prefix;
-
-  /// The work store's issue-id prefix ([name] unless overridden).
-  String get prefix => _prefix ?? name;
-}
-
-/// The memento-engineering org roster — the CODED default drive set
-/// (space-6ds): the five org substations, each an umbrella sibling of the
-/// grid home. With no [umbrella], roots are the `../<repo>` siblings (space's
-/// own posture: the grid home IS inside the umbrella); a downstream station
-/// whose grid home lives ELSEWHERE passes the umbrella's absolute path and
-/// gets absolute-rooted seats.
-List<SubstationSpec> mementoRoster({String? umbrella}) {
-  String at(String repo) =>
-      umbrella == null ? '../$repo' : p.join(umbrella, repo);
-  return [
-    // the substrate — driven directly (worktrees isolate under
-    // .grid/worktrees; main untouched)
-    SubstationSpec('genesis', at('genesis')),
-    // the framework — self-host; `tg` is the shared Dolt server (gc coexists:
-    // read tg's frontier, write sessions to houston — A37)
-    SubstationSpec('the_grid', at('the_grid'), prefix: 'tg'),
-    // the asset packs — self-host
-    SubstationSpec('power_station', at('power_station'), prefix: 'pow'),
-    // the runner — self-host; for space this IS the grid home. Its store
-    // mints `space-` (NOT `space_station-`), so the prefix MUST be set
-    // explicitly — the default (prefix ?? name) would own `space_station`
-    // and drive nothing (ownership matches name OR prefix).
-    SubstationSpec('space_station', at('space_station'), prefix: 'space'),
-    // the debug harness (memento-engineering/lenny)
-    SubstationSpec('lenny', at('lenny')),
-  ];
+/// A [SpaceDelegate] is a `StateNotifier` (a lifecycle object, not a value):
+/// construction is legal exactly at an effect boundary, ONE instance per
+/// effect, always disposed — this helper is that discipline made a function.
+/// Only `runGrid`'s ARMED delegate lives longer, and `runGrid` documentedly
+/// owns that one (hot-restart retires it through `dispose`/`onTeardown`).
+///
+/// [gridRoot] defaults to `'/'` — a deterministic ABSOLUTE placeholder
+/// (v3 §0: the tree refuses a relative root) for reads that only need
+/// names/prefixes (seat names are grid-home-independent); pass the real home
+/// when the resolved roots matter (they arrive resolved by the SDK's own
+/// seat build).
+List<sdk.SubstationScope> codedRosterOf(
+  SpaceDelegateFactory factory, {
+  String gridRoot = '/',
+}) {
+  final delegate = factory(gridRoot: gridRoot);
+  try {
+    return mountedRosterOf(delegate);
+  } finally {
+    delegate.dispose();
+  }
 }
 
 /// The delegate seat memento's `space` verbs re-seat over — space_station
 /// authored as a Seed.
 ///
 /// Constructed from space's resolved station config (its [gridRoot] home, the
-/// coded [roster] — [mementoRoster] unless a downstream station passed its
-/// own — the operator's [appended] flag seats, the station-default
-/// [agentConfig], and — when a live run armed them — the git [provisioner] /
-/// [gitOps] / [prOpener]). The master [build] authors the v3 §2 tree by
-/// folding the roster into literal seats; `space up` mounts it with
-/// `runGrid(this)`.
+/// operator's [appended] flag seats, the station-default [agentConfig], and —
+/// when a live run armed them — the git [provisioner] / [gitOps] /
+/// [prOpener]). The master [build] authors the v3 §2 tree; `space up` mounts
+/// it with `runGrid(this)`.
+///
+/// ## The extension seam: SUBCLASS and override (extend, never fork)
+///
+/// A downstream station (an IC's private station) extends this delegate and
+/// overrides the designed hooks — the template-method pattern the whole
+/// substrate is built on. [substations] and [seat] are BUILD METHODS (they
+/// carry the master [build]'s context, like any decomposed build), while
+/// [stationName] and [umbrella] are identity accessors:
+///
+///  * [stationName] — the station's identity;
+///  * [umbrella] — where the coded org resolves, relative to the grid home;
+///  * [substations] — THE roster hook: the coded drive set as authored
+///    seats. Compose, don't replace;
+///  * [seat] — the standard per-seat asset stack; override it to change the
+///    stack itself (e.g. a commit-only posture for a store the station may
+///    not deliver to).
+///
+/// ```dart
+/// class LunarDelegate extends SpaceDelegate {
+///   LunarDelegate({required super.gridRoot, super.agentConfig, ...});
+///   @override
+///   String get stationName => 'lunar';
+///   @override
+///   String get umbrella => '../../engineering.memento';
+///   @override
+///   List<sdk.Substation> substations(
+///     TreeContext context,
+///     sdk.GridConfiguration configuration,
+///   ) => [
+///     ...super.substations(context, configuration),
+///     seat(context, 'butane_flutter', '../butane_flutter'),
+///   ];
+/// }
+/// ```
+///
+/// The subclass's constructor mirrors the base via super-parameters so its
+/// tear-off satisfies [SpaceDelegateFactory] — the seam `buildRunner`
+/// threads into the composed commands. The off-tree machinery reads the
+/// roster by mounting the tree offline (`mountedRosterOf`), so overriding
+/// [substations] is the WHOLE change — guard, help, refusal set and specs
+/// all follow.
 class SpaceDelegate extends sdk.GridDelegate {
-  /// Creates the delegate over space's resolved station config. [roster]
-  /// defaults to the memento org ([mementoRoster]) — a downstream station
-  /// passes its own. [harnesses] defaults to the first-party
+  /// Creates the delegate over space's resolved station config.
+  /// [agentConfig] defaults to the authoring-only claude scope (what the
+  /// offline mounts — `search`, `assets`, roster enumeration — need; a live
+  /// `up` passes the real one). [harnesses] defaults to the first-party
   /// claude/copilot/pi/opencode set. [provisioner] / [gitOps] / [prOpener]
   /// are the live git machinery (all null ⇒ the offline / dry-run authoring,
   /// where provisioning + land no-op but the worktree layout still resolves —
   /// Track F).
   SpaceDelegate({
     required this.gridRoot,
-    required this.stationName,
-    required this.agentConfig,
-    List<SubstationSpec>? roster,
+    AgentConfig? agentConfig,
     this.appended = const [],
     EnvironmentRegistry? harnesses,
     this.wiring,
     this.provisioner,
     this.gitOps,
     this.prOpener,
-  }) : roster = roster ?? mementoRoster(),
+  }) : agentConfig = agentConfig ?? const AgentConfig(harness: 'claude'),
        harnesses = harnesses ?? buildBuiltinEnvironmentRegistry();
 
   /// The station's home (absolute): the `RawAssetGrid` root the [build] tree
@@ -161,19 +187,21 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// Surfaced through the overridden [root] getter below.
   final String gridRoot;
 
-  /// The machine's name (the `Station` name — e.g. the host).
-  final String stationName;
+  /// The station's identity (the `Station` seat's name). OVERRIDE POINT: a
+  /// downstream station names itself here.
+  String get stationName => 'space';
 
-  /// The CODED roster — the station's default drive set, authored in Dart
-  /// (space-6ds; [mementoRoster] unless a downstream station passed its own).
-  /// [build] folds each spec into its literal [sdk.Substation] seat, BEFORE
-  /// the [appended] layer.
-  final List<SubstationSpec> roster;
+  /// Where the coded org roster resolves, relative to the grid home (or
+  /// absolute). OVERRIDE POINT: space's grid home IS an umbrella member, so
+  /// the org repos are its `../` siblings; a downstream station whose grid
+  /// home lives elsewhere points this at the umbrella (e.g.
+  /// `'../../engineering.memento'`).
+  String get umbrella => '..';
 
   /// The operator's `--substation` flags, parsed into ready [sdk.Substation]
   /// seats — the APPEND layer (Fork B, round 3): they spread AFTER the coded
-  /// org in [build], in flag order. Never a merge, never an override — the
-  /// coded roster is changed by forking [build], not by config.
+  /// roster in [build], in flag order. Never a merge, never an override — the
+  /// coded roster is changed in code ([substations], the subclass hook).
   final List<sdk.Substation> appended;
 
   /// The station-default agent scope (harness / model / target) — the ambient
@@ -216,14 +244,14 @@ class SpaceDelegate extends sdk.GridDelegate {
 
   /// The master build (v3 §2/§4): space's station as ONE literal tree.
   ///
-  /// **The roster is CODE** (space-6ds, evolved): [roster] — [mementoRoster]
-  /// unless a downstream station passed its own — folds seat by seat into
-  /// literal [sdk.Substation] calls, each with its root (relative resolved
-  /// against the ambient `GridRoot`, tg-32r; absolute used as-is) and the
-  /// standard asset stack ([_seat]). NOT a manifest file, NOT filesystem
-  /// discovery — the roster is authored in Dart, and changing it is a code
-  /// change: space edits [mementoRoster]; a downstream station (extend, never
-  /// fork) constructs the delegate with its OWN [SubstationSpec] list.
+  /// **The roster is authored in [substations]** (space-6ds, evolved): the
+  /// coded drive set is the delegate's OWN override point — literal
+  /// [sdk.Substation] seats, each with its root (relative resolved against
+  /// the ambient `GridRoot`, tg-32r; absolute used as-is) and the standard
+  /// asset stack ([seat]). NOT a manifest file, NOT filesystem discovery —
+  /// the roster is code, and changing it is a code change: space edits
+  /// [substations] here; a downstream station (extend, never fork) SUBCLASSES
+  /// and overrides it.
   ///
   /// **Flags APPEND, never override** (Fork B, round 3): the parsed
   /// `--substation` seats ([appended]) spread AFTER the coded roster, in flag
@@ -271,11 +299,10 @@ class SpaceDelegate extends sdk.GridDelegate {
                   ],
                   child: sdk.Substations(
                     substations: [
-                      // ── The CODED roster (space-6ds): the station's
-                      // default drive set, authored in Dart — memento's five
-                      // org seats unless a downstream station passed its
-                      // own. Each spec folds into the standard seat. ──
-                      for (final spec in roster) _seat(spec),
+                      // ── The CODED roster (space-6ds): the [substations]
+                      // build hook — memento's five org seats unless a
+                      // subclass overrides. ──
+                      ...substations(context, configuration),
                       // ── The append layer (Fork B): `--substation` seats
                       // fan out AFTER the roster, in flag order. ──
                       ...appended,
@@ -290,16 +317,70 @@ class SpaceDelegate extends sdk.GridDelegate {
     );
   }
 
-  /// Folds one [SubstationSpec] into its literal seat: the standard
-  /// `Nest[GitGridAssets → GitHubGridAssets] → SubstationWork` stack.
+  /// THE roster hook — a BUILD METHOD, decomposed out of [build] with its
+  /// signature (the template-method idiom the substrate is built on): the
+  /// station's coded drive set as authored seats, spread into [build] BEFORE
+  /// the [appended] layer. Base = the memento-engineering org, five seats at
+  /// their [umbrella]-relative roots.
+  ///
+  /// OVERRIDE POINT: a downstream station composes, it does not replace
+  /// blindly — `[...super.substations(context, configuration),
+  /// seat(context, 'mine', '../mine')]`. The off-tree machinery (`up`'s
+  /// store guard and work specs, the codedNames refusal set, the
+  /// `--substation` help) enumerates the roster by MOUNTING this tree
+  /// offline (`mountedRosterOf`) — never by a parallel list — so the tree
+  /// stays the single source.
+  List<sdk.Substation> substations(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [
+    // the substrate — driven directly (worktrees isolate under
+    // .grid/worktrees; main untouched)
+    seat(context, 'genesis', p.join(umbrella, 'genesis')),
+    // the framework — self-host; `tg` is the shared Dolt server (gc
+    // coexists: read tg's frontier, write sessions to houston — A37)
+    seat(context, 'the_grid', p.join(umbrella, 'the_grid'), prefix: 'tg'),
+    // the asset packs — self-host
+    seat(
+      context,
+      'power_station',
+      p.join(umbrella, 'power_station'),
+      prefix: 'pow',
+    ),
+    // the runner — self-host; for space this IS the grid home. Its store
+    // mints `space-` (NOT `space_station-`), so the prefix MUST be set
+    // explicitly — the default (prefix ?? name) would own `space_station`
+    // and drive nothing (ownership matches name OR prefix).
+    seat(
+      context,
+      'space_station',
+      p.join(umbrella, 'space_station'),
+      prefix: 'space',
+    ),
+    // the debug harness (memento-engineering/lenny)
+    seat(context, 'lenny', p.join(umbrella, 'lenny')),
+  ];
+
+  /// One seat with the standard asset stack — a BUILD METHOD ([context]
+  /// rides so an override can read ambient values while authoring):
+  /// `Nest[GitGridAssets → GitHubGridAssets] → SubstationWork`.
   /// [GitGridAssets] mounts BARE and reads provisioning/commit from the
   /// ambient [GitServices]; [GitHubGridAssets] binds PR delivery iff a live
-  /// [prOpener] was DI'd (ADR-0006 D3) — so a downstream roster's seats get
+  /// [prOpener] was DI'd (ADR-0006 D3) — so a subclass roster's seats get
   /// the SAME delivery wiring as the org's.
-  sdk.Substation _seat(SubstationSpec spec) => sdk.Substation(
-    spec.name,
-    spec.root,
-    prefix: spec.prefix,
+  ///
+  /// OVERRIDE POINT: a station that needs a DIFFERENT stack for its seats
+  /// (e.g. a commit-only or observe-hardened posture for a store it may not
+  /// deliver to) overrides this — the stack is a hook, not new config.
+  sdk.Substation seat(
+    TreeContext context,
+    String name,
+    String root, {
+    String? prefix,
+  }) => sdk.Substation(
+    name,
+    root,
+    prefix: prefix,
     assets: [
       Nest(
         children: [
@@ -317,11 +398,11 @@ class SpaceDelegate extends sdk.GridDelegate {
 //
 // v3 stores-at-roots (tg-r81): a substation is a name AND its ONE root, paired
 // in ONE `--substation <name>=<root>` flag. The coded roster is authored in
-// Dart (space-6ds: [mementoRoster], or a downstream station's own
-// SubstationSpec list) — flags only APPEND new substations onto it; a coded
-// name on a flag is a LOUD refusal (round 3: the roster is changed in code,
-// never by config). The state store (and the RS-2 lock) live under the grid
-// home (`--grid-home`).
+// Dart (space-6ds: [SpaceDelegate.substations], overridden by a downstream
+// subclass) — flags only APPEND new substations onto it; a coded name on a
+// flag is a LOUD refusal (round 3: the roster is changed in code, never by
+// config). The state store (and the RS-2 lock) live under the grid home
+// (`--grid-home`).
 //
 // A resident verb takes NO drive-list, EVER (D-R1/D-R4): the ready frontier of
 // the owned substation IS the drive set, so there is no `--bead` on this
@@ -348,7 +429,7 @@ class SpaceStationConfig {
 
   /// The operator's `--substation` flags, parsed into APPENDED
   /// [sdk.Substation] seats (Fork B, round 3: append-only — the coded roster
-  /// lives in [SpaceDelegate.build], never here). Every appended seat is
+  /// lives in [SpaceDelegate.substations], never here). Every appended seat is
   /// operator-named: `up`'s store guard refuses LOUD when one resolves no
   /// work store (their error), while an absent CODED sibling is skipped loud
   /// so the rest of the org still arms.
@@ -370,11 +451,14 @@ class SpaceStationConfig {
 /// Adds space's resident-station flags to [parser] (the station surface MINUS
 /// `--bead`). Space's own design; there is deliberately no `--bead`.
 ///
-/// [roster] is the composing station's coded drive set ([mementoRoster]
-/// absent) — rendered into the `--substation` help so a downstream station's
-/// operator reads THEIR coded names, not memento's.
-void addSpaceStationFlags(ArgParser parser, {List<SubstationSpec>? roster}) {
-  final codedNames = [for (final s in roster ?? mementoRoster()) s.name];
+/// [codedNames] are the composing station's coded seats (enumerated off its
+/// delegate's [SpaceDelegate.substations]) — rendered into the `--substation`
+/// help so a downstream station's operator reads THEIR coded names, not
+/// memento's.
+void addSpaceStationFlags(
+  ArgParser parser, {
+  required List<String> codedNames,
+}) {
   parser
     ..addMultiOption(
       'substation',
@@ -384,8 +468,9 @@ void addSpaceStationFlags(ArgParser parser, {List<SubstationSpec>? roster}) {
           '(${codedNames.join(', ')}), paired: '
           '`--substation <name>[@<prefix>]=<root>` (repeatable, absolute '
           'root). Append-only: a coded name is refused — the coded roster is '
-          'authored in Dart (a SubstationSpec list) and changed in code, '
-          'never by flags. A substation is a name and ONE root (v3 §0) — its '
+          "authored in the station delegate's substations() and changed in "
+          'code, never by flags. A substation is a name and ONE root (v3 §0) '
+          '— its '
           '`.beads/` work store lives at `<root>/.beads/`. The optional '
           '`@<prefix>` names the store\'s issue-id prefix when it differs '
           'from the name (`tgdog@td=/work/tgdog`). Optional: a no-flag '
@@ -482,25 +567,24 @@ sdk.Substation _parseSubstation(String raw) {
 }
 
 /// Builds [SpaceStationConfig] from space's own flags ([addSpaceStationFlags]).
-/// The CODED roster is authored in Dart ([mementoRoster] / a downstream
-/// station's own list) and consumed by [SpaceDelegate.build] — it never
-/// arrives through here; [codedNames] (defaulting to the memento five) is the
-/// refusal set. `--substation` flags parse into APPENDED seats
-/// ([SpaceStationConfig.appended]); a flag naming a CODED substation is a loud
-/// [FormatException] (round 3: the roster is code, never overridden by
-/// config), as is the same name twice. A missing --grid-home is a null
-/// return, which the verb renders as a LOUD arming refusal (never a `''`
-/// sentinel — v3 kills those); the coded roster is never empty, so the old
-/// "no substation ⇒ refuse" gate stays retired.
+/// The CODED roster is authored in the station delegate's
+/// [SpaceDelegate.substations] and consumed by [SpaceDelegate.build] — it
+/// never arrives through here; [codedNames] (the same seats' names,
+/// enumerated by the caller) is the refusal set. `--substation` flags parse
+/// into APPENDED seats ([SpaceStationConfig.appended]); a flag naming a CODED
+/// substation is a loud [FormatException] (round 3: the roster is code, never
+/// overridden by config), as is the same name twice. A missing --grid-home is
+/// a null return, which the verb renders as a LOUD arming refusal (never a
+/// `''` sentinel — v3 kills those); the coded roster is never empty, so the
+/// old "no substation ⇒ refuse" gate stays retired.
 SpaceStationConfig? spaceStationConfigFrom(
   ArgResults args, {
-  Set<String>? codedNames,
+  required Set<String> codedNames,
 }) {
   final gridHome = (args.option('grid-home') ?? args.option('state-workspace'))
       ?.trim();
   if (gridHome == null || gridHome.isEmpty) return null;
 
-  codedNames ??= {for (final s in mementoRoster()) s.name};
   final appended = <sdk.Substation>[];
   final seen = <String>{};
   for (final raw in args.multiOption('substation')) {
@@ -509,9 +593,9 @@ SpaceStationConfig? spaceStationConfigFrom(
     if (codedNames.contains(s.name)) {
       throw FormatException(
         'space up: --substation "$raw" names the CODED substation "${s.name}" '
-        '— the coded roster is authored in Dart (mementoRoster / the '
-        "station's own SubstationSpec list) and never overridden by flags "
-        '(change the roster in code); flags APPEND new substations only',
+        "— the coded roster is authored in the station delegate's "
+        'substations() and never overridden by flags (change the roster in '
+        'code); flags APPEND new substations only',
       );
     }
     if (!seen.add(s.name)) {

@@ -22,11 +22,7 @@ library;
 import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart'
-    show
-        AgentConfig,
-        AssetsCommand,
-        OverlayInstallReport,
-        OverlayInstallService;
+    show AssetsCommand, OverlayInstallReport, OverlayInstallService;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
@@ -88,13 +84,14 @@ class _SpaceOverlayInstallService extends OverlayInstallService {
 /// runs). [runnerInvocation] is the JIT invocation rendered into the manual's
 /// `{{runner}}` holes (a downstream station passes its own, e.g. `dart run
 /// lunar:lunar`); it feeds the DEFAULT service only — an explicit [service]
-/// owns its own runner arg. [out]/[err] default to the process sinks.
+/// owns its own runner arg. [delegateFactory] names WHICH [SpaceDelegate]
+/// subclass authors the station (the base class absent: space's posture).
+/// [out]/[err] default to the process sinks.
 AssetsCommand buildSpaceAssetsCommand({
   String Function() gridHomeDefault = _currentDirectory,
   OverlayInstallService? service,
   String runnerInvocation = kSpaceRunner,
-  List<SubstationSpec>? roster,
-  String stationName = 'space',
+  SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
   Future<List<String>> Function(String gridHome)? roots,
   String Function(String overlayRoot)? sourceRef,
   StringSink? out,
@@ -113,19 +110,14 @@ AssetsCommand buildSpaceAssetsCommand({
         install.usageException(
           'space assets install: --grid-home must be an ABSOLUTE path (got '
           '"$home") — the install RENDERS the grid home into every asset it '
-          'stamps, and the coded roster resolves its ../<repo> seats against '
+          'stamps, and the coded roster resolves its relative seats against '
           'it; a cwd-relative home would be baked into the committed manual.',
         );
       }
-      return SpaceDelegate(
-        gridRoot: p.normalize(home),
-        stationName: stationName,
-        roster: roster,
-        // Installing reads asset packs and writes files; it spawns no agent.
-        // The station-default agent scope is the delegate's required ambient
-        // rung (ADR-0008 D10) — this authoring-only mount never reads it.
-        agentConfig: const AgentConfig(harness: 'claude'),
-      );
+      // Installing reads asset packs and writes files; it spawns no agent.
+      // The delegate's DEFAULT agent scope (the authoring-only claude rung,
+      // ADR-0008 D10) rides — this authoring-only mount never reads it.
+      return delegateFactory(gridRoot: p.normalize(home));
     },
     service: service,
     roots: roots,

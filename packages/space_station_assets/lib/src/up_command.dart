@@ -84,20 +84,29 @@ import 'space_delegate.dart';
 /// work store's issue-id prefix. The off-tree work machinery (the store
 /// guard, `buildStationWork`'s specs, the `/status` view) runs BEFORE the
 /// tree mounts (the pinned ordering, ADR-0007 §4), so it carries the roster
-/// as plain values — derived from the SAME [SubstationSpec] list the
-/// delegate's tree folds (space-6ds, evolved), so they cannot diverge.
+/// as plain values — read off an OFFLINE MOUNT of the same delegate class
+/// the armed tree builds (space-6ds, evolved), so they cannot diverge.
 typedef _ArmedSubstation = ({String name, String root, String prefix});
 
 /// `space up`: boots the resident station.
 class UpCommand extends Command<int> {
-  /// Creates the up command (space's own station flags MINUS `--bead`, plus the
-  /// agent scope's). [roster] is the CODED drive set (defaults to
-  /// [mementoRoster]; a downstream station passes its own) and [stationName]
-  /// the `Station` seat's name — the two seams a downstream runner composes
-  /// this command with.
-  UpCommand({List<SubstationSpec>? roster, this.stationName = 'space'})
-    : roster = roster ?? mementoRoster() {
-    addSpaceStationFlags(argParser, roster: this.roster);
+  /// Creates the up command (space's own station flags MINUS `--bead`, plus
+  /// the agent scope's). [delegateFactory] is the ONE downstream seam: which
+  /// [SpaceDelegate] subclass authors this station (its identity, roster and
+  /// seat stacks live on the CLASS as override points). The coded roster is
+  /// read by MOUNTING the delegate's tree offline (`mountedRosterOf` — the
+  /// same enumeration `search` uses) for the help text, the refusal set, and
+  /// the store guard — the tree stays the single source.
+  UpCommand({SpaceDelegateFactory delegateFactory = SpaceDelegate.new})
+    : _delegateFactory = delegateFactory {
+    addSpaceStationFlags(
+      argParser,
+      // One owned enumeration (constructed, mounted, DISPOSED — a delegate
+      // is a StateNotifier, never a throwaway value) at a placeholder home:
+      // seat NAMES are grid-home-independent, and only names render into the
+      // help. The real mounts (guard + tree) happen in [run].
+      codedNames: [for (final s in codedRosterOf(delegateFactory)) s.name],
+    );
     argParser
       ..addOption(
         'harness',
@@ -145,14 +154,7 @@ class UpCommand extends Command<int> {
       );
   }
 
-  /// The CODED roster this station drives ([mementoRoster] unless the
-  /// composing runner passed its own). The ONE list the store guard, the
-  /// work specs, AND the delegate's tree consume — they cannot diverge.
-  final List<SubstationSpec> roster;
-
-  /// The `Station` seat's name (`'space'` unless the composing runner passed
-  /// its own — e.g. `'lunar'`).
-  final String stationName;
+  final SpaceDelegateFactory _delegateFactory;
 
   @override
   final String name = 'up';
@@ -259,14 +261,35 @@ class UpCommand extends Command<int> {
     }
 
     // --- space's OWN resident-station config (v3 stores-at-roots). The coded
-    // memento roster is HARDCODED in SpaceDelegate.build (space-6ds); flags
+    // roster is authored in the delegate's substations() (space-6ds); flags
     // only APPEND new substations, so only a missing --grid-home is a LOUD
     // arming refusal (never a `''` sentinel — v3 kills those). A malformed,
     // duplicate, or coded-name --substation is an uncaught FormatException (a
     // config defect the operator sees immediately).
+    // The coded roster, read off the REAL tree: one owned offline authoring
+    // mount at the real grid home ([codedRosterOf] — no wiring, no effects,
+    // enumeration delegate disposed). Scopes arrive with their roots RESOLVED
+    // by the SDK itself (relative against the ambient GridRoot, absolute
+    // as-is), so the off-tree machinery and the armed tree agree by
+    // construction — the hand-kept mirror this replaced could diverge (a
+    // prefix divergence silently un-owned every `space-` bead).
+    // A missing or RELATIVE home falls back to the placeholder mount: only
+    // seat NAMES are read before the home guards below refuse (exit 64), and
+    // names are home-independent. The resolved ROOTS are only consumed after
+    // those guards pass — i.e. always from a real absolute home.
+    final homeFlag =
+        (results.option('grid-home') ?? results.option('state-workspace'))
+            ?.trim();
+    final codedScopes = codedRosterOf(
+      _delegateFactory,
+      gridRoot:
+          (homeFlag == null || homeFlag.isEmpty || !p.isAbsolute(homeFlag))
+          ? '/'
+          : homeFlag,
+    );
     final config = spaceStationConfigFrom(
       results,
-      codedNames: {for (final s in roster) s.name},
+      codedNames: {for (final s in codedScopes) s.name},
     );
     if (config == null) {
       err(
@@ -304,22 +327,12 @@ class UpCommand extends Command<int> {
     //
     // The coded roster, restated as OFF-TREE specs: the work machinery (the
     // controllers `buildStationWork` builds, this guard, the /status view)
-    // runs BEFORE the tree mounts, so it cannot read the tree's seats — each
-    // root resolves EXACTLY as the SDK's Substation._resolveRoot will: a
-    // relative root normalizes against the grid home (the ambient GridRoot,
-    // tg-32r); an absolute root rides as-is, UN-normalized, byte-identical
-    // with the tree's. SAME [roster] list the delegate's build folds, so
-    // seats and machinery cannot diverge (the old hand-kept mirror could — a
-    // prefix divergence silently un-owned every `space-` bead).
+    // runs BEFORE the armed tree mounts, so it reads the OFFLINE mount above
+    // ([codedScopes]) — roots already resolved by the SDK's own seat build,
+    // byte-identical with what the armed tree will resolve.
     final coded = <_ArmedSubstation>[
-      for (final s in roster)
-        (
-          name: s.name,
-          root: p.isAbsolute(s.root)
-              ? s.root
-              : p.normalize(p.join(config.gridHome, s.root)),
-          prefix: s.prefix,
-        ),
+      for (final s in codedScopes)
+        (name: s.name, root: s.root, prefix: s.prefix),
     ];
     final locator = StoreLocator();
     final armed = <_ArmedSubstation>[];
@@ -445,10 +458,8 @@ class UpCommand extends Command<int> {
     // delegate. `runGrid`'s own contract: a JIT station passes a factory, an AOT
     // station omits it and `hotRestart` then refuses LOUD — so the factory is
     // armed on the SAME gate, and nothing else.
-    SpaceDelegate buildDelegate() => SpaceDelegate(
+    SpaceDelegate buildDelegate() => _delegateFactory(
       gridRoot: config.gridHome,
-      stationName: stationName,
-      roster: roster,
       appended: config.appended,
       agentConfig: agentConfig,
       harnesses: harnesses,

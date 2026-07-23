@@ -25,7 +25,6 @@ void main() {
     PrOpener? prOpener,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
-    stationName: 'space',
     appended: appended,
     agentConfig: const AgentConfig(harness: 'claude'),
     prOpener: prOpener,
