@@ -15,8 +15,13 @@ dependencies:
 
 dev_dependencies:
   # The process-level smokes drive the REAL runner and assert over grid_cli's
-  # lock/attach surfaces directly.
-  grid_cli: any
+  # lock/attach surfaces directly. Pinned with the IDENTICAL descriptor as
+  # space_station_assets' pin — pub unifies git deps by ref string (ADR-0003).
+  grid_cli:
+    git:
+      url: git@github.com:memento-engineering/the_grid.git
+      ref: grid_cli-v0.1.0
+      path: packages/grid_cli
   lints: ^5.1.0
   path: ^1.9.0
   test: ^1.25.0
