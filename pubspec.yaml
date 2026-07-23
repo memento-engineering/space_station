@@ -1,33 +1,39 @@
-name: space_station
+name: space_station_workspace
 description: >-
-  memento's grid station — the assembled runner + configuration over the
-  the_grid CLI-SDK and the power_station asset packs (the Dart runner model:
-  compose the Commands you want, `dart compile exe bin/space.dart -o space`).
+  memento's grid station — a pub workspace: the thin JIT runner (apps/space)
+  over the reusable station composition (packages/space_station_assets), which
+  downstream stations (e.g. a private IC station) import and extend instead of
+  forking.
 publish_to: none
 
 environment:
   sdk: ^3.11.0
 
-dependencies:
-  args: ^2.6.0
-  beads_dart: any
-  dart_grid_assets: any
-  federated_grid_assets: any
-  genesis_tree: ^0.1.3
-  grid_assets: any
-  grid_cli: any
-  grid_engine: any
-  # The dev-mode host: `GridExplorationHost` (the sole registrar of
-  # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
-  # so `space reload` has an extension to invoke.
-  grid_exploration: any
-  grid_runtime: any
-  # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
-  # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
-  # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
-  grid_sdk: any
-  path: ^1.9.0
+workspace:
+  - apps/space
+  - packages/space_station_assets
 
 dev_dependencies:
-  lints: ^5.1.0
-  test: ^1.25.0
+  melos: ^7.7.0
+
+melos:
+  scripts:
+    test:
+      description: >-
+        Run each member's tests (dart test does not fan out from a workspace
+        root).
+      steps:
+        - test:dart
+    analyze:
+      description: Run dart analyze on the entire workspace.
+      run: dart analyze
+    format:
+      description: Check formatting for all Dart files.
+      run: dart format --output=none --set-exit-if-changed .
+
+    test:dart:
+      private: true
+      description: dart test in every member with a test/ dir.
+      exec: dart test
+      packageFilters:
+        dirExists: test

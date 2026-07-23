@@ -6,18 +6,25 @@ CLI-SDK) and [power_station](https://github.com/memento-engineering/power_statio
 (first-party asset packs).
 
 the_grid is a framework, not a turnkey tool (the Dart runner model): a station
-is a user-composed, AOT-compiled runner. `lib/space_station.dart` builds the
-`CommandRunner` (`buildRunner()`) from the Commands memento wants — the generic
-CLI-SDK ones (`watch`/`gate`/`demo` + `serve`/`lease`) plus the asset-exported
-`dart` (the DART domain's `DartCommand`), plus memento's OWN resident verbs
-(`up`/`down`/`status`, below); `bin/space.dart` drives it.
+is a user-composed runner. This repo is a **pub workspace**:
+`packages/space_station_assets` builds the `CommandRunner` (`buildRunner()`)
+from the Commands memento wants — the generic CLI-SDK ones
+(`watch`/`gate`/`demo` + `serve`/`lease`) plus the asset-exported `dart` (the
+DART domain's `DartCommand`), plus memento's OWN resident verbs
+(`up`/`down`/`status`, below) — and the thin runner app `apps/space` drives it.
+A downstream station imports `space_station_assets` and extends it
+(`buildRunner(name: …)..addCommand(…)`) instead of forking this repo.
+
+**JIT only — never AOT.** Every `space` invocation runs from source
+(`dart run space:space`, workspace-addressable from the repo root); there is
+deliberately no committed binary. JIT keeps the VM service open (hot-reload +
+lenny debugging) and guarantees current source.
 
 ## Assemble
 
 ```sh
-dart pub get                              # needs the sibling checkouts + overrides
-dart compile exe bin/space.dart -o space  # the AOT station binary
-./space up --grid-home .                   # arms the coded memento org (dry-run)
+dart pub get                       # needs the sibling checkouts + overrides
+dart run space:space up --grid-home "$(pwd)"   # arms the coded memento org (dry-run)
 ```
 
 ## The resident station (`up` / `down` / `status`)
@@ -35,9 +42,10 @@ no double-fork — a supervisor (launchd; the runbook is RS-6) owns
 backgrounding.
 
 ```sh
-./space up --grid-home . --dry-run                     # arm the coded org, observe-only
-./space up --grid-home . --substation the_grid@tg=/elsewhere/the_grid  # rebind one root
-./space up --grid-home . --no-dry-run                  # arm the coded org, LIVE (human gate)
+space() { dart run space:space "$@"; }     # (illustrative shorthand — always JIT)
+space up --grid-home "$(pwd)" --dry-run                     # arm the coded org, observe-only
+space up --grid-home "$(pwd)" --substation the_grid@tg=/elsewhere/the_grid  # rebind one root
+space up --grid-home "$(pwd)" --no-dry-run                  # arm the coded org, LIVE (human gate)
 ```
 
 **The roster is memento's org, hardcoded** (space-6ds;
@@ -58,8 +66,8 @@ control surface; lifecycle rides OS signals (`down` SIGTERMs the holder),
 never HTTP (the control surface is GET-only, by construction):
 
 ```sh
-./space status --state-workspace ../tgdog --substation tg --workspace ../the_grid
-./space down --state-workspace ../tgdog
+dart run space:space status --state-workspace ../tgdog --substation tg --workspace ../the_grid
+dart run space:space down --state-workspace ../tgdog
 ```
 
 `status` renders the live `/status` payload when a station is up, or falls
@@ -76,18 +84,18 @@ only consumer left.
 `up` is **foreground-resident by design** — no self-daemonization, no
 double-fork; a supervisor owns backgrounding. On macOS that supervisor is
 **launchd**, recipe-first (D-R3): a `LaunchAgent` plist template ships at
-[`tool/launchd/engineering.memento.space.plist`](tool/launchd/engineering.memento.space.plist)
+[`apps/space/tool/launchd/engineering.memento.space.plist`](apps/space/tool/launchd/engineering.memento.space.plist)
 plus this runbook. There is deliberately **no `space install` command yet** —
 a template earns automation only after it's been operated by hand.
 
-### 1. Compile
+### 1. No compile step — launchd runs JIT too
 
-launchd execs a binary path directly (no `dart run`, no shell), so ship the
-AOT artifact the template's `ProgramArguments` points at:
-
-```sh
-dart compile exe bin/space.dart -o space
-```
+launchd execs a binary path directly (no shell), and space is JIT-only — so
+the template's `ProgramArguments` exec the **`dart` binary itself** with
+`run space:space up …` args and `WorkingDirectory` set to this repo (the
+workspace root, where `space:space` resolves). Find your dart path with
+`which dart`. The VM service flag stays, so a supervised station still
+hot-reloads.
 
 ### 2. Install
 
@@ -99,7 +107,7 @@ home directory), lint it, then bootstrap it into your GUI session:
 
 ```sh
 mkdir -p ~/Library/Logs/space_station
-cp tool/launchd/engineering.memento.space.plist ~/Library/LaunchAgents/
+cp apps/space/tool/launchd/engineering.memento.space.plist ~/Library/LaunchAgents/
 $EDITOR ~/Library/LaunchAgents/engineering.memento.space.plist   # fill in CHANGE_ME
 plutil -lint ~/Library/LaunchAgents/engineering.memento.space.plist   # must print "OK"
 launchctl bootstrap gui/$UID ~/Library/LaunchAgents/engineering.memento.space.plist
@@ -122,8 +130,8 @@ section) to stop the *current* run without unregistering.
 Thin clients over the SAME `--state-workspace` the plist's `up` was given:
 
 ```sh
-./space status --state-workspace <path> --substation <sub> --workspace <path>
-./space down --state-workspace <path>
+dart run space:space status --state-workspace <path> --substation <sub> --workspace <path>
+dart run space:space down --state-workspace <path>
 ```
 
 `status` attaches to the live `StationControl` surface when up, or falls
@@ -167,7 +175,7 @@ kill -9 / crash → launchd relaunch (RunAtLoad)
     tg-9fl lands) → kernel mount
 ```
 
-launchd notices the exit and restarts the binary (a signal death or
+launchd notices the exit and restarts the station (a signal death or
 non-zero exit does not satisfy `SuccessfulExit: false`, so `KeepAlive`
 fires). The new process re-acquires the lock — stealing the stale one the
 dead pid left behind — then waits on the freshness barrier (a COMPLETED

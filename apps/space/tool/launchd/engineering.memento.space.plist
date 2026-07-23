@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RS-6 launchd recipe for the resident `space up` station
+  (the_grid/docs/SCRATCH-resident-station.md D-R3). A TEMPLATE, not a
+  finished artifact — every CHANGE_ME below is operator-filled before this
+  is installed. See space_station/README.md "Resident operation" for the
+  full compile/install/start/stop/status/logs/lock/crash-recovery runbook.
+
+  Track G-space (tg-33n): `up` authors its station as a SpaceDelegate (a
+  grid_sdk GridDelegate subclass) and mounts it via runGrid. The launchd
+  POSTURE is unchanged — foreground-resident, KeepAlive with
+  SuccessfulExit=false — and these ProgramArguments run space's OWN CLI, JIT
+  from source (see the JIT note below).
+
+  There is deliberately no `space install` command yet: a template earns
+  automation after it has been operated by hand.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>engineering.memento.space</string>
+
+	<!--
+	  JIT only — never AOT (space_station CLAUDE.md): launchd execs the `dart`
+	  binary itself (`which dart`) with `run space:space up …` args, and
+	  WorkingDirectory is the space_station repo (the workspace root, where
+	  `space:space` resolves). The VM service flag keeps a supervised station
+	  hot-reloadable (`space reload`). The coded memento roster is the default
+	  drive set (space-6ds) — no --substation flags for the org seats.
+	-->
+	<key>ProgramArguments</key>
+	<array>
+		<string>/CHANGE_ME/path/to/dart</string>
+		<string>run</string>
+		<string>--enable-vm-service</string>
+		<string>space:space</string>
+		<string>up</string>
+		<string>--grid-home</string>
+		<string>/CHANGE_ME/path/to/space_station</string>
+		<string>--no-dry-run</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/CHANGE_ME/path/to/space_station</string>
+
+	<!--
+	  SuccessfulExit=false, NOT a bare `true`: launchd only relaunches on a
+	  non-zero/signal exit. A graceful `space down` (SIGTERM -> clean exit 0)
+	  is then a REAL stop, not an instant bounce; `kill -9` / a crash (exit
+	  via signal / non-zero) IS relaunched. See README "Resident operation".
+	-->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>/CHANGE_ME/Users/you/Library/Logs/space_station/space.out.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/CHANGE_ME/Users/you/Library/Logs/space_station/space.err.log</string>
+</dict>
+</plist>

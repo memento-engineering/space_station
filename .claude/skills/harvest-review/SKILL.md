@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@1182361 — do not edit; run `dart run bin/space.dart assets install`
+# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
 name: harvest-review
 description: >
   Review and land what a the_grid station built: verify each terminal
@@ -47,7 +47,7 @@ For each work bead with a terminal session:
 ## Keep / rework / close
 
 - **Keep** — real delta, grades hold up, plan green → land it.
-- **Rework** — a critic's finding is real and actionable → `dart run bin/space.dart rework`
+- **Rework** — a critic's finding is real and actionable → `dart run space:space rework`
   with the finding quoted as the note (see `gate-medicine`).
 - **Close-as-stale** — zero delta, work already in mainline → close with
   receipts.

@@ -1,10 +1,15 @@
 # space_station — memento's grid home (governor's manual)
 
-**What this repo is.** `space_station` is **memento's grid instance**: the assembled, AOT-compiled
-runner (`space`) that arms a **resident [the_grid](../the_grid) station** over the org's substations.
-It is a *composition + config* over the_grid's CLI-SDK and [power_station](../power_station)'s asset
-packs — **not a library and not an engine**. `bin/space.dart` composes the Commands it wants;
-`SpaceDelegate` (`lib/src/space_delegate.dart`) authors the station as a tree. The umbrella map at
+**What this repo is.** `space_station` is **memento's grid instance**: the JIT runner (`space`) that
+arms a **resident [the_grid](../the_grid) station** over the org's substations. It is a *composition
++ config* over the_grid's CLI-SDK and [power_station](../power_station)'s asset packs — **not an
+engine**. It is a **pub workspace**: the thin runner app lives at `apps/space` (`bin/space.dart`
+just drives), and the reusable composition lives at `packages/space_station_assets` —
+`buildRunner()` assembles the Commands, `SpaceDelegate`
+(`packages/space_station_assets/lib/src/space_delegate.dart`) authors the station as a tree. The
+assets package is the **extend-don't-fork seam**: a downstream station (an IC's private station,
+e.g. lunar) imports `space_station_assets` and composes on top — it never forks this repo. This
+repo is the **gold standard for what a station repo should resemble.** The umbrella map at
 [../CLAUDE.md](../CLAUDE.md) explains how all the org repos fit together.
 
 ## The governor's posture — READ THIS FIRST
@@ -84,33 +89,39 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-`space_station` is a single Dart package (`publish_to: none`). Its deps are **today** sibling **path
-overrides** in the gitignored `pubspec_overrides.yaml` (the `grid_*` packages are unpublished — see
+`space_station` is a **pub workspace** (`publish_to: none` throughout): the root `pubspec.yaml`
+lists the members (`apps/space`, `packages/space_station_assets`) + inline melos scripts; the
+gitignored, machine-local `pubspec_overrides.yaml` stays at the **workspace root** (workspace-level
+overrides). Deps are **today** sibling **path overrides** (the `grid_*` packages are unpublished —
+see
 [the_grid/docs/SCRATCH-pub-capability-and-repo-split.md](../the_grid/docs/SCRATCH-pub-capability-and-repo-split.md)).
 
 **Direction: git-tag version constraints (`space-td1`).** Path overrides couple space to the_grid's
 `main` — when `main` takes a breaking change, space stops compiling and the JIT station can't bounce or
 hot-reload until space migrates (the wedge that stalled the tkm/#56 arc). The move (genesis ADR-0001 D8;
 private repos support git-ref deps) is to pin each private dep to a released **git tag** and adopt a
-breaking change *deliberately* by bumping the ref — so `dart run bin/space.dart` always compiles from
+breaking change *deliberately* by bumping the ref — so `dart run space:space` always compiles from
 space's own source regardless of upstream `main`. This is also the mechanism behind stacked development
 (the_grid `tg-ugj`) and it supersedes the `tg-8uz` worktree-override hack.
 
 ```bash
-dart pub get                              # resolve (needs the sibling checkouts present)
-dart analyze && dart test                 # the house gate
-dart run bin/space.dart assets install --check   # the operator assets match their vended source
+dart pub get                              # resolve the workspace (needs the sibling checkouts present)
+dart analyze                              # workspace-wide, from the root
+(cd packages/space_station_assets && dart test)   # the composition suite
+(cd apps/space && dart test)              # the process-level CLI smokes
+dart run space:space assets install --check      # the operator assets match their vended source
 
-# Operate the resident station (governor) — ALWAYS JIT, never an AOT binary (see below):
-dart run bin/space.dart status            # what the station is driving right now
+# Operate the resident station (governor) — ALWAYS JIT, never an AOT binary (see below).
+# All from the workspace root — `dart run space:space` is workspace-addressable:
+dart run space:space status               # what the station is driving right now
 dart run --enable-vm-service \            # ARM a LIVE station (builds + opens PRs); JIT keeps the VM
-  bin/space.dart up --no-dry-run \        #   service open for hot-reload + lenny debugging
+  space:space up --no-dry-run \           #   service open for hot-reload + lenny debugging
   --grid-home "$(pwd)"                    # ABSOLUTE path required (relative = loud refusal).
                                           # NO --substation flags for the memento roster: it is
                                           # CODED in SpaceDelegate.build() (space-6ds; currently
                                           # genesis, the_grid, power_station, space_station, lenny)
                                           # and naming a coded seat REFUSES; flags APPEND only.
-dart run bin/space.dart down              # tear down
+dart run space:space down                 # tear down
 ```
 
 **JIT only — never AOT.** The resident station and every `space` command run under `dart run` (JIT),
@@ -118,12 +129,12 @@ dart run bin/space.dart down              # tear down
 guarantees you're running *current source*, not a stale compiled artifact. There is deliberately **no
 committed `./space` binary** — if you find one lying around, it's a build leftover; delete it, don't run
 it. For a grid op while the runner is mid-migration, still stay JIT: the operation belongs to *space's*
-composition, so run it through `dart run bin/space.dart <cmd>` — not through the_grid's `grid_cli`, which
+composition, so run it through `dart run space:space <cmd>` — not through the_grid's `grid_cli`, which
 sidesteps space's actual station workflow.
 
 **`space reload` — the EXPLICIT hot-reload trigger.** JIT-from-source is the default dev operating
 mode (the mac studio dogfoods from source), so a landed change activates **without a down/up bounce**:
-`dart run bin/space.dart reload --grid-home .` connects to the RESIDENT station over the VM service it
+`dart run space:space reload --grid-home .` connects to the RESIDENT station over the VM service it
 advertised in its 0600 `.grid/station.lock`, swaps the sources, and re-composes the tree — live
 sessions are ADOPTED, never killed. `--restart` re-runs the delegate factory instead of the master
 build. The trigger is EXPLICIT and operator-driven: there is deliberately **no file-watcher and no
@@ -133,8 +144,9 @@ PRs). Arming it is the **run mode alone** — a station booted JIT with `--enabl
 registers nothing, reports `dev mode: OFF`, and `space reload` refuses LOUD.
 
 **`validation_plan` worktree gotcha.** space_station beads need an **absolute-cd** plan
-(`cd <abs>/space_station && dart analyze && dart test`) — a per-bead worktree can't `pub get` (the
-unpublished `grid_*` deps + the gitignored overrides are absent). the_grid/power_station beads use a
+(`cd <abs>/space_station && dart analyze && cd packages/space_station_assets && dart test && cd
+../../apps/space && dart test`) — a per-bead worktree can't `pub get` (the unpublished `grid_*` deps
++ the gitignored overrides are absent). the_grid/power_station beads use a
 **relative** plan (`cd packages/<pkg> && dart pub get && dart analyze && dart test`). `tg-8uz`
 (materialize overrides per-worktree) was the stopgap fix; the **git-tag version constraints** direction
 (`space-td1`) is the real fix — a worktree resolving tagged deps just `pub get`s, no override
@@ -187,7 +199,7 @@ so the work store stays read-only.
   boot/bounce/status/diagnose; `intake-grooming` — make a bead driveable; `harvest-review` — land
   what the station built; `gate-medicine` — clear gated sessions; `discover`), `.claude/agents/governor.md`
   and `.claude/settings.json` are INSTALLED from `grid_assets`' vended `station_overlay` —
-  `dart run bin/space.dart assets install` — and each carries a `generated from grid_assets@<ref>`
+  `dart run space:space assets install` — and each carries a `generated from grid_assets@<ref>`
   stamp. The authored home is [power_station](../power_station), not here: to change a skill, change
   it there and re-install. `assets install --check` is part of the house gate and FAILS on an
   out-of-band edit. The `governor` agent is the persona for this seat — reach for these before

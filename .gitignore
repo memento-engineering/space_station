@@ -14,8 +14,9 @@ pubspec_overrides.yaml
 # machine-local, so the lock is too.
 pubspec.lock
 
-# The compiled runner.
-space
+# A stray compiled runner at the repo root (there is deliberately no
+# committed binary; JIT only). Anchored: `apps/space/` must stay tracked.
+/space
 
 # Beads / Dolt files (added by bd init)
 .dolt/

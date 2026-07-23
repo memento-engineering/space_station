@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@1182361 — do not edit; run `dart run bin/space.dart assets install`
+# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
 name: discover
 description: >
   The grid home's front door — the ONLY human-in-the-loop stage. Dispatches on
@@ -29,7 +29,7 @@ deterministic, read-only Command for it, and you use it for EVERY "what does
 the grid know about X?" pass:
 
 ```bash
-dart run bin/space.dart search --json "<keywords>"
+dart run space:space search --json "<keywords>"
 ```
 
 It resolves the ATTACHED substations from the resident-station context (the
@@ -66,7 +66,7 @@ Look at the first argument:
   want to look into?" then treat the answer as a **topic**.
 - **Arg 1 looks like a bead-id** — a `<prefix>-<suffix>` token on one of the
   roster's store prefixes. Confirm it deterministically:
-  `dart run bin/space.dart search --json "<token>"` — an `id`-field hit confirms the bead
+  `dart run space:space search --json "<token>"` — an `id`-field hit confirms the bead
   exists AND names its owning store (id has first match precedence). Then:
   - **nothing after it** → *Advisory* (read-only recommendation).
   - **a prompt after it** → *Directed* (carry out the instruction). Everything

@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@1182361 — do not edit; run `dart run bin/space.dart assets install`
+# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
 name: release
 description: >
   Cut a disciplined pub.dev release of a Dart package (or a workspace of them) —
@@ -9,11 +9,11 @@ description: >
   workspace whose tags have drifted (lenny's repo-level `v0.1.1`) onto the
   per-package `<pub-name>-v<version>` convention. The deterministic work —
   version math, tag strings, the scrub gate, the dry-run, the pub.dev poll,
-  dependency order — rides the vended `dart run bin/space.dart dart release` Command, whose
+  dependency order — rides the vended `dart run space:space dart release` Command, whose
   JSON this skill PARSES. Use when the human says "release <package>", "publish
   <package> to pub.dev", "cut a release", "bump and publish", "ship the new
   version", or "reconcile the release tags".
-compatibility: Requires dart + the `dart run bin/space.dart` runner, git, and pub.dev publish rights (the memento.engineering verified publisher).
+compatibility: Requires dart + the `dart run space:space` runner, git, and pub.dev publish rights (the memento.engineering verified publisher).
 metadata:
   author: memento-engineering
 ---
@@ -22,7 +22,7 @@ metadata:
 
 Publishing is a JUDGEMENT wrapped around a deterministic core. You make the calls
 a human would — is this worth a release, is it breaking, is the drift real — and
-you delegate every mechanical step to the `dart run bin/space.dart dart release` Command,
+you delegate every mechanical step to the `dart run space:space dart release` Command,
 which returns structured JSON you PARSE. Never eyeball a version, hand-grep for
 internal refs, or read pub.dev's HTML — the Command is the substrate.
 
@@ -30,16 +30,16 @@ internal refs, or read pub.dev's HTML — the Command is the substrate.
 
 Each op emits ONE JSON object under `--json`. Read the fields; never scrape.
 
-- **Version + tag** — `dart run bin/space.dart dart release plan --package <name> --current <ver> --change <docs|additive|fix|breaking> --json`
+- **Version + tag** — `dart run space:space dart release plan --package <name> --current <ver> --change <docs|additive|fix|breaking> --json`
   -> `{current, next, change, requiresBreakingChangelog, package, tag}`.
-- **Scrub gate** — `dart run bin/space.dart dart release scrub --dir <package-dir> --json`
+- **Scrub gate** — `dart run space:space dart release scrub --dir <package-dir> --json`
   -> `{root, clean, filesScanned, hits:[{file, line, text, match}]}`.
-- **Publish order** — `dart run bin/space.dart dart release order --manifest <deps.json> --json`
+- **Publish order** — `dart run space:space dart release order --manifest <deps.json> --json`
   -> `{order:[...]}` (a `{package:[in-set deps]}` manifest in; dependency-first
   sequence out). A cycle exits non-zero with a loud message.
-- **Dry-run gate** — `dart run bin/space.dart dart release dry-run --dir <package-dir> --package <name> --json`
+- **Dry-run gate** — `dart run space:space dart release dry-run --dir <package-dir> --package <name> --json`
   -> `{package, exitCode, warningCount, clean, warnings:[...]}`.
-- **pub.dev poll** — `dart run bin/space.dart dart release poll --package <name> --version <ver> --json`
+- **pub.dev poll** — `dart run space:space dart release poll --package <name> --version <ver> --json`
   -> `{package, wanted, latest, isPublished}`. ONE probe — you loop it.
 
 ## When to publish (the judgement)
@@ -77,7 +77,7 @@ Run them in sequence; a failure STOPS the release.
 1. **Workspace green** — `melos run analyze`, `melos run test`, `melos run
    format` (or the repo's equivalent). A plain shell gate, not a `dart release`
    op.
-2. **Scrub** — `dart run bin/space.dart dart release scrub --dir <package-dir> --json`. Read
+2. **Scrub** — `dart run space:space dart release scrub --dir <package-dir> --json`. Read
    `clean`. If false, each `hits[]` entry names the `file`, `line`, and `match`
    to strip; fix, re-run, expect `clean: true`.
 3. **No internal working docs inside the package dir** — handoffs, scratch, and
@@ -85,17 +85,17 @@ Run them in sequence; a failure STOPS the release.
 4. **CHANGELOG entry + version bump, committed** — bump `pubspec.yaml` to
    `plan.next`, write the CHANGELOG entry (the `Breaking:` + migration line when
    `requiresBreakingChangelog`), and commit.
-5. **Dry-run** — `dart run bin/space.dart dart release dry-run --dir <package-dir> --package
+5. **Dry-run** — `dart run space:space dart release dry-run --dir <package-dir> --package
    <name> --json`. Read `clean`; treat ANY warning as a stop.
 
 ## Publishing — in dependency order
 
 - For a MULTI-package release, resolve the order first: build a
-  `{package:[deps]}` manifest and call `dart run bin/space.dart dart release order --manifest
+  `{package:[deps]}` manifest and call `dart run space:space dart release order --manifest
   <file> --json`. Publish in the returned `order`. (For the actual upload,
   `melos publish --no-dry-run --yes` resolves the same order automatically.)
 - `dart pub publish` from the package dir.
-- **After each upload, POLL before publishing a dependent:** loop `dart run bin/space.dart
+- **After each upload, POLL before publishing a dependent:** loop `dart run space:space
   dart release poll --package <name> --version <ver> --json` until
   `isPublished: true` (the new version lands as `latest` within a minute or two).
   Only then publish the next package.
@@ -105,7 +105,7 @@ Run them in sequence; a failure STOPS the release.
 1. **Tag the release commit** with `plan.tag` (`<pub-name>-v<version>`, e.g.
    `genesis_tree-v0.1.5`) and push tags.
 2. Push `main`.
-3. Verify: `dart run bin/space.dart dart release poll --package <name> --version <ver> --json`
+3. Verify: `dart run space:space dart release poll --package <name> --version <ver> --json`
    returns `isPublished: true`, and spot-check the rendered README.
 
 ## Reconciling drift (the lenny case)
@@ -117,7 +117,7 @@ the **anti-pattern** — it cannot tell which package a tag belongs to. To migra
 a workspace onto the convention:
 
 1. For each published package, read its real `pubspec.yaml` version and compose
-   the correct tag with `dart run bin/space.dart dart release plan --package <name> --current
+   the correct tag with `dart run space:space dart release plan --package <name> --current
    <ver> --change docs --json` (read `tag`).
 2. Create the missing per-package tags on the commits that shipped those
    versions; leave the old repo-level tags in place (deleting shared tags
@@ -135,7 +135,7 @@ step this skill flags but cannot perform.
 ## What you don't do here
 
 - Invent a version, tag string, publish order, or scrub verdict by inference —
-  every one is a `dart run bin/space.dart dart release` op whose JSON you PARSE.
+  every one is a `dart run space:space dart release` op whose JSON you PARSE.
 - Publish when no consumer needs the version and it is not a docs refresh.
 - Hide a breaking change in a patch, or ship a `Breaking:`-less CHANGELOG for a
   `--change breaking` release.

@@ -1,0 +1,22 @@
+name: space
+description: >-
+  memento's grid station runner — the thin JIT app over
+  space_station_assets (the reusable composition: SpaceDelegate + the
+  station's Commands). Run it from the workspace root: `dart run space:space`.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  args: ^2.6.0
+  space_station_assets: any
+
+dev_dependencies:
+  # The process-level smokes drive the REAL runner and assert over grid_cli's
+  # lock/attach surfaces directly.
+  grid_cli: any
+  lints: ^5.1.0
+  path: ^1.9.0
+  test: ^1.25.0

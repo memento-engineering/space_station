@@ -1,14 +1,14 @@
 ---
-# generated from grid_assets@1182361 — do not edit; run `dart run bin/space.dart assets install`
+# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
 name: station-operations
 description: >
-  Operate the resident the_grid station: boot (dart run bin/space.dart up), bounce, tear
+  Operate the resident the_grid station: boot (dart run space:space up), bounce, tear
   down, read /status, seed a grid home's state store, and diagnose a station
   that is up but driving nothing. Use when starting, restarting, or arming the
   station, when a boot looks healthy but ready > 0 with mounted 0 and no
   output, or when preparing a fresh grid home — even if the symptom is just
   "nothing is happening."
-compatibility: Requires dart + the `dart run bin/space.dart` runner (the station runs JIT via `dart run`, never an AOT binary), bd (beads CLI), git.
+compatibility: Requires dart + the `dart run space:space` runner (the station runs JIT via `dart run`, never an AOT binary), bd (beads CLI), git.
 metadata:
   author: memento-engineering
 ---
@@ -20,7 +20,7 @@ metadata:
 From the grid home (the repo whose `.grid/` holds the state store and lock):
 
 ```
-dart run bin/space.dart up --no-dry-run \
+dart run space:space up --no-dry-run \
   --grid-home /Users/nico/development/engineering.memento/space_station \
   --substation '<name>[@<prefix>]=<abs work-repo root>' ...
   [--max-agents N]
@@ -33,10 +33,10 @@ dart run bin/space.dart up --no-dry-run \
   coded seat authors `GitHubGridAssets`, so a LIVE arm (`--no-dry-run`) pushes and
   opens a PR per landed bead. `--dry-run` binds nothing (the commit-only posture).
   There is no land flag to omit.
-- The station is resident: it runs until `dart run bin/space.dart down`. Run it in the
+- The station is resident: it runs until `dart run space:space down`. Run it in the
   background and read the banner from its log.
 
-Verify the boot with effects, not the banner: `dart run bin/space.dart status --state-workspace
+Verify the boot with effects, not the banner: `dart run space:space status --state-workspace
 /Users/nico/development/engineering.memento/space_station` should show `station: UP`, and within a minute of ready work
 existing you should see `mounted`/`live sessions` > 0, per-bead worktrees under
 `<work-repo>/.grid/worktrees/<substation>/<bead>`, and real agent processes.
@@ -44,8 +44,8 @@ existing you should see `mounted`/`live sessions` > 0, per-bead worktrees under
 ## Bounce / down
 
 ```
-dart run bin/space.dart down --state-workspace /Users/nico/development/engineering.memento/space_station    # scoped stop via the lock
-dart run bin/space.dart up ...                                 # same arming
+dart run space:space down --state-workspace /Users/nico/development/engineering.memento/space_station    # scoped stop via the lock
+dart run space:space up ...                                 # same arming
 ```
 
 Bounce whenever station-side state is latched (see the silent-death runbook) or
@@ -113,9 +113,9 @@ timeout heartbeat (~45min while work is in flight, ~3h idle). Scan gates via
 - The banner's "work-driving: ARMED" is derived from config, not from the tree
   actually driving — trust only effects.
 - A landed engine/sdk change is picked up by re-running from source on a bounce or
-  hot-reload — there is no recompile step. Run the `dart run bin/space.dart` station JIT (via
+  hot-reload — there is no recompile step. Run the `dart run space:space` station JIT (via
   `dart run`), never a compiled binary: a binary loses the VM service, hot-reload,
-  and the current-source guarantee (space is JIT-only — see its CLAUDE.md).
+  and the current-source guarantee (the station is JIT-only — see its CLAUDE.md).
 - The dry smoke CANNOT prove the write path (dry = no-op bd writer): the first
   live boot of any new composition is the only prover — treat it as an
   instrumented experiment, not a formality.
