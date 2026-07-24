@@ -11,19 +11,42 @@ import 'package:test/test.dart';
 /// Bounded (`--for-seconds`) `--dry-run` boots over hermetic `bd init` fixtures:
 /// a real lock and control surface, no spawn, no store write, no git.
 void main() {
+  test('default codex build reports its environment-native model while grade '
+      'falls through to the mid default', () async {
+    final home = await _bdInitGridHome('space-scope-codex-home-');
+    final sub = await _bdInitWorkspace('space-scope-codex-sub-');
+    addTearDown(() async {
+      await home.delete(recursive: true);
+      await sub.delete(recursive: true);
+    });
+
+    final result = await _runUp(home: home, sub: sub);
+
+    expect(result.exitCode, 0, reason: 'stderr: ${result.stderr}');
+    expect(
+      '${result.stdout}',
+      allOf(
+        contains('build model gpt-5.6-sol'),
+        contains('grader model sonnet'),
+      ),
+    );
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test(
-    'NO --model / NO --grader-model: each role falls through to its ASSET '
-    'default — build on opus, grade on sonnet. The station-side `?? sonnet` '
-    'pin that out-ranked those defaults (and drove an ALL-sonnet grid) is GONE',
+    'explicit claude build falls through to frontier and mid defaults',
     () async {
-      final home = await _bdInitGridHome('space-scope-default-home-');
-      final sub = await _bdInitWorkspace('space-scope-default-sub-');
+      final home = await _bdInitGridHome('space-scope-claude-home-');
+      final sub = await _bdInitWorkspace('space-scope-claude-sub-');
       addTearDown(() async {
         await home.delete(recursive: true);
         await sub.delete(recursive: true);
       });
 
-      final result = await _runUp(home: home, sub: sub);
+      final result = await _runUp(
+        home: home,
+        sub: sub,
+        args: const ['--build-harness', 'claude'],
+      );
 
       expect(result.exitCode, 0, reason: 'stderr: ${result.stderr}');
       expect(
@@ -49,7 +72,14 @@ void main() {
     final result = await _runUp(
       home: home,
       sub: sub,
-      args: const ['--model', 'sonnet', '--grader-model', 'haiku'],
+      args: const [
+        '--build-harness',
+        'claude',
+        '--model',
+        'sonnet',
+        '--grader-model',
+        'haiku',
+      ],
     );
 
     expect(result.exitCode, 0, reason: 'stderr: ${result.stderr}');

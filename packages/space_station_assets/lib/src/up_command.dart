@@ -45,7 +45,7 @@ import 'package:grid_assets/grid_assets.dart'
         AgentConfig,
         AgentRole,
         buildBuiltinEnvironmentRegistry,
-        defaultModelFor;
+        resolveAgentConfig;
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
@@ -541,14 +541,22 @@ class UpCommand extends Command<int> {
       '·  work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  '
       '·  delivery: ${live ? 'BOUND (GitHub PR)' : 'none (commit-only)'}',
     );
-    // Report each role's EFFECTIVE model through the SAME projection the ladder
-    // resolves with, so the banner cannot drift from what the spawners get.
-    final buildModel =
-        agentConfig.stationModelFor(AgentRole.build) ??
-        defaultModelFor(AgentRole.build);
-    final gradeModel =
-        agentConfig.stationModelFor(AgentRole.grade) ??
-        defaultModelFor(AgentRole.grade);
+    // Report each role's EFFECTIVE model through the SAME resolver the spawners
+    // use, so environment-native pins and the fallback ladder cannot drift.
+    final buildModel = resolveAgentConfig(
+      role: AgentRole.build,
+      ambient: agentConfig,
+      beadMetadata: const <String, dynamic>{},
+      stepParams: const <String, String>{},
+      registry: harnesses,
+    ).params['model']!;
+    final gradeModel = resolveAgentConfig(
+      role: AgentRole.grade,
+      ambient: agentConfig,
+      beadMetadata: const <String, dynamic>{},
+      stepParams: const <String, String>{},
+      registry: harnesses,
+    ).params['model']!;
     out(
       'agent scope: environment ${agentConfig.harness} '
       '(${harnesses.resolve(agentConfig.harness).target})'
