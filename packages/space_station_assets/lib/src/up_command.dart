@@ -63,7 +63,7 @@ import 'package:grid_assets/grid_assets.dart'
 import 'package:grid_exploration/grid_exploration.dart'
     show stationVmServiceUri;
 import 'package:grid_runtime/grid_runtime.dart'
-    show GhPrOpener, GitOps, SystemGitRunner, SystemProcessGroupController;
+    show GhPrOpener, GitOps, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         GridHandle,
@@ -377,7 +377,6 @@ class UpCommand extends Command<int> {
       stationLock = await StationLockService(log: out).acquire(
         stateWorkspaceDir: config.gridHome,
         pid: pid,
-        pgid: SystemProcessGroupController().currentGroupId(),
         now: bootTime,
       );
     } on Object catch (e) {
