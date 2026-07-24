@@ -68,7 +68,7 @@ dependencies:
       url: git@github.com:memento-engineering/the_grid.git
       tag_pattern: grid_cli-v{{version}}
       path: packages/grid_cli
-    version: ^0.1.0
+    version: ^0.2.0
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.
