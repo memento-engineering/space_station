@@ -496,6 +496,10 @@ class UpCommand extends Command<int> {
         port: config.controlPort,
         token: token,
         view: () => _status(config, armed, bootTime, workRuntime),
+        // The fenced POST /command route (ADR-0014 D-C4, the_grid #106):
+        // operator commands execute IN this resident via the work runtime's
+        // vended handler (#104 seam).
+        commandHandler: workRuntime.commands,
       );
     } on Object catch (e) {
       await grid.teardown();
