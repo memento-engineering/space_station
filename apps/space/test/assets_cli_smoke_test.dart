@@ -16,7 +16,7 @@ void main() {
     '.claude/skills/discover/SKILL.md',
     '.claude/skills/gate-medicine/SKILL.md',
     '.claude/skills/harvest-review/SKILL.md',
-    '.claude/skills/intake-grooming/SKILL.md',
+    '.claude/skills/intake-refinement/SKILL.md',
     '.claude/skills/release/SKILL.md',
     '.claude/skills/station-operations/SKILL.md',
   ];

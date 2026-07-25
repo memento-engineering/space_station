@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@58a245a — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@9a453dd — do not edit; run `dart run space:space assets install`
 name: release
 description: >
   Cut a disciplined pub.dev release of a Dart package (or a workspace of them) —

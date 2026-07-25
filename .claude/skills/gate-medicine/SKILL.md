@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@cf7f0c0 — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@9a453dd — do not edit; run `dart run space:space assets install`
 name: gate-medicine
 description: >
   Diagnose and clear gated the_grid sessions: read the worktree critique
@@ -34,7 +34,7 @@ claims (files, commits, test names). Verify the load-bearing ones.
 
 - **`rc` non-zero + the bead has NO `validation_plan` metadata** → the
   plan-less default (`false`) — an intake miss, not bad work. Stamp the plan
-  (see `intake-grooming`), verify it, rework.
+  (see `intake-refinement`), verify it, rework.
 - **`rc` non-zero + a real plan** → run the plan yourself in the worktree.
   Environment failures (unresolved deps → bridge `pubspec_overrides.yaml`
   into the worktree; it is gitignored, safe) are yours to fix; genuine red is

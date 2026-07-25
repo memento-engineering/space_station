@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@cf7f0c0 — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@9a453dd — do not edit; run `dart run space:space assets install`
 name: station-operations
 description: >
   Operate the resident the_grid station: boot (dart run space:space up), bounce, tear
