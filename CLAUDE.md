@@ -24,7 +24,7 @@ You sit here as the **governor**: the *operator* of the resident station, not an
 
 - **You feed the backlog; you do not build.** The station's agents build — in the substations'
   worktrees, graded by the committee, landed as PRs. **Never edit engine or product code in this seat
-  to "fix" a bead.** If work needs doing, you *file, groom, and ready a bead*; the station drives it.
+  to "fix" a bead.** If work needs doing, you *file, refine, and ready a bead*; the station drives it.
 - **Your levers are backlog + station ops, nothing else:**
   - **Ready (kick in)** — undefer a bead into a substation's ready frontier. **Ready = in:** a live station
     mounts an agent on it within seconds.
@@ -198,13 +198,13 @@ writes to the `houston` state store so the work store stays read-only.
   `FederatedSnapshotSource._applyExternalDepGuard` keys `DependencyType.affectsBlocking` and fails
   closed when no member observes the target (the_grid ADR-0000 **A44**, pending). What `external:` does
   NOT give you is BEAD granularity — it says "project X shipped capability Z," not "this bead waits on
-  that bead" — so homing tightly-coupled beads in ONE store stays the simplest default: a grooming
+  that bead" — so homing tightly-coupled beads in ONE store stays the simplest default: a refinement
   CHOICE, not a platform limitation.
 - **The memento house set** (genesis ADR-0001 D7): Dart `^3.11`, freezed + json_serializable,
   exhaustive `switch`, Fakes-not-mocks, no `print` in lib. **Terminology:** "extension," never
   "plugin"; package names are faculties/crafts, never agent-nouns.
 - **Operator assets are GENERATED, never hand-edited.** `.claude/skills/` (`station-operations` —
-  boot/bounce/status/diagnose; `intake-grooming` — make a bead driveable; `harvest-review` — land
+  boot/bounce/status/diagnose; `intake-refinement` — make a bead driveable; `harvest-review` — land
   what the station built; `gate-medicine` — clear gated sessions; `discover`), `.claude/agents/governor.md`
   and `.claude/settings.json` are INSTALLED from `grid_assets`' vended `station_overlay` —
   `dart run space:space assets install` — and each carries a `generated from grid_assets@<ref>`

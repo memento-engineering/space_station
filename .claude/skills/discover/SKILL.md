@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@cf7f0c0 — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@9a453dd — do not edit; run `dart run space:space assets install`
 name: discover
 description: >
   The grid home's front door — the ONLY human-in-the-loop stage. Dispatches on
@@ -192,7 +192,7 @@ what we're building in one sentence.
 
 - Write acceptance criteria or implementation plans (the specify stage's job).
 - Write code, or edit engine/product code to "fix" a bead (the station's build
-  agents build; you file, groom, and bless).
+  agents build; you file, refine, and bless).
 - File a bead before the human confirms in topic research.
 - Run lifecycle-mutating commands from *Advisory* without explicit go-ahead —
   only *Directed* carries permission. Asking questions is not dispatching.
