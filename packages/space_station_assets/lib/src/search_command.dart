@@ -31,8 +31,6 @@ import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart'
     show SearchCommand, StationSearchService;
-import 'package:path/path.dart' as p;
-
 import 'space_delegate.dart';
 
 /// Builds the VENDED `search` Command curried with the station's
@@ -51,35 +49,17 @@ SearchCommand buildSpaceSearchCommand({
   StringSink? out,
   StringSink? err,
 }) {
-  late final SearchCommand command;
-  command = SearchCommand(
-    delegate: () {
-      final flag = command.argResults?.option('grid-home')?.trim();
-      final home = (flag == null || flag.isEmpty) ? gridHomeDefault() : flag;
-      if (!p.isAbsolute(home)) {
-        command.usageException(
-          'space search: --grid-home must be an ABSOLUTE path (got "$home") — '
-          'a cwd-relative grid home re-imports the ambience the v3 model kills '
-          '(the coded roster resolves its relative seats against it).',
-        );
-      }
-      // Search reads stores; it spawns no agent. The delegate's DEFAULT
-      // agent scope (the authoring-only claude rung, ADR-0008 D10) rides —
-      // this authoring-only mount never reads it.
-      return delegateFactory(gridRoot: p.normalize(home));
-    },
+  // The vended SearchCommand OWNS the --grid-home flag + absolute-path guard
+  // + normalization (pow-x3b, A24-aligned): the factory receives the resolved
+  // home. Search reads stores; it spawns no agent. The delegate's DEFAULT
+  // agent scope (the authoring-only claude rung, ADR-0008 D10) rides — this
+  // authoring-only mount never reads it.
+  final command = SearchCommand(
+    delegate: (gridHome) => delegateFactory(gridRoot: gridHome),
+    gridHomeDefault: gridHomeDefault,
     service: service,
     out: out,
     err: err,
-  );
-  command.argParser.addOption(
-    'grid-home',
-    abbr: 'g',
-    help:
-        "The grid's HOME (ABSOLUTE): the root the coded memento roster's "
-        '../<repo> substation seats resolve against. Defaults to the current '
-        'directory — `space` is run FROM its grid home. Read-only: search '
-        'attaches to no station, no state store, and no lock (A37).',
   );
   return command;
 }
