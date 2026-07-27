@@ -23,7 +23,7 @@ lenny debugging) and guarantees current source.
 ## Assemble
 
 ```sh
-dart pub get                       # resolves from the release tags (no siblings needed)
+dart pub get                       # resolves hosted releases (no siblings needed)
 dart run space:space up --grid-home "$(pwd)"   # arms the coded memento org (dry-run)
 ```
 
@@ -198,7 +198,6 @@ containers/VMs, not side-by-side processes on bare metal.
 
 ## Dev linkage
 
-Framework + asset packages are declared `any` and resolved via a machine-local
-`pubspec_overrides.yaml` (gitignored) — path deps into the sibling `../the_grid`
-and `../power_station` checkouts during dev. The dart domain's `grid dart link`
-generates it; see the_grid `docs/SCRATCH-pub-capability-and-repo-split.md`.
+Framework + asset packages resolve from committed hosted pub.dev constraints by default. This amends the earlier ADR-0003 D1 git-tag source because published sibling packages use hosted intra-repo dependencies, and pub cannot resolve one package from both git and hosted sources. Deliberate adoption still occurs through committed constraint bumps.
+
+For local co-editing only, `pubspec_overrides.yaml` (gitignored) path-overrides those hosted releases into sibling `../the_grid` and `../power_station` checkouts. The dart domain's `grid dart link` generates it; see the_grid `docs/SCRATCH-pub-capability-and-repo-split.md` and ADR-0003 D5.

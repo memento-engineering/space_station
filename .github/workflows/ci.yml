@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Resolve committed dependencies
+        run: dart pub get
+      - name: Analyze workspace
+        run: dart analyze
+      - name: Test space_station_assets
+        working-directory: packages/space_station_assets
+        run: dart test

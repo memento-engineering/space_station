@@ -98,23 +98,12 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 `space_station` is a **pub workspace** (`publish_to: none` throughout): the root `pubspec.yaml`
 lists the members (`apps/space`, `packages/space_station_assets`) + inline melos scripts.
 
-**Deps are RELEASE-TAG constraints (`space-td1`, LANDED; power_station ADR-0003).** Every private
-dep uses pub's [git-packages](https://dart.dev/tools/pub/dependencies#git-packages) `tag_pattern`
-form — `git: {url, tag_pattern: <package>-v{{version}}, path}` plus a normal `version:` constraint,
-so pub feeds the matching release tags to the VERSION SOLVER (Dart 3.9+); genesis packages resolve
-HOSTED from pub.dev. A plain checkout `dart pub get`s with **no sibling checkouts and no
-overrides** — space always compiles from its own source regardless of any producer's `main` (the
-wedge class that stalled the tkm/#56 arc is closed), and a breaking upstream change is adopted
-*deliberately* by bumping version constraints (patch/minor releases inside the constraint adopt on
-the next `pub upgrade`). For **local co-development** the gitignored, machine-local
-`pubspec_overrides.yaml` at the workspace root path-overrides the pins (ADR-0003 D5 — the org-dev
-escape hatch; it needs the sibling checkouts). One rule when touching deps: pub unifies git deps by
-**descriptor**, so every declaration of the same package (across members and producers) must carry
-the identical `{url, tag_pattern, path}` — mixed forms (a bare `ref:`, a `path:` sibling) do not
-unify with it.
+**Deps are HOSTED release constraints (`space-3yl`; amendment to `space-td1` / power_station ADR-0003 D1).** Every published `grid_*` and `beads_dart` dependency resolves from pub.dev at an explicit caret constraint. The deliberate-adoption intent of D1 remains: producer changes are adopted by bumping a committed constraint, while compatible releases inside it adopt on the next `dart pub upgrade`. The source changed because the published sibling packages themselves use hosted intra-repo dependencies; pub cannot resolve the same package from both git and hosted sources.
+
+A plain checkout `dart pub get`s with **no sibling checkouts and no overrides**. For **local co-development**, the gitignored, machine-local `pubspec_overrides.yaml` at the workspace root path-overrides hosted releases (ADR-0003 D5 — the org-dev escape hatch; it needs sibling checkouts). Dependency declarations shared by workspace members must use the same hosted constraint; `grid_cli` is `^0.3.0` in both members.
 
 ```bash
-dart pub get                              # resolves from the release tags (no siblings needed)
+dart pub get                              # resolves hosted releases (no siblings needed)
 dart analyze                              # workspace-wide, from the root
 (cd packages/space_station_assets && dart test)   # the composition suite
 (cd apps/space && dart test)              # the process-level CLI smokes
