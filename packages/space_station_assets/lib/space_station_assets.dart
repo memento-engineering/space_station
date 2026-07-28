@@ -59,7 +59,7 @@ import 'src/up_command.dart';
 // [buildRunner] as a SpaceDelegateFactory. codedRosterOf is the owned
 // (construct → mount → dispose) roster enumeration over that factory.
 export 'src/space_delegate.dart'
-    show SpaceDelegate, SpaceDelegateFactory, codedRosterOf;
+    show NoteAppender, SpaceDelegate, SpaceDelegateFactory, codedRosterOf;
 // The composition site of the VENDED `assets` Command group — exported so a
 // test (or a Flutter app) can build the seat with its seams injected.
 // kSpaceRunner rides along so a downstream runner can reference the canonical
