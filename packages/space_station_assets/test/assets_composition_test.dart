@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:grid_assets/grid_assets.dart'
+    show StationOverlaySource, kDefaultStationOverlayMappings;
 import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
@@ -38,14 +40,22 @@ void main() {
 
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  ({CommandRunner<int> runner, StringBuffer out, StringBuffer err}) harness() {
+  ({CommandRunner<int> runner, StringBuffer out, StringBuffer err}) harness({
+    String runnerInvocation = kSpaceRunner,
+  }) {
     final out = StringBuffer();
     final err = StringBuffer();
     final runner = CommandRunner<int>('space', "memento's grid station")
       ..addCommand(
         buildSpaceAssetsCommand(
           gridHomeDefault: () => seat.path,
-          roots: (_) async => [overlay.path],
+          runnerInvocation: runnerInvocation,
+          roots: (_) async => [
+            StationOverlaySource(
+              root: overlay.path,
+              mappings: kDefaultStationOverlayMappings,
+            ),
+          ],
           sourceRef: (_) => 'deadbee',
           out: out,
           err: err,
@@ -72,6 +82,16 @@ void main() {
       contains('`dart run space:space up --grid-home ${seat.path}`'),
     );
     expect(body, isNot(contains('{{')), reason: 'no hole survives the render');
+  });
+
+  test('`assets install` renders a downstream station JIT invocation through '
+      'the vended runnerInvocation seam', () async {
+    final h = harness(runnerInvocation: 'dart run lunar:lunar');
+    expect(await h.runner.run(['assets', 'install', '--no-diff']), 0);
+    expect(
+      skillIn(seat).readAsStringSync(),
+      contains('`dart run lunar:lunar up --grid-home ${seat.path}`'),
+    );
   });
 
   test('`assets install --check` is CURRENT on a freshly installed tree (0) '
