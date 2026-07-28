@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:grid_cli/grid_cli.dart' show StationLockService;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_lock.dart' show StationLockService;
 import 'package:test/test.dart';
 
 import 'station_fixtures.dart';

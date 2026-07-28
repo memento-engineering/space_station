@@ -42,8 +42,14 @@ import 'package:grid_assets/grid_assets.dart'
         DispatchCommand,
         computeDispatchHandler,
         kComputeKind;
-import 'package:grid_cli/grid_cli.dart'
-    show DemoCommand, GateCommand, ReloadCommand, ReworkCommand, WatchCommand;
+// ignore: implementation_imports
+import 'package:grid_cli/src/gate_command.dart' show GateCommand;
+// ignore: implementation_imports
+import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
+// ignore: implementation_imports
+import 'package:grid_cli/src/rework_command.dart' show ReworkCommand;
+// ignore: implementation_imports
+import 'package:grid_cli/src/watch_command.dart' show WatchCommand;
 
 import 'src/assets_command.dart';
 import 'src/down_command.dart';
@@ -136,7 +142,6 @@ CommandRunner<int> buildRunner({
   ..addCommand(DartCommand())
   ..addCommand(GateCommand())
   ..addCommand(ReworkCommand())
-  ..addCommand(DemoCommand())
   // serve/lease are GENERIC core commands ("leasing is core"); the
   // COMPUTE asset's use (bounded dispatch + its payload/result codec) is
   // assembled in here — the asset owns the "use" (ADR-0011 D3).

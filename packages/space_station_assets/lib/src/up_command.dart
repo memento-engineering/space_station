@@ -49,13 +49,12 @@ import 'package:grid_assets/grid_assets.dart'
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
-import 'package:grid_cli/grid_cli.dart'
-    show
-        StationControl,
-        StationLockHandle,
-        StationLockService,
-        StationStatus,
-        mintControlToken;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_control.dart'
+    show StationControl, StationStatus, mintControlToken;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_lock.dart'
+    show StationLockHandle, StationLockService;
 import 'package:grid_assets/grid_assets.dart'
     show CodeCircuitResolver, kCodeCircuit;
 // The RUN-MODE probe: this process's own VM-service URI (JIT) or null (AOT) —

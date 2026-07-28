@@ -13,7 +13,8 @@ library;
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:grid_cli/grid_cli.dart'
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_attach.dart'
     show AlreadyDown, StationAttach, Stopped, TimedOut;
 
 import 'attach_support.dart';

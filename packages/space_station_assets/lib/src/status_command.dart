@@ -22,7 +22,8 @@ import 'package:beads_dart/beads_dart.dart'
         CliSnapshotReader,
         GraphSnapshot,
         ProcessBdRunner;
-import 'package:grid_cli/grid_cli.dart'
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_attach.dart'
     show AttachResult, Down, StationAttach, Stale, Unauthorized, Up;
 import 'package:grid_runtime/grid_runtime.dart' show BeadOwnershipPredicate;
 

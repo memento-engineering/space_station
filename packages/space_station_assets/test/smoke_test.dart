@@ -1,5 +1,6 @@
 import 'package:grid_assets/grid_assets.dart' show SearchCommand;
-import 'package:grid_cli/grid_cli.dart' show ReloadCommand;
+// ignore: implementation_imports
+import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
@@ -19,11 +20,11 @@ void main() {
         'search',
         'dart',
         'gate',
-        'demo',
         'serve',
         'lease',
       ]),
     );
+    expect(runner.commands['demo'], isNull);
   });
 
   test('`search` is the VENDED grid_assets Command, composed — not a '
