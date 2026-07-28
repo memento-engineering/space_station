@@ -22,56 +22,22 @@ library;
 import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart'
-    show AssetsCommand, OverlayInstallReport, OverlayInstallService;
+    show AssetsCommand, OverlayInstallService, StationOverlaySource;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
 
-/// The verb the vended operator skills' `{{runner}}` holes render to. space is
-/// JIT-only — there is deliberately no `space` binary (`CLAUDE.md`: "JIT only —
-/// never AOT"), so the installed manual must teach the workspace-addressable
-/// JIT invocation (`dart run space:space`, resolvable from the workspace
-/// root), NEVER the runner's own executable name (`space`, the vended
-/// `kDefaultOverlayRunner` the install reads off `runner.executableName`).
+/// The verb [AssetsCommand.runnerInvocation] renders into the vended operator
+/// skills' `{{runner}}` holes. space is JIT-only — there is deliberately no
+/// `space` binary (`CLAUDE.md`: "JIT only — never AOT"), so the installed
+/// manual must teach the workspace-addressable JIT invocation (`dart run
+/// space:space`, resolvable from the workspace root), NEVER the runner's own
+/// executable name.
 ///
 /// A downstream station overrides this per-install via
 /// [buildSpaceAssetsCommand]'s `runnerInvocation` (e.g. `dart run
 /// lunar:lunar`), so ITS installed manual teaches ITS runner.
 const String kSpaceRunner = 'dart run space:space';
-
-/// The vended [OverlayInstallService] with the ONE station-specific override:
-/// it FORCES the overlay's `{{runner}}` arg to the station's JIT invocation
-/// before the materializer renders and stamps.
-///
-/// The vended `AssetsInstallCommand.run()` binds `runner` off
-/// `runner.executableName` (`space`); a station cannot rename its
-/// `CommandRunner` without corrupting every other command's usage banner, so it
-/// overrides the value at the single seam it owns — the injected service. A
-/// THIN forward (one arg rewritten, everything else passed through), not a
-/// re-implementation.
-class _SpaceOverlayInstallService extends OverlayInstallService {
-  const _SpaceOverlayInstallService([this.runnerInvocation = kSpaceRunner]);
-
-  /// The JIT invocation rendered into every `{{runner}}` hole.
-  final String runnerInvocation;
-
-  @override
-  Future<OverlayInstallReport> install({
-    required List<String> overlayRoots,
-    required String targetRoot,
-    required String sourceRef,
-    Map<String, String> args = const {},
-    bool check = false,
-  }) => super.install(
-    overlayRoots: overlayRoots,
-    targetRoot: targetRoot,
-    sourceRef: sourceRef,
-    // run() set args['runner'] = runner.executableName ('space'); overwrite it
-    // with the JIT invocation. gridHome (and any other arg) rides through.
-    args: {...args, 'runner': runnerInvocation},
-    check: check,
-  );
-}
 
 /// Builds the VENDED `assets` Command group curried with space's
 /// resident-station context ([SpaceDelegate]).
@@ -82,22 +48,22 @@ class _SpaceOverlayInstallService extends OverlayInstallService {
 /// provenance-ref resolver — all three default to the vended implementations
 /// (tests inject a fake overlay root and a fixed ref, so no `git` subprocess
 /// runs). [runnerInvocation] is the JIT invocation rendered into the manual's
-/// `{{runner}}` holes (a downstream station passes its own, e.g. `dart run
-/// lunar:lunar`); it feeds the DEFAULT service only — an explicit [service]
-/// owns its own runner arg. [delegateFactory] names WHICH [SpaceDelegate]
-/// subclass authors the station (the base class absent: space's posture).
+/// `{{runner}}` holes through [AssetsCommand.runnerInvocation], the single
+/// vended seam for a station's JIT invocation (a downstream station passes its
+/// own, e.g. `dart run lunar:lunar`). [delegateFactory] names WHICH
+/// [SpaceDelegate] subclass authors the station (the base class absent: space's
+/// posture).
 /// [out]/[err] default to the process sinks.
 AssetsCommand buildSpaceAssetsCommand({
   String Function() gridHomeDefault = _currentDirectory,
   OverlayInstallService? service,
   String runnerInvocation = kSpaceRunner,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
-  Future<List<String>> Function(String gridHome)? roots,
+  Future<List<StationOverlaySource>> Function(String gridHome)? roots,
   String Function(String overlayRoot)? sourceRef,
   StringSink? out,
   StringSink? err,
 }) {
-  service ??= _SpaceOverlayInstallService(runnerInvocation);
   late final AssetsCommand command;
   command = AssetsCommand(
     delegate: () {
@@ -119,7 +85,8 @@ AssetsCommand buildSpaceAssetsCommand({
       // ADR-0008 D10) rides — this authoring-only mount never reads it.
       return delegateFactory(gridRoot: p.normalize(home));
     },
-    service: service,
+    service: service ?? const OverlayInstallService(),
+    runnerInvocation: runnerInvocation,
     roots: roots,
     sourceRef: sourceRef,
     out: out,
