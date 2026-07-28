@@ -49,15 +49,14 @@ import 'package:grid_assets/grid_assets.dart'
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
-import 'package:grid_cli/grid_cli.dart'
-    show
-        StationControl,
-        StationLockHandle,
-        StationLockService,
-        StationStatus,
-        mintControlToken;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_control.dart'
+    show StationControl, StationStatus, mintControlToken;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_lock.dart'
+    show StationLockHandle, StationLockService;
 import 'package:grid_assets/grid_assets.dart'
-    show CodeCircuitResolver, buildCodeRegistry, kCodeCircuit;
+    show CodeCircuitResolver, kCodeCircuit;
 // The RUN-MODE probe: this process's own VM-service URI (JIT) or null (AOT) —
 // the WHOLE dev-mode gate.
 import 'package:grid_exploration/grid_exploration.dart'
@@ -399,6 +398,15 @@ class UpCommand extends Command<int> {
     // once no OPEN session carries a pre-fold cursor, this reverts to the plain
     // shape-agnostic resolver and that file is deleted. This is scaffolding
     // with an expiry, not a permanent seam.
+    final live = !config.dryRun;
+    final workPolicyDelegate = _delegateFactory(
+      gridRoot: config.gridHome,
+      appended: config.appended,
+      agentConfig: agentConfig,
+      harnesses: harnesses,
+      gitOps: live ? GitOps(SystemGitRunner()) : null,
+      prOpener: live ? GhPrOpener(ghRunner) : null,
+    );
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await buildStationWork(
@@ -407,12 +415,17 @@ class UpCommand extends Command<int> {
           for (final s in armed)
             SubstationWorkSpec(name: s.name, root: s.root, prefix: s.prefix),
         ],
-        resolver: const CodeCircuitResolver(kCodeCircuit),
-        registry: buildCodeRegistry(),
+        resolver: CodeCircuitResolver(
+          kCodeCircuit,
+          overrideFor: workPolicyDelegate.circuitOverrideFor,
+        ),
+        registryBuilder: (appendNote) =>
+            workPolicyDelegate.buildWorkRegistry(appendNote),
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
       );
     } on Object catch (e) {
+      workPolicyDelegate.dispose();
       await stationLock.release();
       err('space up: $e');
       return 1;
@@ -425,6 +438,7 @@ class UpCommand extends Command<int> {
       await workRuntime.start();
     } on Object catch (e) {
       await workRuntime.shutdown();
+      workPolicyDelegate.dispose();
       await stationLock.release();
       err('space up: $e');
       return 1;
@@ -445,8 +459,6 @@ class UpCommand extends Command<int> {
     // The runner's only say is the DRY/LIVE posture it already owns. A LIVE arm
     // hands the real halves over; `--dry-run` constructs NEITHER — no `git`, no
     // `gh` — so the tree binds no delivery and the dry run stays inert.
-    final live = !config.dryRun;
-
     // The RUN MODE is the WHOLE dev-mode gate: a JIT station launched with
     // `--enable-vm-service` reports a VM service; an AOT binary reports none.
     // No hostname allowlist, no env var, no flag, no config — and no filesystem
@@ -480,6 +492,7 @@ class UpCommand extends Command<int> {
       );
     } on Object catch (e) {
       await workRuntime.shutdown();
+      workPolicyDelegate.dispose();
       await stationLock.release();
       err('space up: $e');
       return 64;
@@ -504,6 +517,7 @@ class UpCommand extends Command<int> {
     } on Object catch (e) {
       await grid.teardown();
       await workRuntime.shutdown();
+      workPolicyDelegate.dispose();
       await stationLock.release();
       err('space up: $e');
       return 1;
@@ -529,6 +543,7 @@ class UpCommand extends Command<int> {
       await control.dispose();
       await grid.teardown();
       await workRuntime.shutdown();
+      workPolicyDelegate.dispose();
       await stationLock.release();
       err('space up: $e');
       return 1;
@@ -591,6 +606,7 @@ class UpCommand extends Command<int> {
       await control.dispose();
       await grid.teardown();
       await workRuntime.shutdown();
+      workPolicyDelegate.dispose();
       await stationLock.release();
     }
 

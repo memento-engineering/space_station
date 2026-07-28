@@ -49,6 +49,7 @@
 library;
 
 import 'package:args/args.dart';
+import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -59,6 +60,7 @@ import 'package:grid_assets/grid_assets.dart'
         GitServices,
         HarnessProvider,
         buildBuiltinEnvironmentRegistry,
+        buildCodeRegistry,
         mountedRosterOf;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, StationGitService;
@@ -83,6 +85,10 @@ typedef SpaceDelegateFactory =
       GitOps? gitOps,
       PrOpener? prOpener,
     });
+
+/// Appends one resident capability log [line] to [beadId]'s notes through the
+/// station-owned write chokepoint.
+typedef NoteAppender = Future<void> Function(String beadId, String line);
 
 /// Enumerates the CODED roster of the station [factory] authors — an offline
 /// authoring mount of one delegate at [gridRoot], walked for its
@@ -131,6 +137,10 @@ List<sdk.SubstationScope> codedRosterOf(
 ///
 ///  * [stationName] — the station's identity;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
+///  * [circuitOverrideFor] — bead-scoped non-code routing; null retains the
+///    migration-aware code policy;
+///  * [buildWorkRegistry] — the resident capability composition, built over
+///    the station-owned note appender;
 ///  * [substations] — THE roster hook: the coded drive set as authored
 ///    seats. Compose, don't replace;
 ///  * [seat] — the standard per-seat asset stack; override it to change the
@@ -197,6 +207,20 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// home lives elsewhere points this at the umbrella (e.g.
   /// `'../../engineering.memento'`).
   String get umbrella => '..';
+
+  /// Selects a non-code root circuit for [bead], or null to retain the
+  /// migration-aware code-circuit policy. OVERRIDE POINT: a downstream station
+  /// returns a circuit only for work it owns; null preserves code-shape bounce
+  /// protection.
+  sdk.Circuit? circuitOverrideFor(Bead bead) => null;
+
+  /// Builds this station's resident work capability registry.
+  ///
+  /// [appendNote] is backed by the assembled runtime's ownership-checked bead
+  /// writer. OVERRIDE POINT: downstream registries pass it to capabilities that
+  /// persist operational lines; the code registry does not consume it.
+  sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) =>
+      buildCodeRegistry();
 
   /// The operator's `--substation` flags, parsed into ready [sdk.Substation]
   /// seats — the APPEND layer (Fork B, round 3): they spread AFTER the coded

@@ -1,5 +1,9 @@
+import 'dart:io';
+
+import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
-import 'package:grid_assets/grid_assets.dart' show AgentConfig;
+import 'package:grid_assets/grid_assets.dart'
+    show AgentConfig, buildCodeRegistry, kCodeCircuit;
 import 'package:grid_runtime/grid_runtime.dart'
     show PrOpener, PullRequestRef, PullRequestResult;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
@@ -76,6 +80,59 @@ void main() {
       expect(delegate().harnesses.names, contains('claude'));
     });
   });
+
+  group('SpaceDelegate — resident work policy hooks', () {
+    test('defaults retain migration-aware routing and the code registry', () {
+      final subject = delegate();
+      expect(subject.circuitOverrideFor(const Bead(id: 'space-code')), isNull);
+
+      final registry = subject.buildWorkRegistry((_, _) async {});
+      for (final id in <String>{
+        'code',
+        'spec_review',
+        'discovery',
+        'code_review',
+        'docs_review',
+        'landing',
+      }) {
+        expect(registry.circuit(id), isNotNull, reason: id);
+      }
+    });
+
+    test('a downstream delegate selects only its marker bead', () {
+      final subject = _MarkerDelegate(gridRoot: '/home/space');
+      expect(
+        subject.circuitOverrideFor(const Bead(id: 'space-marker')),
+        same(_MarkerDelegate.markerCircuit),
+      );
+      expect(subject.circuitOverrideFor(const Bead(id: 'space-code')), isNull);
+
+      final registry = subject.buildWorkRegistry((_, _) async {});
+      expect(registry.circuit('code'), same(kCodeCircuit));
+      expect(subject.receivedAppender, isNotNull);
+    });
+
+    test('resident assembly owns and disposes its policy delegate', () {
+      final source = File('lib/src/up_command.dart').readAsStringSync();
+      final construction = source.indexOf('final workPolicyDelegate =');
+      final assembly = source.indexOf('workRuntime = await buildStationWork(');
+      expect(construction, greaterThanOrEqualTo(0));
+      expect(construction, lessThan(assembly));
+      expect(
+        source,
+        contains('overrideFor: workPolicyDelegate.circuitOverrideFor'),
+      );
+      expect(
+        source,
+        contains('workPolicyDelegate.buildWorkRegistry(appendNote)'),
+      );
+      expect(source, isNot(contains('registry: buildCodeRegistry()')));
+      expect(
+        RegExp(r'workPolicyDelegate\.dispose\(\);').allMatches(source).length,
+        6,
+      );
+    });
+  });
 }
 
 /// Mounts [root] in a bare tree and flushes one build pass (the Track B/F
@@ -111,4 +168,22 @@ class _FakePrOpener implements PrOpener {
     String body = '',
   }) async =>
       PullRequestResult.opened(const PullRequestRef(url: 'https://x/pr/1'));
+}
+
+class _MarkerDelegate extends SpaceDelegate {
+  _MarkerDelegate({required super.gridRoot});
+
+  static final sdk.Circuit markerCircuit = kCodeCircuit.copyWith(id: 'marker');
+
+  NoteAppender? receivedAppender;
+
+  @override
+  sdk.Circuit? circuitOverrideFor(Bead bead) =>
+      bead.id == 'space-marker' ? markerCircuit : null;
+
+  @override
+  sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) {
+    receivedAppender = appendNote;
+    return buildCodeRegistry();
+  }
 }

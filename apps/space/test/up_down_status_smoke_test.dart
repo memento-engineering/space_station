@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:grid_cli/grid_cli.dart' show StationLockService;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_lock.dart' show StationLockService;
 import 'package:test/test.dart';
 
 /// RS-5b / H2 (tg-r81, `the_grid/docs/SCRATCH-resident-station.md` D-R1/D-C3):
