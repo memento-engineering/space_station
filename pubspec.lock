@@ -42,12 +42,11 @@ packages:
     source: hosted
     version: "2.13.1"
   beads_dart:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: beads_dart
-      sha256: "2e7e06b4d0ab95b6aee44bf3fec408c043837d731e4782f2ac85219ab805ff68"
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/beads_dart"
+      relative: false
+    source: path
     version: "0.1.1"
   boolean_selector:
     dependency: transitive
@@ -146,12 +145,11 @@ packages:
     source: hosted
     version: "3.0.7"
   dart_grid_assets:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: dart_grid_assets
-      sha256: "5c84e0f632de1b0a0c97775eb7747e4d5ed34d5c876c2ff8a47f9dbde9c979b2"
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/power_station/packages/dart_grid_assets"
+      relative: false
+    source: path
     version: "0.1.0"
   extension_discovery:
     dependency: transitive
@@ -162,12 +160,11 @@ packages:
     source: hosted
     version: "2.1.0"
   federated_grid_assets:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: federated_grid_assets
-      sha256: d0527e5e6636ef3a52e5dd432ad806b5ba21c57a0b188dce8336d9a9e0e534bf
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/power_station/packages/federated_grid_assets"
+      relative: false
+    source: path
     version: "0.1.0"
   ffi:
     dependency: transitive
@@ -201,14 +198,27 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.0"
-  genesis_tree:
-    dependency: transitive
+  genesis_foundation:
+    dependency: "direct overridden"
     description:
-      name: genesis_tree
-      sha256: "03f1bbd0e2f6d8ac3f43fb9a1729c06d43a332012b72d51f2f0dab499d7d4199"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.5"
+      path: "/Users/nico/development/engineering.memento/genesis/packages/foundation"
+      relative: false
+    source: path
+    version: "0.2.0"
+  genesis_perception:
+    dependency: "direct overridden"
+    description:
+      path: "/Users/nico/development/engineering.memento/genesis/packages/perception"
+      relative: false
+    source: path
+    version: "0.2.0"
+  genesis_tree:
+    dependency: "direct overridden"
+    description:
+      path: "/Users/nico/development/engineering.memento/genesis/packages/tree"
+      relative: false
+    source: path
+    version: "0.2.0"
   glob:
     dependency: transitive
     description:
@@ -226,60 +236,53 @@ packages:
     source: hosted
     version: "2.3.2"
   grid_assets:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_assets
-      sha256: "11f1fcee00b5e79ced36b223f36efa34174900aacfa02961b89d1b366659780b"
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/power_station/packages/grid_assets"
+      relative: false
+    source: path
     version: "0.3.1"
   grid_cli:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_cli
-      sha256: a029e51e43d93dfb05e8c35dc67a60a967124a6b756644d9784788c850aeb2ec
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.0"
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_cli"
+      relative: false
+    source: path
+    version: "0.4.0"
   grid_diagnostics_contract:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_diagnostics_contract
-      sha256: a37d55f68287b9843a96361ffb08aa995070aa5e30e51dc67832c72014941675
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.1"
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_diagnostics_contract"
+      relative: false
+    source: path
+    version: "0.1.2"
   grid_engine:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_engine
-      sha256: "616b3f323634c6f7b29697efb5e306d180cb74f443c14a4514ea7290c00aa595"
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_engine"
+      relative: false
+    source: path
     version: "0.1.2"
   grid_exploration:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_exploration
-      sha256: "10383ac8879e36fae92ef499348fd0186b14f533ac6d04b912fc853d4cbb627b"
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_exploration"
+      relative: false
+    source: path
     version: "0.1.1"
   grid_runtime:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_runtime
-      sha256: "7ba1a76317facee19714994925d0165ac5416c57dc97109b69ae8d9640275eeb"
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_runtime"
+      relative: false
+    source: path
     version: "0.1.2"
   grid_sdk:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: grid_sdk
-      sha256: e296b11bf1a313c18b54f8456f8f9ed21fc9c4170dea371e49ad6de6edc03fc6
-      url: "https://pub.dev"
-    source: hosted
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_sdk"
+      relative: false
+    source: path
     version: "0.1.3"
   http:
     dependency: transitive
@@ -321,6 +324,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.12.0"
+  leonard_contract:
+    dependency: transitive
+    description:
+      name: leonard_contract
+      sha256: "6195985d4d92250fafddf1a64c343cfef0152537d7522ef58acbdf24b18a9ed5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.1"
   lints:
     dependency: transitive
     description:
