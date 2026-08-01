@@ -53,6 +53,7 @@ import 'package:grid_cli/src/watch_command.dart' show WatchCommand;
 
 import 'src/assets_command.dart';
 import 'src/down_command.dart';
+import 'src/link_commands.dart';
 import 'src/search_command.dart';
 import 'src/space_delegate.dart';
 import 'src/status_command.dart';
@@ -74,6 +75,8 @@ export 'src/assets_command.dart' show buildSpaceAssetsCommand, kSpaceRunner;
 // The composition site of the VENDED `search` Command — exported so a test
 // (or a Flutter app) can build the seat with its seams injected.
 export 'src/search_command.dart' show buildSpaceSearchCommand;
+export 'src/link_commands.dart'
+    show SpaceLinkCommands, buildSpaceLinkCommands, kSpaceStateStorePrefix;
 
 /// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
 /// the power_station assets' exported Commands, with the COMPUTE asset's use
@@ -95,114 +98,119 @@ CommandRunner<int> buildRunner({
   String description = "memento's grid station",
   String runnerInvocation = kSpaceRunner,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
-}) => CommandRunner<int>(name, description)
-  ..addCommand(WatchCommand())
-  // memento's OWN resident verbs (RS-5b): the composed resident station
-  // (up) + the thin StationAttach renders over it (down/status).
-  ..addCommand(UpCommand(delegateFactory: delegateFactory))
-  ..addCommand(DownCommand())
-  ..addCommand(StatusCommand())
-  // The operator's EXPLICIT hot-reload trigger. `reload` talks to the
-  // RESIDENT station over the VM service it advertised in its lock — it
-  // starts no second station and watches no file. Generic and
-  // asset-agnostic (it carries its own --grid-home/--restart flags and
-  // injects its own client), so it is composed BARE — contrast `search`
-  // below, which is curried with space's station context because the
-  // ASSET's Command needs it.
-  ..addCommand(ReloadCommand())
-  // The SEARCH asset's exported CLI component, COMPOSED with space's
-  // resident-station context — `space search <query>`: the deterministic,
-  // read-only (A37) cross-store search the `discover` skill CALLS instead
-  // of reinventing it by inference (the coupled skill+command pattern,
-  // power_station ADR-0001). The logic is the asset's; this is the
-  // last-mile composition.
-  ..addCommand(buildSpaceSearchCommand(delegateFactory: delegateFactory))
-  // The ASSETS domain's exported Command group, COMPOSED with space's
-  // resident-station context — `space assets install`: the operator leg of
-  // overlay delivery. It overlays the vended `station_overlay` onto THIS
-  // repo's root, path-preserving and provenance-stamped, so the operator's
-  // own manual (the skills, the governor agent-def, the harness settings)
-  // is GENERATED from grid_assets rather than hand-copied here. NEVER
-  // folded into `up` — installing the manual is an explicit act, the same
-  // reason auto-reload was rejected.
-  ..addCommand(
-    buildSpaceAssetsCommand(
-      runnerInvocation: runnerInvocation,
-      delegateFactory: delegateFactory,
-    ),
-  )
-  // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
-  // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
-  // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
-  // when butane_grid_assets migrates (butane integration is deprioritized
-  // per Nico's policy; the pack stays with its domain).
-  // Asset-exported Commands consumed by a runner (the CLI-SDK model): the
-  // DART domain ships DartCommand from dart_grid_assets; this app just
-  // assembles it.
-  ..addCommand(DartCommand())
-  ..addCommand(GateCommand())
-  ..addCommand(ReworkCommand())
-  // serve/lease are GENERIC core commands ("leasing is core"); the
-  // COMPUTE asset's use (bounded dispatch + its payload/result codec) is
-  // assembled in here — the asset owns the "use" (ADR-0011 D3).
-  ..addCommand(
-    ServeCommand(
-      defaultKind: kComputeKind,
-      configureFlags: (parser) => parser
-        ..addMultiOption(
-          'allow',
-          defaultsTo: const [
-            'dart',
-            'echo',
-            'flutter',
-            'git',
-            'hostname',
-            'melos',
-            'uname',
-          ],
-          help:
-              'The executables the lessor will run (the bounded-use '
-              'allow-list). A dispatched command not on this list is '
-              'REFUSED (no shell-as-a-service; ADR-0011 RCE-bounds).',
-        )
-        ..addOption(
-          'exec-timeout',
-          defaultsTo: '300',
-          help:
-              'Per-command timeout in seconds (the bounded-use upper '
-              'bound).',
-        ),
-      handlerFor: (args, log) {
-        final bounds = ComputeBounds(
-          allowedCommands: args.multiOption('allow').toSet(),
-          timeout: Duration(seconds: int.parse(args.option('exec-timeout')!)),
-        );
-        return (
-          handler: computeDispatchHandler(bounds: bounds, onLog: log),
-          banner:
-              'bounded use: allow-list '
-              '${bounds.allowedCommands.toList()..sort()}  ·  '
-              'timeout ${bounds.timeout.inSeconds}s',
-          // Compute launches nothing that outlives a dispatch — no
-          // lease-end teardown (the burn's lessor, by contrast, reaps
-          // its follower app here).
-          onLeaseEnded: null,
-        );
-      },
-    ),
-  )
-  ..addCommand(
-    LeaseCommand(
-      defaultKind: kComputeKind,
-      payloadFor: (rest) => DispatchCommand(
-        command: rest.first,
-        args: rest.skip(1).toList(),
-      ).toJson(),
-      render: (raw, out, err) {
-        final r = CommandResult.fromJson(raw);
-        if (r.stdout.isNotEmpty) out(r.stdout);
-        if (r.stderr.isNotEmpty) err(r.stderr);
-        return r.exitCode;
-      },
-    ),
-  );
+}) {
+  final linkCommands = buildSpaceLinkCommands(delegateFactory: delegateFactory);
+  return CommandRunner<int>(name, description)
+    ..addCommand(WatchCommand())
+    // memento's OWN resident verbs (RS-5b): the composed resident station
+    // (up) + the thin StationAttach renders over it (down/status).
+    ..addCommand(UpCommand(delegateFactory: delegateFactory))
+    ..addCommand(DownCommand())
+    ..addCommand(StatusCommand())
+    // The operator's EXPLICIT hot-reload trigger. `reload` talks to the
+    // RESIDENT station over the VM service it advertised in its lock — it
+    // starts no second station and watches no file. Generic and
+    // asset-agnostic (it carries its own --grid-home/--restart flags and
+    // injects its own client), so it is composed BARE — contrast `search`
+    // below, which is curried with space's station context because the
+    // ASSET's Command needs it.
+    ..addCommand(ReloadCommand())
+    // The SEARCH asset's exported CLI component, COMPOSED with space's
+    // resident-station context — `space search <query>`: the deterministic,
+    // read-only (A37) cross-store search the `discover` skill CALLS instead
+    // of reinventing it by inference (the coupled skill+command pattern,
+    // power_station ADR-0001). The logic is the asset's; this is the
+    // last-mile composition.
+    ..addCommand(buildSpaceSearchCommand(delegateFactory: delegateFactory))
+    ..addCommand(linkCommands.link)
+    ..addCommand(linkCommands.unlink)
+    // The ASSETS domain's exported Command group, COMPOSED with space's
+    // resident-station context — `space assets install`: the operator leg of
+    // overlay delivery. It overlays the vended `station_overlay` onto THIS
+    // repo's root, path-preserving and provenance-stamped, so the operator's
+    // own manual (the skills, the governor agent-def, the harness settings)
+    // is GENERATED from grid_assets rather than hand-copied here. NEVER
+    // folded into `up` — installing the manual is an explicit act, the same
+    // reason auto-reload was rejected.
+    ..addCommand(
+      buildSpaceAssetsCommand(
+        runnerInvocation: runnerInvocation,
+        delegateFactory: delegateFactory,
+      ),
+    )
+    // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
+    // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
+    // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
+    // when butane_grid_assets migrates (butane integration is deprioritized
+    // per Nico's policy; the pack stays with its domain).
+    // Asset-exported Commands consumed by a runner (the CLI-SDK model): the
+    // DART domain ships DartCommand from dart_grid_assets; this app just
+    // assembles it.
+    ..addCommand(DartCommand())
+    ..addCommand(GateCommand())
+    ..addCommand(ReworkCommand())
+    // serve/lease are GENERIC core commands ("leasing is core"); the
+    // COMPUTE asset's use (bounded dispatch + its payload/result codec) is
+    // assembled in here — the asset owns the "use" (ADR-0011 D3).
+    ..addCommand(
+      ServeCommand(
+        defaultKind: kComputeKind,
+        configureFlags: (parser) => parser
+          ..addMultiOption(
+            'allow',
+            defaultsTo: const [
+              'dart',
+              'echo',
+              'flutter',
+              'git',
+              'hostname',
+              'melos',
+              'uname',
+            ],
+            help:
+                'The executables the lessor will run (the bounded-use '
+                'allow-list). A dispatched command not on this list is '
+                'REFUSED (no shell-as-a-service; ADR-0011 RCE-bounds).',
+          )
+          ..addOption(
+            'exec-timeout',
+            defaultsTo: '300',
+            help:
+                'Per-command timeout in seconds (the bounded-use upper '
+                'bound).',
+          ),
+        handlerFor: (args, log) {
+          final bounds = ComputeBounds(
+            allowedCommands: args.multiOption('allow').toSet(),
+            timeout: Duration(seconds: int.parse(args.option('exec-timeout')!)),
+          );
+          return (
+            handler: computeDispatchHandler(bounds: bounds, onLog: log),
+            banner:
+                'bounded use: allow-list '
+                '${bounds.allowedCommands.toList()..sort()}  ·  '
+                'timeout ${bounds.timeout.inSeconds}s',
+            // Compute launches nothing that outlives a dispatch — no
+            // lease-end teardown (the burn's lessor, by contrast, reaps
+            // its follower app here).
+            onLeaseEnded: null,
+          );
+        },
+      ),
+    )
+    ..addCommand(
+      LeaseCommand(
+        defaultKind: kComputeKind,
+        payloadFor: (rest) => DispatchCommand(
+          command: rest.first,
+          args: rest.skip(1).toList(),
+        ).toJson(),
+        render: (raw, out, err) {
+          final r = CommandResult.fromJson(raw);
+          if (r.stdout.isNotEmpty) out(r.stdout);
+          if (r.stderr.isNotEmpty) err(r.stderr);
+          return r.exitCode;
+        },
+      ),
+    );
+}
