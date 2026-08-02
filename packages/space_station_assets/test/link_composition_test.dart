@@ -1,3 +1,6 @@
+@Tags(['bd-e2e'])
+library;
+
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
