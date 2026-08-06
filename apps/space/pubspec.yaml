@@ -18,7 +18,7 @@ dev_dependencies:
   # The process-level smokes drive the REAL runner and assert over grid_cli's
   # lock/attach surfaces directly. Keep this constraint identical to
   # space_station_assets so the workspace resolves one hosted grid_cli release.
-  grid_cli: ^0.4.1
+  grid_cli: ^0.5.0-rc.1
   lints: ^5.1.0
   path: ^1.9.0
   test: ^1.25.0

@@ -126,9 +126,14 @@ JoinedSnapshot _read(JoinedSnapshotNotifier notifier) {
 
 Future<List<Bead>> _stateBeads(String stateRoot) async {
   final workspace = BeadsWorkspace.discover(start: stateRoot)!;
-  return (await BdCliService(
-    ProcessBdRunner(workspaceRoot: workspace.root),
-  ).exportAll()).beads;
+  // tg-w478 retired `bd export` (BdCliService.exportAll) — it is refused in
+  // proxied-server mode. One all-status query is the replacement whole-graph
+  // read; closed beads are included because the link frontier spans them.
+  return BdCliService(ProcessBdRunner(workspaceRoot: workspace.root)).query(
+    'status=open OR status=in_progress OR status=blocked OR '
+    'status=deferred OR status=closed',
+    includeClosed: true,
+  );
 }
 
 void main() {
