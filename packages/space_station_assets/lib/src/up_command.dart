@@ -50,6 +50,7 @@ import 'package:grid_assets/grid_assets.dart'
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
 // ignore: implementation_imports
+import 'package:grid_cli/grid_cli.dart' show StationDiagnosticsReporter;
 import 'package:grid_cli/src/station_control.dart'
     show StationControl, StationStatus, mintControlToken;
 // ignore: implementation_imports
@@ -373,11 +374,9 @@ class UpCommand extends Command<int> {
     final bootTime = DateTime.now();
     final StationLockHandle stationLock;
     try {
-      stationLock = await StationLockService(log: out).acquire(
-        stateWorkspaceDir: config.gridHome,
-        pid: pid,
-        now: bootTime,
-      );
+      stationLock = await StationLockService(
+        log: out,
+      ).acquire(stateWorkspaceDir: config.gridHome, pid: pid, now: bootTime);
     } on Object catch (e) {
       err('$e');
       return 64;
@@ -407,6 +406,12 @@ class UpCommand extends Command<int> {
       gitOps: live ? GitOps(SystemGitRunner()) : null,
       prOpener: live ? GhPrOpener(ghRunner) : null,
     );
+    // ONE diagnostics reporter across all three rails (the ratified reporter,
+    // now armed in space's own composition): engine flares emit as JSON lines
+    // on stderr, and the SAME projector feeds every completed flush to the
+    // authenticated /stream route. Constructed before the work assembly so
+    // the flare sink exists from the first store read.
+    final diagnostics = StationDiagnosticsReporter(writeLine: stderr.writeln);
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await buildStationWork(
@@ -423,8 +428,10 @@ class UpCommand extends Command<int> {
             workPolicyDelegate.buildWorkRegistry(appendNote),
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
+        transport: diagnostics,
       );
     } on Object catch (e) {
+      diagnostics.dispose();
       workPolicyDelegate.dispose();
       await stationLock.release();
       err('space up: $e');
@@ -488,6 +495,7 @@ class UpCommand extends Command<int> {
       grid = runGrid(
         buildDelegate(),
         onFlushed: workRuntime.afterFlush,
+        treeProjector: diagnostics.treeProjector,
         delegateFactory: vmServiceUri == null ? null : buildDelegate,
       );
     } on Object catch (e) {
@@ -509,6 +517,7 @@ class UpCommand extends Command<int> {
         port: config.controlPort,
         token: token,
         view: () => _status(config, armed, bootTime, workRuntime),
+        treeProjector: diagnostics.treeProjector,
         // The fenced POST /command route (ADR-0014 D-C4, the_grid #106):
         // operator commands execute IN this resident via the work runtime's
         // vended handler (#104 seam).
@@ -605,6 +614,9 @@ class UpCommand extends Command<int> {
       await devMode?.dispose();
       await control.dispose();
       await grid.teardown();
+      // Sockets and the mounted tree are down — NOW the shared projection
+      // stream can close (the reporter owns the projector's lifecycle).
+      diagnostics.dispose();
       await workRuntime.shutdown();
       workPolicyDelegate.dispose();
       await stationLock.release();
@@ -666,6 +678,29 @@ class UpCommand extends Command<int> {
       mounted: live,
       liveSessions: live,
       lastSyncAt: capturedAt.millisecondsSinceEpoch == 0 ? null : capturedAt,
+      sync: <String, Object?>{
+        'stats': <String, Object?>{
+          for (final e in workRuntime.syncStats.entries)
+            e.key: <String, Object?>{
+              'signalCounts': <String, Object?>{
+                for (final c in e.value.signalCounts.entries)
+                  c.key.name: c.value,
+              },
+              'refreshCount': e.value.refreshCount,
+              'lastRefreshMs': e.value.lastRefresh?.inMilliseconds,
+              'lastReactionMs': e.value.lastReaction?.inMilliseconds,
+              'refreshing': e.value.refreshing,
+              'pendingFollowUp': e.value.pendingFollowUp,
+            },
+        },
+        'freshness': <String, Object?>{
+          for (final e in workRuntime.workFreshness.entries)
+            e.key: <String, Object?>{
+              'capturedAt': e.value.capturedAt?.toIso8601String(),
+              'stale': e.value.stale,
+            },
+        },
+      },
     );
   }
 
