@@ -5,6 +5,7 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show AgentConfig, buildCodeRegistry, kCodeCircuit;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
+import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
 import 'package:test/test.dart';
@@ -65,6 +66,50 @@ void main() {
           _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
         ),
         returnsNormally,
+      );
+    });
+
+    test('the LIVE effect providers are TREE-OWNED (create:, STYLE rule 2): '
+        'a full re-description keeps the SAME GitOps/PrOpener instances — a '
+        '.value posture would thread a fresh pre-built instance per build', () {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final subject = delegate(live: true);
+      addTearDown(subject.dispose);
+      late _SwapHostState host;
+      final root = owner.mountRoot(
+        _SwapHost(onCreate: (s) => host = s, describe: () => _Author(subject)),
+      );
+      owner.flush();
+      List<T> valuesOf<T extends Object>() {
+        final found = <T>[];
+        void walk(Branch b) {
+          if (b is InheritedBranch<T>) found.add(b.value);
+          b.visitChildren(walk);
+        }
+
+        walk(root);
+        return found;
+      }
+
+      final opsBefore = valuesOf<GitOps>().single;
+      final openerBefore = valuesOf<PrOpener>().single;
+      // Re-describe the WHOLE delegate tree with fresh seed instances:
+      // reconcile updates the providers in place, and create: never re-runs.
+      host.swap(() => _Author(subject));
+      owner.flush();
+      expect(
+        identical(valuesOf<GitOps>().single, opsBefore),
+        isTrue,
+        reason:
+            'create: runs once per mount — the tree owns ONE GitOps for '
+            'the life of the branch (a .value posture would adopt a new '
+            'boot-built instance on every rebuild)',
+      );
+      expect(
+        identical(valuesOf<PrOpener>().single, openerBefore),
+        isTrue,
+        reason: 'same ownership pin for the station-level opener',
       );
     });
 
@@ -140,6 +185,16 @@ void main() {
         RegExp(r'workPolicyDelegate\.dispose\(\);').allMatches(source).length,
         6,
       );
+      // The policy delegate is ASSEMBLY-ONLY and must stay DRY: neither of
+      // its hooks reads the posture, and a live-postured delegate mounted
+      // for an enumeration would author effect providers into an offline
+      // tree (the boot-leak class space-47t removed).
+      final constructionEnd = source.indexOf(');', construction);
+      expect(
+        source.substring(construction, constructionEnd),
+        isNot(contains('live')),
+        reason: 'workPolicyDelegate must be constructed without live:',
+      );
     });
   });
 }
@@ -183,6 +238,32 @@ List<ServiceBundle> _mountedBundles(Seed root) {
     if (!isOuterOfBoundPair) collapsed.add(bundles[i]);
   }
   return collapsed;
+}
+
+/// A swappable host: [_SwapHostState.swap] re-describes the subtree with
+/// fresh seed instances (the ownership-pinning tests' rebuild trigger).
+class _SwapHost extends StatefulSeed {
+  const _SwapHost({required this.onCreate, required this.describe});
+
+  final void Function(_SwapHostState state) onCreate;
+  final Seed Function() describe;
+
+  @override
+  State<_SwapHost> createState() => _SwapHostState();
+}
+
+class _SwapHostState extends State<_SwapHost> {
+  Seed Function()? _describe;
+
+  @override
+  void initState() {
+    seed.onCreate(this);
+  }
+
+  void swap(Seed Function() describe) => setState(() => _describe = describe);
+
+  @override
+  Seed build(TreeContext context) => (_describe ?? seed.describe)();
 }
 
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the

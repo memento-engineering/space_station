@@ -49,8 +49,8 @@ import 'package:grid_assets/grid_assets.dart'
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
-// ignore: implementation_imports
 import 'package:grid_cli/grid_cli.dart' show StationDiagnosticsReporter;
+// ignore: implementation_imports
 import 'package:grid_cli/src/station_control.dart'
     show StationControl, StationStatus, mintControlToken;
 // ignore: implementation_imports
@@ -395,12 +395,18 @@ class UpCommand extends Command<int> {
     // shape-agnostic resolver and that file is deleted. This is scaffolding
     // with an expiry, not a permanent seam.
     final live = !config.dryRun;
+    // ASSEMBLY-ONLY and deliberately DRY (live omitted ⇒ false): this
+    // delegate exists for its policy hooks (circuitOverrideFor /
+    // buildWorkRegistry) and its build never runs — but if it were ever
+    // mounted for an enumeration (the codedRosterOf pattern), a live-postured
+    // instance would author the GitOps/PrOpener effect providers into an
+    // offline tree, the exact boot-leak class space-47t removed. The armed
+    // tree's delegate (buildDelegate below) is the ONE that carries `live`.
     final workPolicyDelegate = _delegateFactory(
       gridRoot: config.gridHome,
       appended: config.appended,
       agentConfig: agentConfig,
       harnesses: harnesses,
-      live: live,
     );
     // ONE diagnostics reporter across all three rails (the ratified reporter,
     // now armed in space's own composition): engine flares emit as JSON lines

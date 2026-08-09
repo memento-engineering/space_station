@@ -298,10 +298,13 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// station machinery individually — `StationGitService` (adopted from the
   /// work runtime), `GitOps` and `PrOpener` (created IN-TREE here, LIVE arms
   /// only) — and a seat-scoped `Provider<PrOpener>` (a [GitHubAppConfig]
-  /// value on the seat) shadows the station opener (ADR-0006 D3: land flows
-  /// into the substations' GitHub assets, never through station services).
-  /// Under dry-run NONE of the effect providers is authored: the inert
-  /// posture is provider ABSENCE in the tree, visible in the projection.
+  /// value on the seat, mounted only when the seat OBSERVES the station's
+  /// `GitOps` — the live structural signal) shadows the station opener
+  /// (ADR-0006 D3: land flows into the substations' GitHub assets, never
+  /// through station services).
+  /// Under dry-run NONE of the effect providers is authored — by this build
+  /// or by an app-bearing seat: the inert posture is provider ABSENCE in
+  /// the tree, visible in the projection.
   /// Each seat's fold-child is [sdk.SubstationWork] — the seat the
   /// engine's `WorkList` binds into when the station is armed (Track J).
   /// FOLLOW-ON (space-7uc): the committee's rubric/extension asset root
@@ -324,6 +327,15 @@ class SpaceDelegate extends sdk.GridDelegate {
     // enumeration (`mountedRosterOf`), the test mounts — carries the
     // registry too (the nearest scope wins under runGrid, consistently for
     // every provider and watcher authored below).
+    //
+    // SHIELDING CONSEQUENCE of the inner scope: a watch miss below parks
+    // with THIS registry, never the production root's — so a provider
+    // mounted ABOVE this delegate's tree (in runGrid's root scope) notifies
+    // the OUTER registry and can never drain a registration parked here.
+    // Every provider a seat asset watches (StationGitService, GitOps,
+    // PrOpener, GitHubAppConfig) MUST therefore be authored INSIDE this
+    // delegate's tree — which they all are: this build and the seats author
+    // every one. Do not "help" a seat from above the delegate.
     return sdk.ProviderScope(
       child: sdk.RawAssetGrid(
         root: gridRoot,
