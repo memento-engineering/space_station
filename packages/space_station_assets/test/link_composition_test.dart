@@ -18,18 +18,20 @@ class _DownstreamDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
-    super.gitOps,
-    super.prOpener,
+    super.live,
   });
 
   @override
   String get umbrella => '.';
 
   @override
-  List<sdk.Substation> substations(
+  List<Seed> substations(
     TreeContext context,
     sdk.GridConfiguration configuration,
-  ) => [seat(context, 'alpha', 'alpha'), seat(context, 'beta', 'beta')];
+  ) => [
+    SubstationSeat(name: 'alpha', root: 'alpha'),
+    SubstationSeat(name: 'beta', root: 'beta'),
+  ];
 }
 
 Future<void> _init(String root, String prefix) async {

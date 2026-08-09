@@ -4,50 +4,58 @@ import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show AgentConfig, buildCodeRegistry, kCodeCircuit;
-import 'package:grid_runtime/grid_runtime.dart'
-    show PrOpener, PullRequestRef, PullRequestResult;
+import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
+import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
 import 'package:test/test.dart';
 
-/// Track G-space / H2 (tg-r81): offline coverage for [SpaceDelegate] —
-/// space_station authored as a Seed (the v3 §2 tree). Pure + offline: the
-/// delegate's [build] tree is mounted in a bare genesis tree (no kernel, no
-/// live git/claude — null provisioner/gitOps rides the ambient `GitServices`
-/// as the dry authoring where the layout still resolves — Track F/pow-72b),
-/// the same tree `runGrid(SpaceDelegate())` mounts under `space up`. The
-/// Track F assets themselves (a bare GitGridAssets sourcing its halves from
-/// context, the delivery binding, worktree layout) are proven in power_station;
-/// this
-/// proves space COMPOSES them into a valid v3 tree with the memento org
-/// hardcoded in it (space-6ds — see `memento_roster_test.dart` for the
-/// roster/append coverage).
+/// Track G-space / H2 (tg-r81), re-cut by space-47t: offline coverage for
+/// [SpaceDelegate] — space_station authored as a Seed (the v3 §2 tree). Pure
+/// + offline: the delegate's [build] tree is mounted in a bare genesis tree
+/// (no kernel, no live git/claude — the dry authoring mounts NO effect
+/// providers, and the seat assets observe that absence as the commit-only /
+/// offline posture), the same tree `runGrid(SpaceDelegate())` mounts under
+/// `space up`. The composed seat itself ([SubstationSeat] and its watch-based
+/// assets) is proven in `substation_seat_test.dart`; this proves space
+/// COMPOSES it into a valid v3 tree with the memento org hardcoded in it
+/// (space-6ds — see `memento_roster_test.dart` for the roster/append
+/// coverage).
 void main() {
   SpaceDelegate delegate({
     String gridRoot = '/home/memento/space_station',
     List<sdk.Substation> appended = const [],
-    PrOpener? prOpener,
+    bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
     appended: appended,
     agentConfig: const AgentConfig(harness: 'claude'),
-    prOpener: prOpener,
+    live: live,
   );
 
   group('SpaceDelegate.build — space_station as a Seed (v3 §2)', () {
-    test('the well-formed offline tree mounts clean (RawAssetGrid → Station → '
-        'HarnessProvider → GitServices → Substations → the five coded '
-        'Substation[GitGridAssets] seats validate end to end)', () {
+    test('the well-formed offline tree mounts clean (ProviderScope → '
+        'RawAssetGrid → Station → HarnessProvider → Substations → the five '
+        'coded SubstationSeat wrappers validate end to end)', () {
       expect(() => _mount(_Author(delegate())), returnsNormally);
     });
 
-    test('a PR opener DI-d into each seat mounts GitHubGridAssets clean (the '
-        'delivery BINDING itself also needs the commit/push half — '
-        'GitHubGridAssets binds a method only with BOTH, and power_station '
-        'proves that)', () {
+    test('the DRY tree (the default) binds NO delivery anywhere — the effect '
+        'providers are ABSENT from the tree, so every seat bundle is '
+        'commit-only (space-47t: inertness declared in the tree)', () {
+      final bundles = _mountedBundles(_Author(delegate()));
+      expect(bundles, hasLength(5), reason: 'one git bundle per coded seat');
+      expect(bundles.every((b) => b.delivery == null), isTrue);
+    });
+
+    test('a LIVE delegate authors the effect providers IN-TREE and every '
+        'coded seat binds GitHub delivery by OBSERVING both halves '
+        '(space-47t: no effect instance passes through boot)', () {
+      final bundles = _mountedBundles(_Author(delegate(live: true)));
       expect(
-        () => _mount(_Author(delegate(prOpener: _FakePrOpener()))),
-        returnsNormally,
+        bundles.where((b) => b.delivery != null),
+        hasLength(5),
+        reason: 'each coded seat re-provides its bundle delivery-bound',
       );
     });
 
@@ -58,6 +66,50 @@ void main() {
           _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
         ),
         returnsNormally,
+      );
+    });
+
+    test('the LIVE effect providers are TREE-OWNED (create:, STYLE rule 2): '
+        'a full re-description keeps the SAME GitOps/PrOpener instances — a '
+        '.value posture would thread a fresh pre-built instance per build', () {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final subject = delegate(live: true);
+      addTearDown(subject.dispose);
+      late _SwapHostState host;
+      final root = owner.mountRoot(
+        _SwapHost(onCreate: (s) => host = s, describe: () => _Author(subject)),
+      );
+      owner.flush();
+      List<T> valuesOf<T extends Object>() {
+        final found = <T>[];
+        void walk(Branch b) {
+          if (b is InheritedBranch<T>) found.add(b.value);
+          b.visitChildren(walk);
+        }
+
+        walk(root);
+        return found;
+      }
+
+      final opsBefore = valuesOf<GitOps>().single;
+      final openerBefore = valuesOf<PrOpener>().single;
+      // Re-describe the WHOLE delegate tree with fresh seed instances:
+      // reconcile updates the providers in place, and create: never re-runs.
+      host.swap(() => _Author(subject));
+      owner.flush();
+      expect(
+        identical(valuesOf<GitOps>().single, opsBefore),
+        isTrue,
+        reason:
+            'create: runs once per mount — the tree owns ONE GitOps for '
+            'the life of the branch (a .value posture would adopt a new '
+            'boot-built instance on every rebuild)',
+      );
+      expect(
+        identical(valuesOf<PrOpener>().single, openerBefore),
+        isTrue,
+        reason: 'same ownership pin for the station-level opener',
       );
     });
 
@@ -115,7 +167,9 @@ void main() {
     test('resident assembly owns and disposes its policy delegate', () {
       final source = File('lib/src/up_command.dart').readAsStringSync();
       final construction = source.indexOf('final workPolicyDelegate =');
-      final assembly = source.indexOf('workRuntime = await assembleStationWork(');
+      final assembly = source.indexOf(
+        'workRuntime = await assembleStationWork(',
+      );
       expect(construction, greaterThanOrEqualTo(0));
       expect(construction, lessThan(assembly));
       expect(
@@ -131,6 +185,16 @@ void main() {
         RegExp(r'workPolicyDelegate\.dispose\(\);').allMatches(source).length,
         6,
       );
+      // The policy delegate is ASSEMBLY-ONLY and must stay DRY: neither of
+      // its hooks reads the posture, and a live-postured delegate mounted
+      // for an enumeration would author effect providers into an offline
+      // tree (the boot-leak class space-47t removed).
+      final constructionEnd = source.indexOf(');', construction);
+      expect(
+        source.substring(construction, constructionEnd),
+        isNot(contains('live')),
+        reason: 'workPolicyDelegate must be constructed without live:',
+      );
     });
   });
 }
@@ -143,6 +207,65 @@ void _mount(Seed root) {
   owner.flush();
 }
 
+/// Mounts [root], flushes once, and collects every provided [ServiceBundle]
+/// in tree order — the delivery-posture projection of the authored tree.
+/// A commit-only seat provides ONE bundle (its git asset's); a
+/// delivery-bound seat re-provides a second, delivery-carrying bundle below
+/// it, so the outermost bundle per seat is filtered to the DEEPEST per
+/// substation by taking `delivery != null` counts where bound.
+List<ServiceBundle> _mountedBundles(Seed root) {
+  final owner = TreeOwner();
+  final branch = owner.mountRoot(root);
+  owner.flush();
+  final bundles = <ServiceBundle>[];
+  void walk(Branch b) {
+    if (b is InheritedBranch<ServiceBundle>) bundles.add(b.value);
+    b.visitChildren(walk);
+  }
+
+  walk(branch);
+  // The delivery-bound seats provide TWO bundles (git's, then GitHub's
+  // re-provision). Collapse to the innermost per pair: a bound bundle
+  // supersedes the unbound one directly above it.
+  final collapsed = <ServiceBundle>[];
+  for (var i = 0; i < bundles.length; i++) {
+    final next = i + 1 < bundles.length ? bundles[i + 1] : null;
+    final isOuterOfBoundPair =
+        bundles[i].delivery == null &&
+        next != null &&
+        next.delivery != null &&
+        identical(next.sourceControl, bundles[i].sourceControl);
+    if (!isOuterOfBoundPair) collapsed.add(bundles[i]);
+  }
+  return collapsed;
+}
+
+/// A swappable host: [_SwapHostState.swap] re-describes the subtree with
+/// fresh seed instances (the ownership-pinning tests' rebuild trigger).
+class _SwapHost extends StatefulSeed {
+  const _SwapHost({required this.onCreate, required this.describe});
+
+  final void Function(_SwapHostState state) onCreate;
+  final Seed Function() describe;
+
+  @override
+  State<_SwapHost> createState() => _SwapHostState();
+}
+
+class _SwapHostState extends State<_SwapHost> {
+  Seed Function()? _describe;
+
+  @override
+  void initState() {
+    seed.onCreate(this);
+  }
+
+  void swap(Seed Function() describe) => setState(() => _describe = describe);
+
+  @override
+  Seed build(TreeContext context) => (_describe ?? seed.describe)();
+}
+
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the
 /// offline stand-in for runGrid's `_DelegateRoot`, which does the same).
 class _Author extends StatelessSeed {
@@ -153,21 +276,6 @@ class _Author extends StatelessSeed {
   @override
   Seed build(TreeContext context) =>
       delegate.build(context, const sdk.GridConfiguration());
-}
-
-/// A non-throwing PR opener. The offline delegate DI-s only this half, which is
-/// enough to mount `GitHubGridAssets` under every seat; the delivery BINDING
-/// needs the commit/push half too (power_station proves that seam).
-class _FakePrOpener implements PrOpener {
-  @override
-  Future<PullRequestResult> open({
-    required String workDir,
-    required String branch,
-    required String baseBranch,
-    required String title,
-    String body = '',
-  }) async =>
-      PullRequestResult.opened(const PullRequestRef(url: 'https://x/pr/1'));
 }
 
 class _MarkerDelegate extends SpaceDelegate {

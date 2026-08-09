@@ -55,17 +55,17 @@ import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
         EnvironmentRegistry,
-        GitGridAssets,
-        GitHubGridAssets,
-        GitServices,
         HarnessProvider,
         buildBuiltinEnvironmentRegistry,
         buildCodeRegistry,
         mountedRosterOf;
 import 'package:grid_runtime/grid_runtime.dart'
-    show GitOps, PrOpener, StationGitService;
+    show GhPrOpener, GitOps, PrOpener, StationGitService, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
+import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
+
+import 'substation_seat.dart';
 
 /// The factory signature the runner compositions construct a station's
 /// delegate through — [SpaceDelegate.new] satisfies it, and so does a
@@ -82,8 +82,7 @@ typedef SpaceDelegateFactory =
       EnvironmentRegistry? harnesses,
       sdk.StationWorkWiring? wiring,
       StationGitService? provisioner,
-      GitOps? gitOps,
-      PrOpener? prOpener,
+      bool live,
     });
 
 /// Appends one resident capability log [line] to [beadId]'s notes through the
@@ -122,18 +121,18 @@ List<sdk.SubstationScope> codedRosterOf(
 /// authored as a Seed.
 ///
 /// Constructed from space's resolved station config (its [gridRoot] home, the
-/// operator's [appended] flag seats, the station-default [agentConfig], and —
-/// when a live run armed them — the git [provisioner] / [gitOps] /
-/// [prOpener]). The master [build] authors the v3 §2 tree; `space up` mounts
-/// it with `runGrid(this)`.
+/// operator's [appended] flag seats, the station-default [agentConfig], the
+/// work-runtime machinery ([wiring] / [provisioner]), and the [live] posture
+/// VALUE). The master [build] authors the v3 §2 tree; `space up` mounts it
+/// with `runGrid(this)`.
 ///
 /// ## The extension seam: SUBCLASS and override (extend, never fork)
 ///
 /// A downstream station (an IC's private station) extends this delegate and
 /// overrides the designed hooks — the template-method pattern the whole
-/// substrate is built on. [substations] and [seat] are BUILD METHODS (they
-/// carry the master [build]'s context, like any decomposed build), while
-/// [stationName] and [umbrella] are identity accessors:
+/// substrate is built on. [substations] is a BUILD METHOD (it carries the
+/// master [build]'s context, like any decomposed build), while [stationName]
+/// and [umbrella] are identity accessors:
 ///
 ///  * [stationName] — the station's identity;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
@@ -142,10 +141,14 @@ List<sdk.SubstationScope> codedRosterOf(
 ///  * [buildWorkRegistry] — the resident capability composition, built over
 ///    the station-owned note appender;
 ///  * [substations] — THE roster hook: the coded drive set as authored
-///    seats. Compose, don't replace;
-///  * [seat] — the standard per-seat asset stack; override it to change the
-///    stack itself (e.g. a commit-only posture for a store the station may
-///    not deliver to).
+///    [SubstationSeat] values. Compose, don't replace.
+///
+/// The per-seat stack is [SubstationSeat] — EXACTLY ONE composed seat class
+/// (space-47t; the old `seat(...)` build helper died with it — the
+/// helper-method-returns-widget anti-pattern). Stations differ only in the
+/// VALUES their [substations] passes (name, root, prefix, an optional
+/// [GitHubAppConfig] delivery identity); a different seat class enters only
+/// when a seat's STACK genuinely differs — none does yet, so none ships.
 ///
 /// ```dart
 /// class LunarDelegate extends SpaceDelegate {
@@ -155,12 +158,12 @@ List<sdk.SubstationScope> codedRosterOf(
 ///   @override
 ///   String get umbrella => '../../engineering.memento';
 ///   @override
-///   List<sdk.Substation> substations(
+///   List<Seed> substations(
 ///     TreeContext context,
 ///     sdk.GridConfiguration configuration,
 ///   ) => [
 ///     ...super.substations(context, configuration),
-///     seat(context, 'butane_flutter', '../butane_flutter'),
+///     SubstationSeat(name: 'butane_flutter', root: '../butane_flutter'),
 ///   ];
 /// }
 /// ```
@@ -168,7 +171,8 @@ List<sdk.SubstationScope> codedRosterOf(
 /// The subclass's constructor mirrors the base via super-parameters so its
 /// tear-off satisfies [SpaceDelegateFactory] — the seam `buildRunner`
 /// threads into the composed commands. The off-tree machinery reads the
-/// roster by mounting the tree offline (`mountedRosterOf`), so overriding
+/// roster by mounting the tree offline (`mountedRosterOf` finds the
+/// `Substation` branches UNDER the seat wrappers), so overriding
 /// [substations] is the WHOLE change — guard, help, refusal set and specs
 /// all follow.
 class SpaceDelegate extends sdk.GridDelegate {
@@ -176,10 +180,13 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// [agentConfig] defaults to the authoring-only claude scope (what the
   /// offline mounts — `search`, `assets`, roster enumeration — need; a live
   /// `up` passes the real one). [harnesses] defaults to the first-party
-  /// claude/copilot/pi/opencode set. [provisioner] / [gitOps] / [prOpener]
-  /// are the live git machinery (all null ⇒ the offline / dry-run authoring,
-  /// where provisioning + land no-op but the worktree layout still resolves —
-  /// Track F).
+  /// claude/copilot/pi/opencode set. [provisioner] is the work runtime's
+  /// worktree machinery (null ⇒ provisioning no-ops — the offline authoring,
+  /// where the worktree layout still resolves — Track F). [live] is the
+  /// boot's ONE remaining posture say (space-47t): false — the default —
+  /// authors NO effect providers (the inert dry-run tree, declared by
+  /// ABSENCE); true has [build] author the commit/push and PR-opening
+  /// providers IN-TREE. No effect instance passes through this constructor.
   SpaceDelegate({
     required this.gridRoot,
     AgentConfig? agentConfig,
@@ -187,8 +194,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     EnvironmentRegistry? harnesses,
     this.wiring,
     this.provisioner,
-    this.gitOps,
-    this.prOpener,
+    this.live = false,
   }) : agentConfig = agentConfig ?? const AgentConfig(harness: 'claude'),
        harnesses = harnesses ?? buildBuiltinEnvironmentRegistry();
 
@@ -238,20 +244,23 @@ class SpaceDelegate extends sdk.GridDelegate {
   final EnvironmentRegistry harnesses;
 
   /// The station's shared worktree-provisioning service (leased per
-  /// substation); null ⇒ provisioning no-ops (offline / dry-run). Provided to
-  /// every seat's bare [GitGridAssets] through the ambient [GitServices]
-  /// carrier [build] mounts once above the fan-out (pow-72b).
+  /// substation), built and OWNED by the off-tree work runtime; null ⇒
+  /// provisioning no-ops (offline). [build] ADOPTS it over the fan-out as a
+  /// `Provider<StationGitService>.value` (STYLE rule 2: `.value` adopts an
+  /// instance held by another owner — the runtime — exactly as `StationWork`
+  /// adopts the wiring's values); each seat's [GitGridAssets] observes it
+  /// individually (the retired `GitServices` bundle's split, space-47t).
   final StationGitService? provisioner;
 
-  /// Commit/push ops; null ⇒ land no-ops (the commit-only arm). Rides the
-  /// same ambient [GitServices] carrier as [provisioner].
-  final GitOps? gitOps;
-
-  /// The PR-opening seam; null ⇒ no land added (the commit-only arm). DI'd
-  /// into each coded seat's [GitHubGridAssets] (ADR-0006 D3: the land ops
-  /// flow into the substations' GitHub assets, never through station
-  /// services).
-  final PrOpener? prOpener;
+  /// The LIVE posture VALUE — the boot's one remaining say on effects
+  /// (space-47t; the old `gitOps`/`prOpener` reference params are retired,
+  /// space-00g subsumed). False (dry-run, the default): [build] authors NO
+  /// effect providers — inertness is declared in the tree as ABSENCE, visible
+  /// in the projection. True: [build] authors the station-level commit/push
+  /// (`Provider<GitOps>`) and PR-opening (`Provider<PrOpener>`) effect
+  /// providers, constructed IN-TREE via `create:` — tree-owned, never a
+  /// pre-built instance threaded through boot.
+  final bool live;
 
   /// The station's work-axis wiring (Track J, tg-yl8/space-6nj): the DI'd
   /// ambient values `runGrid`'s tree provides through `StationWork` so each
@@ -284,11 +293,19 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// no store controller feeding it (`space up` arms controllers only over
   /// stores that resolve), that seat drives no work.
   ///
-  /// Each seat's git is substation-scoped (Track F): [GitGridAssets] mounts
-  /// BARE and reads the provisioner/gitOps halves from the ambient
-  /// [GitServices] this tree provides ONCE above the fan-out (pow-72b);
-  /// [GitHubGridAssets] adds land when a live [prOpener] is DI'd (ADR-0006
-  /// D3). Each seat's fold-child is [sdk.SubstationWork] — the seat the
+  /// Each seat's git is substation-scoped (Track F, re-cut by space-47t):
+  /// the seat's `const` [GitGridAssets] / [GitHubGridAssets] WATCH the
+  /// station machinery individually — `StationGitService` (adopted from the
+  /// work runtime), `GitOps` and `PrOpener` (created IN-TREE here, LIVE arms
+  /// only) — and a seat-scoped `Provider<PrOpener>` (a [GitHubAppConfig]
+  /// value on the seat, mounted only when the seat OBSERVES the station's
+  /// `GitOps` — the live structural signal) shadows the station opener
+  /// (ADR-0006 D3: land flows into the substations' GitHub assets, never
+  /// through station services).
+  /// Under dry-run NONE of the effect providers is authored — by this build
+  /// or by an app-bearing seat: the inert posture is provider ABSENCE in
+  /// the tree, visible in the projection.
+  /// Each seat's fold-child is [sdk.SubstationWork] — the seat the
   /// engine's `WorkList` binds into when the station is armed (Track J).
   /// FOLLOW-ON (space-7uc): the committee's rubric/extension asset root
   /// belongs in these `assets:` slots too, so the critic resolves
@@ -301,20 +318,55 @@ class SpaceDelegate extends sdk.GridDelegate {
   @override
   Seed build(TreeContext context, sdk.GridConfiguration configuration) {
     final armedWiring = wiring;
-    return sdk.RawAssetGrid(
-      root: gridRoot,
-      assets: [
-        sdk.Station(
-          name: stationName,
-          root: gridRoot,
-          assets: [
-            HarnessProvider(
-              registry: harnesses,
-              config: agentConfig,
-              child: InheritedSeed<GitServices>(
-                value: GitServices(provisioner: provisioner, gitOps: gitOps),
+    final git = provisioner;
+    // The availability registry (tg-1fa2.5): the seat assets OBSERVE their
+    // collaborators (`watch<T>()` — nullable always, absence is a posture),
+    // and a watch MISS parks a pending registration with the enclosing
+    // ProviderScope. runGrid mounts one at the production root; this tree
+    // authors its OWN so every mount of the SAME tree — the offline roster
+    // enumeration (`mountedRosterOf`), the test mounts — carries the
+    // registry too (the nearest scope wins under runGrid, consistently for
+    // every provider and watcher authored below).
+    //
+    // SHIELDING CONSEQUENCE of the inner scope: a watch miss below parks
+    // with THIS registry, never the production root's — so a provider
+    // mounted ABOVE this delegate's tree (in runGrid's root scope) notifies
+    // the OUTER registry and can never drain a registration parked here.
+    // Every provider a seat asset watches (StationGitService, GitOps,
+    // PrOpener, GitHubAppConfig) MUST therefore be authored INSIDE this
+    // delegate's tree — which they all are: this build and the seats author
+    // every one. Do not "help" a seat from above the delegate.
+    return sdk.ProviderScope(
+      child: sdk.RawAssetGrid(
+        root: gridRoot,
+        assets: [
+          sdk.Station(
+            name: stationName,
+            root: gridRoot,
+            assets: [
+              HarnessProvider(
+                registry: harnesses,
+                config: agentConfig,
                 child: Nest(
                   children: [
+                    // The work runtime's worktree machinery, ADOPTED (STYLE
+                    // rule 2: another owner's instance rides Provider.value;
+                    // the runner disposes it, never the tree). Absent ⇒ no
+                    // provider — the offline posture is absence.
+                    if (git != null) Provider<StationGitService>.value(git),
+                    // The EFFECT providers — LIVE arms only (space-47t):
+                    // constructed IN-TREE, tree-owned. A dry run authors
+                    // NEITHER, so the tree binds no delivery and the dry arm
+                    // stays inert BY CONSTRUCTION — inertness declared in
+                    // the tree, visible in the projection.
+                    if (live) ...[
+                      Provider<GitOps>(
+                        create: (_) => GitOps(SystemGitRunner()),
+                      ),
+                      Provider<PrOpener>(
+                        create: (_) => GhPrOpener(sdk.ghRunner),
+                      ),
+                    ],
                     // ARMED: StationWork provides the engine's ambient
                     // work-axis stack above the fan-out (the runGrid→engine
                     // bridge, tg-yl8); UNARMED: H2's authoring-only shape.
@@ -334,87 +386,61 @@ class SpaceDelegate extends sdk.GridDelegate {
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   /// THE roster hook — a BUILD METHOD, decomposed out of [build] with its
   /// signature (the template-method idiom the substrate is built on): the
-  /// station's coded drive set as authored seats, spread into [build] BEFORE
-  /// the [appended] layer. Base = the memento-engineering org, five seats at
-  /// their [umbrella]-relative roots.
+  /// station's coded drive set as authored [SubstationSeat] values, spread
+  /// into [build] BEFORE the [appended] layer. Base = the
+  /// memento-engineering org, five seats at their [umbrella]-relative roots.
+  ///
+  /// Returns `List<Seed>` (space-47t): a seat is the COMPOSED wrapper, and
+  /// the offline enumeration (`mountedRosterOf` / [codedRosterOf]) still
+  /// finds the `Substation` branches UNDER the wrappers — the tree stays the
+  /// single source for `up`'s store guard and work specs, the codedNames
+  /// refusal set, and the `--substation` help.
   ///
   /// OVERRIDE POINT: a downstream station composes, it does not replace
   /// blindly — `[...super.substations(context, configuration),
-  /// seat(context, 'mine', '../mine')]`. The off-tree machinery (`up`'s
-  /// store guard and work specs, the codedNames refusal set, the
-  /// `--substation` help) enumerates the roster by MOUNTING this tree
-  /// offline (`mountedRosterOf`) — never by a parallel list — so the tree
-  /// stays the single source.
-  List<sdk.Substation> substations(
+  /// SubstationSeat(name: 'mine', root: '../mine')]`. Identity is the
+  /// seat's VALUES; there is no name-keyed lookup anywhere (space-47t).
+  List<Seed> substations(
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
-    seat(context, 'genesis', p.join(umbrella, 'genesis')),
+    SubstationSeat(name: 'genesis', root: p.join(umbrella, 'genesis')),
     // the framework — self-host; `tg` is the shared Dolt server (gc
     // coexists: read tg's frontier, write sessions to houston — A37)
-    seat(context, 'the_grid', p.join(umbrella, 'the_grid'), prefix: 'tg'),
+    SubstationSeat(
+      name: 'the_grid',
+      root: p.join(umbrella, 'the_grid'),
+      prefix: 'tg',
+    ),
     // the asset packs — self-host
-    seat(
-      context,
-      'power_station',
-      p.join(umbrella, 'power_station'),
+    SubstationSeat(
+      name: 'power_station',
+      root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
     ),
     // the runner — self-host; for space this IS the grid home. Its store
     // mints `space-` (NOT `space_station-`), so the prefix MUST be set
     // explicitly — the default (prefix ?? name) would own `space_station`
     // and drive nothing (ownership matches name OR prefix).
-    seat(
-      context,
-      'space_station',
-      p.join(umbrella, 'space_station'),
+    SubstationSeat(
+      name: 'space_station',
+      root: p.join(umbrella, 'space_station'),
       prefix: 'space',
     ),
     // the debug harness (memento-engineering/lenny)
-    seat(context, 'lenny', p.join(umbrella, 'lenny')),
+    SubstationSeat(name: 'lenny', root: p.join(umbrella, 'lenny')),
   ];
-
-  /// One seat with the standard asset stack — a BUILD METHOD ([context]
-  /// rides so an override can read ambient values while authoring):
-  /// `Nest[GitGridAssets → GitHubGridAssets] → SubstationWork`.
-  /// [GitGridAssets] mounts BARE and reads provisioning/commit from the
-  /// ambient [GitServices]; [GitHubGridAssets] binds PR delivery iff a live
-  /// [prOpener] was DI'd (ADR-0006 D3) — so a subclass roster's seats get
-  /// the SAME delivery wiring as the org's.
-  ///
-  /// OVERRIDE POINT: a station that needs a DIFFERENT stack for its seats
-  /// (e.g. a commit-only or observe-hardened posture for a store it may not
-  /// deliver to) overrides this — the stack is a hook, not new config.
-  sdk.Substation seat(
-    TreeContext context,
-    String name,
-    String root, {
-    String? prefix,
-  }) => sdk.Substation(
-    name,
-    root,
-    prefix: prefix,
-    assets: [
-      Nest(
-        children: [
-          const GitGridAssets(),
-          GitHubGridAssets(prOpener: prOpener),
-        ],
-        child: const sdk.SubstationWork(),
-      ),
-    ],
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -535,12 +561,14 @@ void addSpaceStationFlags(
 }
 
 /// Parses one `--substation <name>[@<prefix>]=<root>` value into an APPENDED
-/// [sdk.Substation] seat carrying the standard substation asset stack — the
-/// same `Nest[GitGridAssets → GitHubGridAssets] → SubstationWork` fold the
-/// coded seats author, all bare: commit/push flows from the ambient
-/// [GitServices]; PR-opening for an appended substation waits until it is
-/// CODED into the roster (round 3: flags append a seat, they do not rewire
-/// one). Throws [FormatException] on a malformed pairing (no `=`, empty
+/// [sdk.Substation] seat carrying the GIT half of the substation stack —
+/// `Nest[GitGridAssets] → SubstationWork` (provisioning observed from the
+/// ambient `Provider<StationGitService>`). The GitHub delivery node is
+/// deliberately ABSENT: PR-opening for an appended substation waits until it
+/// is CODED into the roster (round 3: flags append a seat, they do not rewire
+/// one), and under the watch-based assets (space-47t) that policy is authored
+/// STRUCTURALLY — no [GitHubGridAssets] node, so no delivery can bind even on
+/// a live arm. Throws [FormatException] on a malformed pairing (no `=`, empty
 /// name/prefix/root) — a config defect the operator sees immediately. The
 /// optional `@<prefix>` names the store's issue-id prefix when it differs
 /// from the name (names ≠ prefixes); absent, the prefix IS the name.
@@ -582,10 +610,7 @@ sdk.Substation _parseSubstation(String raw) {
     rootPath,
     prefix: prefix,
     assets: const [
-      Nest(
-        children: [GitGridAssets(), GitHubGridAssets()],
-        child: sdk.SubstationWork(),
-      ),
+      Nest(children: [GitGridAssets()], child: sdk.SubstationWork()),
     ],
   );
 }

@@ -39,18 +39,20 @@ class _FixtureDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
-    super.gitOps,
-    super.prOpener,
+    super.live,
   });
 
   static late String alphaRoot;
   static late String betaRoot;
 
   @override
-  List<sdk.Substation> substations(
+  List<Seed> substations(
     TreeContext context,
     sdk.GridConfiguration configuration,
-  ) => [seat(context, 'alpha', alphaRoot), seat(context, 'beta', betaRoot)];
+  ) => [
+    SubstationSeat(name: 'alpha', root: alphaRoot),
+    SubstationSeat(name: 'beta', root: betaRoot),
+  ];
 }
 
 class _Recorder implements SessionResolver {
@@ -240,14 +242,18 @@ void main() {
     final recorder = _Recorder();
     final owner = TreeOwner();
     owner.mountRoot(
-      InheritedSeed<JoinedSnapshotNotifier>(
-        value: bridge.notifier,
-        child: InheritedSeed<SessionResolver>(
-          value: recorder,
-          child: const WorkList(
-            substationConfig: SubstationConfig(
-              substationId: 'alpha',
-              ownedSubstations: {'alpha'},
+      // The availability registry the production root always mounts (the
+      // engine's WorkList observes its optional services via watch<T>()).
+      sdk.ProviderScope(
+        child: InheritedSeed<JoinedSnapshotNotifier>(
+          value: bridge.notifier,
+          child: InheritedSeed<SessionResolver>(
+            value: recorder,
+            child: const WorkList(
+              substationConfig: SubstationConfig(
+                substationId: 'alpha',
+                ownedSubstations: {'alpha'},
+              ),
             ),
           ),
         ),
