@@ -44,6 +44,12 @@ dependencies:
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   grid_cli: ^0.5.0-rc.3
+  # The engine's SDK-facing value types the composed seat stack provides into
+  # the tree (`ServiceBundle` — space-47t's watch-based seat assets author it
+  # directly now that the seat stack lives here).
+  # Hosted release constraint (ADR-0003 D1 source amendment): a producer
+  # change is adopted DELIBERATELY by bumping this constraint.
+  grid_engine: ^0.3.0-rc.2
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.
@@ -68,6 +74,5 @@ dependencies:
   path: ^1.9.0
 
 dev_dependencies:
-  grid_engine: ^0.3.0-rc.2
   lints: ^5.1.0
   test: ^1.25.0

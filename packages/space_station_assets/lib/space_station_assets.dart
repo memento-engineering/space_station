@@ -67,6 +67,13 @@ import 'src/up_command.dart';
 // (construct → mount → dispose) roster enumeration over that factory.
 export 'src/space_delegate.dart'
     show NoteAppender, SpaceDelegate, SpaceDelegateFactory, codedRosterOf;
+// The COMPOSED SEAT (space-47t): the ONE per-substation seat class a
+// station's substations() authors (value config: name/root/prefix + an
+// optional GitHubAppConfig delivery identity), plus the const, watch-based
+// seat-stack assets it composes. Exported so a downstream station's
+// substations() override authors the same seats.
+export 'src/substation_seat.dart'
+    show GitGridAssets, GitHubAppConfig, GitHubGridAssets, SubstationSeat;
 // The composition site of the VENDED `assets` Command group — exported so a
 // test (or a Flutter app) can build the seat with its seams injected.
 // kSpaceRunner rides along so a downstream runner can reference the canonical
