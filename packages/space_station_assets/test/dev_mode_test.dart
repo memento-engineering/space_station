@@ -28,7 +28,7 @@ void main() {
     'handshake ADVERTISES it, and dispatching it re-composes the tree',
     () async {
       final builds = <int>[];
-      final grid = runGrid(
+      final grid = await runGrid(
         _ProbeDelegate(builds),
         delegateFactory: () => _ProbeDelegate(builds),
       );
@@ -68,7 +68,7 @@ void main() {
 
   test('AOT (no VM service) arms NOTHING: null in, null out — no host, no '
       'reload tool, nothing registered', () async {
-    final grid = runGrid(_ProbeDelegate(<int>[]));
+    final grid = await runGrid(_ProbeDelegate(<int>[]));
     addTearDown(grid.teardown);
 
     final seat = await armDevMode(
@@ -83,7 +83,7 @@ void main() {
 
   test('the seat observes the station\'s JOINED graph — no second controller '
       'over the stores, no dirty source of its own', () async {
-    final grid = runGrid(_ProbeDelegate(<int>[]));
+    final grid = await runGrid(_ProbeDelegate(<int>[]));
     addTearDown(grid.teardown);
     final seat = await armDevMode(
       vmServiceUri: 'http://127.0.0.1:8181/aBc=/',

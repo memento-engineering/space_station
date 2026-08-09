@@ -115,7 +115,7 @@ void main() {
     test('resident assembly owns and disposes its policy delegate', () {
       final source = File('lib/src/up_command.dart').readAsStringSync();
       final construction = source.indexOf('final workPolicyDelegate =');
-      final assembly = source.indexOf('workRuntime = await buildStationWork(');
+      final assembly = source.indexOf('workRuntime = await assembleStationWork(');
       expect(construction, greaterThanOrEqualTo(0));
       expect(construction, lessThan(assembly));
       expect(

@@ -72,7 +72,7 @@ import 'package:grid_sdk/grid_sdk.dart'
         StoreLocator,
         StoreRefusal,
         SubstationWorkSpec,
-        buildStationWork,
+        assembleStationWork,
         ghRunner,
         runGrid;
 import 'package:path/path.dart' as p;
@@ -414,7 +414,7 @@ class UpCommand extends Command<int> {
     final diagnostics = StationDiagnosticsReporter(writeLine: stderr.writeln);
     final StationWorkRuntime workRuntime;
     try {
-      workRuntime = await buildStationWork(
+      workRuntime = await assembleStationWork(
         stateStore: GridStateStore.forGridRoot(config.gridHome),
         substations: [
           for (final s in armed)
@@ -492,7 +492,7 @@ class UpCommand extends Command<int> {
     // spawn — inert under --dry-run). A mount-time refusal unwinds everything.
     final GridHandle grid;
     try {
-      grid = runGrid(
+      grid = await runGrid(
         buildDelegate(),
         onFlushed: workRuntime.afterFlush,
         treeProjector: diagnostics.treeProjector,
