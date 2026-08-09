@@ -3,6 +3,7 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart' show AgentConfig;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
+import 'package:space_station_assets/src/substation_seat.dart';
 import 'package:test/test.dart';
 
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
@@ -117,7 +118,8 @@ void main() {
       ]);
       // The org resolves at the OVERRIDDEN umbrella (relative to the
       // downstream grid home), the downstream seat at its own root — both
-      // through the SAME seat() stack.
+      // through the SAME SubstationSeat class (one seat class, different
+      // VALUES — space-47t).
       expect(seats.first.root, '/home/me/memento/genesis');
       expect(seats.last.root, '/home/me/mine');
       expect(seats.last.prefix, 'mn');
@@ -269,8 +271,7 @@ class _DownstreamDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
-    super.gitOps,
-    super.prOpener,
+    super.live,
   });
 
   @override
@@ -280,11 +281,11 @@ class _DownstreamDelegate extends SpaceDelegate {
   String get umbrella => '../memento';
 
   @override
-  List<sdk.Substation> substations(
+  List<Seed> substations(
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
     ...super.substations(context, configuration),
-    seat(context, 'mine', '../mine', prefix: 'mn'),
+    SubstationSeat(name: 'mine', root: '../mine', prefix: 'mn'),
   ];
 }
