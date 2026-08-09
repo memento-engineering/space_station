@@ -62,8 +62,6 @@ import 'package:grid_assets/grid_assets.dart'
 // the WHOLE dev-mode gate.
 import 'package:grid_exploration/grid_exploration.dart'
     show stationVmServiceUri;
-import 'package:grid_runtime/grid_runtime.dart'
-    show GhPrOpener, GitOps, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         GridHandle,
@@ -73,7 +71,6 @@ import 'package:grid_sdk/grid_sdk.dart'
         StoreRefusal,
         SubstationWorkSpec,
         assembleStationWork,
-        ghRunner,
         runGrid;
 import 'package:path/path.dart' as p;
 
@@ -403,8 +400,7 @@ class UpCommand extends Command<int> {
       appended: config.appended,
       agentConfig: agentConfig,
       harnesses: harnesses,
-      gitOps: live ? GitOps(SystemGitRunner()) : null,
-      prOpener: live ? GhPrOpener(ghRunner) : null,
+      live: live,
     );
     // ONE diagnostics reporter across all three rails (the ratified reporter,
     // now armed in space's own composition): engine flares emit as JSON lines
@@ -458,14 +454,16 @@ class UpCommand extends Command<int> {
     // DELIVERY IS A BINDING, NOT AN ARM (the_grid ADR-0000 A51). A substation
     // BINDS a `DeliveryMethod` on its `ServiceBundle`, and binding NONE is the
     // commit-only posture — a real posture, not an unarmed one. space's coded
-    // seats author `GitHubGridAssets`, which binds a `GitHubPrDelivery` iff it
-    // receives BOTH halves (commit/push `GitOps` + a `PrOpener`). ADR-0006 D3
-    // is preserved: the bound method pushes and opens a PR from the per-bead
-    // branch, and nothing auto-merges.
+    // seats author the watch-based `GitHubGridAssets` (space-47t), which binds
+    // a `GitHubPrDelivery` iff it OBSERVES both halves (commit/push `GitOps` +
+    // a `PrOpener`) from the tree. ADR-0006 D3 is preserved: the bound method
+    // pushes and opens a PR from the per-bead branch, and nothing auto-merges.
     //
-    // The runner's only say is the DRY/LIVE posture it already owns. A LIVE arm
-    // hands the real halves over; `--dry-run` constructs NEITHER — no `git`, no
-    // `gh` — so the tree binds no delivery and the dry run stays inert.
+    // The runner's only say is the DRY/LIVE posture VALUE it already owns
+    // (space-47t: no effect instance passes through boot — space-00g
+    // subsumed). A LIVE arm has the delegate author the effect providers
+    // IN-TREE; `--dry-run` authors NEITHER — no `git`, no `gh` — so the tree
+    // binds no delivery and the dry run stays inert by provider ABSENCE.
     // The RUN MODE is the WHOLE dev-mode gate: a JIT station launched with
     // `--enable-vm-service` reports a VM service; an AOT binary reports none.
     // No hostname allowlist, no env var, no flag, no config — and no filesystem
@@ -483,8 +481,7 @@ class UpCommand extends Command<int> {
       harnesses: harnesses,
       wiring: workRuntime.wiring,
       provisioner: workRuntime.git,
-      gitOps: live ? GitOps(SystemGitRunner()) : null,
-      prOpener: live ? GhPrOpener(ghRunner) : null,
+      live: live,
     );
 
     // --- mount the tree: runGrid over the SpaceDelegate. The armed WorkLists
