@@ -69,11 +69,16 @@ export 'src/space_delegate.dart'
     show NoteAppender, SpaceDelegate, SpaceDelegateFactory, codedRosterOf;
 // The COMPOSED SEAT (space-47t): the ONE per-substation seat class a
 // station's substations() authors (value config: name/root/prefix + an
-// optional GitHubAppConfig delivery identity), plus the const, watch-based
-// seat-stack assets it composes. Exported so a downstream station's
-// substations() override authors the same seats.
-export 'src/substation_seat.dart'
-    show GitGridAssets, GitHubAppConfig, GitHubGridAssets, SubstationSeat;
+// optional GitHubAppConfig delivery identity). Exported so a downstream
+// station's substations() override authors the same seats. The seat-stack
+// assets (GitGridAssets/GitHubGridAssets) are deliberately NOT exported:
+// grid_assets (power_station) still exports an older, ctor-param pair under
+// the SAME names, and a downstream file importing both barrels would hit an
+// ambiguous-name error — a station authors SEATS, not raw assets. They
+// re-enter the public surface when the power_station follow-on migrates its
+// pair onto this const/watch shape and these local copies are deleted
+// (see src/substation_seat.dart's library doc).
+export 'src/substation_seat.dart' show GitHubAppConfig, SubstationSeat;
 // The composition site of the VENDED `assets` Command group — exported so a
 // test (or a Flutter app) can build the seat with its seams injected.
 // kSpaceRunner rides along so a downstream runner can reference the canonical

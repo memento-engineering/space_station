@@ -20,12 +20,22 @@
 /// universal): the assets watch `StationGitService` and `GitOps` individually,
 /// so a non-git seat composes a stack without either — unavailability is a
 /// designed posture, projected into the tree, never an error.
+///
+/// **DIVERGENCE NOTE (space-47t landing residue).** `grid_assets`
+/// (power_station) still exports an older `GitGridAssets`/`GitHubGridAssets`
+/// pair under the SAME names — constructor-param based, pre-split. Until the
+/// power_station follow-on migrates that pair onto this const/watch shape and
+/// these local copies are deleted in favor of a re-export, the two coexist;
+/// this barrel therefore exports only [SubstationSeat] and [GitHubAppConfig]
+/// downstream (a station's `substations()` authors seats, not raw assets), so
+/// no downstream file can hit the ambiguous-name collision.
 library;
 
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show GitHubPrDelivery, GitSourceControl, PrComposition;
-import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
+import 'package:grid_engine/grid_engine.dart'
+    show ServiceBundle, TrustFloor, TrustLevel;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, PrOpener, RootCheckout, StationGitService;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
@@ -38,6 +48,15 @@ import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderTreeContext;
 /// key resolves from. Secrets resolve from the environment at EFFECT time —
 /// they are never stored in config, beads, or argv, and this type deliberately
 /// has nowhere to put one.
+///
+/// **DECLARATIVE-ONLY TODAY.** No shipped opener consumes these fields yet:
+/// the seat's opener shells `gh` and acts under the machine's AMBIENT `gh`
+/// credentials, NOT this identity. The identity IS mounted into the seat's
+/// tree (`Provider<GitHubAppConfig>.value`) so the authenticated token
+/// exchange (`github_grid_assets`, pow #104) can observe it via `watch` when
+/// it composes into the opener seam — until then, setting these fields
+/// changes only the seat's POSTURE (delivery-bound vs commit-only), never the
+/// actor PRs open as.
 class GitHubAppConfig {
   /// Creates the identity value.
   const GitHubAppConfig({
@@ -46,11 +65,14 @@ class GitHubAppConfig {
     required this.privateKeyVar,
   });
 
-  /// The GitHub App identifier (the JWT issuer of the future authenticated
-  /// exchange — `github_grid_assets`' token provider).
+  /// The GitHub App identifier — the JWT issuer of the FUTURE authenticated
+  /// exchange (`github_grid_assets`' token provider). Not consumed by any
+  /// shipped opener yet (see the class doc).
   final String appId;
 
-  /// The installation whose access tokens delivery acts under.
+  /// The installation whose access tokens delivery WILL act under once the
+  /// token exchange composes into the opener seam. Not consumed by any
+  /// shipped opener yet (see the class doc).
   final String installationId;
 
   /// The NAME of the environment variable holding the app's private key — the
@@ -86,12 +108,24 @@ class GitHubAppConfig {
 ///
 /// [build] mounts the standard stack —
 /// `Substation[Nest[GitGridAssets → GitHubGridAssets] → SubstationWork]` — and,
-/// when [app] is non-null, a `Provider<PrOpener>` OVER it: constructed IN-TREE
-/// via `create:` (tree-owned — STYLE rule 2), scoped to THIS seat, shadowing
-/// any station-level opener. When [app] is null NO provider mounts: the
-/// commit-only posture is declared by ABSENCE in the tree, visible in the
-/// projection. Per-seat delivery therefore never passes through boot
-/// (space-00g, subsumed).
+/// when [app] is non-null, TWO things over it: the identity VALUE
+/// (`Provider<GitHubAppConfig>.value` — config, posture-independent, so the
+/// future token exchange can observe what it acts as) and, ONLY when the
+/// build also observes the station's commit/push half (`watch<GitOps>()` —
+/// the live arm's structural signal), a seat-scoped `Provider<PrOpener>`:
+/// constructed IN-TREE via `create:` (tree-owned — STYLE rule 2), scoped to
+/// THIS seat, shadowing any station-level opener. A dry arm — and every
+/// offline enumeration mount — authors no `GitOps`, so the seat constructs
+/// NO opener object either: inertness stays declared by ABSENCE in the tree,
+/// visible in the projection (design (e)), and `GhPrOpener` keeps its
+/// "never instantiated offline" contract. When [app] is null NO provider
+/// mounts at all: the commit-only posture is that absence. Per-seat delivery
+/// therefore never passes through boot (space-00g, subsumed).
+///
+/// **The opener is CREDENTIAL-AMBIENT today**: it shells `gh` under the
+/// machine's ambient login; [app] is declarative until the
+/// `github_grid_assets` token exchange (pow #104) composes into this seam —
+/// see [GitHubAppConfig].
 class SubstationSeat extends StatelessSeed {
   /// Creates the seat over its VALUE config. [prefix] defaults to [name]
   /// downstream (the `sdk.Substation` default); [app] is the seat's delivery
@@ -118,8 +152,11 @@ class SubstationSeat extends StatelessSeed {
   /// The work store's issue-id prefix; null ⇒ the name (the SDK default).
   final String? prefix;
 
-  /// The seat's delivery identity. Non-null mounts a seat-scoped
+  /// The seat's delivery identity. Non-null mounts the identity value and —
+  /// on a tree whose station authored `GitOps` (a LIVE arm) — a seat-scoped
   /// `Provider<PrOpener>`; null mounts NOTHING (commit-only by absence).
+  /// DECLARATIVE today: the mounted opener is credential-ambient until the
+  /// `github_grid_assets` token exchange composes in — see [GitHubAppConfig].
   final GitHubAppConfig? app;
 
   @override
@@ -139,16 +176,33 @@ class SubstationSeat extends StatelessSeed {
     // Commit-only by ABSENCE: no identity value ⇒ no provider node at all —
     // the inert posture is structural, not a null-valued provider.
     if (delivery == null) return substation;
-    return Provider<PrOpener>(
-      // Constructed IN-TREE, tree-owned (never a pre-built instance through
-      // create: — STYLE rule 2). The opener shells `gh`, whose credentials
-      // resolve from the ENVIRONMENT at effect time; [delivery] is the seat's
-      // declared app identity — the value the authenticated GitHub App client
-      // (`github_grid_assets`, pow #104) consumes when its token exchange is
-      // composed into the opener seam. Identity in config; secrets at effect.
-      create: (context) => GhPrOpener(sdk.ghRunner),
-      child: substation,
-    );
+    // The LIVE structural signal: the station's commit/push half. A dry arm
+    // (and every offline enumeration mount) authors no GitOps, so the seat
+    // authors no opener either — no gh-shelling effect object exists in a
+    // dry tree (design (e): inertness by absence, visible in the projection),
+    // and GhPrOpener's "never instantiated offline" contract holds. A
+    // Provider<GitOps> mounting later flips this seat live through the
+    // pending-registry rebuild (grid_engine Provider/ProviderScope, #182).
+    final ops = context.watch<GitOps>();
+    final wired = ops == null
+        ? substation
+        : Provider<PrOpener>(
+            // Constructed IN-TREE, tree-owned (never a pre-built instance
+            // through create: — STYLE rule 2). The opener shells `gh`, whose
+            // credentials resolve from the ENVIRONMENT at effect time —
+            // CREDENTIAL-AMBIENT until the authenticated GitHub App client
+            // (`github_grid_assets`, pow #104) composes its token exchange
+            // into this seam and consumes the mounted identity below.
+            // Identity in config; secrets at effect.
+            create: (context) => GhPrOpener(sdk.ghRunner),
+            child: substation,
+          );
+    // The identity VALUE rides the tree unconditionally of posture (config,
+    // not an effect): `.value` because the seat ADOPTS its own config value —
+    // there is nothing to own or dispose. Mounted so the future token
+    // exchange can WATCH what this seat acts as, and so the projection shows
+    // the declared identity even on a dry arm.
+    return Provider<GitHubAppConfig>.value(delivery, child: wired);
   }
 }
 
@@ -196,7 +250,7 @@ class GitGridAssets extends SingleChildStatelessSeed {
     // nullable always — absence is the offline posture, and a later provider
     // mount flips this node live through the pending-registry rebuild.
     final provisioner = context.watch<StationGitService>();
-    return InheritedSeed<ServiceBundle>(
+    return _DerivedBundleSeed(
       // ONE source control, resolved by TREE POSITION (never a name keyed
       // into a map). No delivery bound — GitHubGridAssets binds it below.
       value: ServiceBundle(
@@ -210,6 +264,7 @@ class GitGridAssets extends SingleChildStatelessSeed {
           ),
         ),
       ),
+      derivedFrom: [provisioner, scope.root, scope.name, defaultBranch, remote],
       child: child,
     );
   }
@@ -227,9 +282,12 @@ class GitGridAssets extends SingleChildStatelessSeed {
 /// the availability registry's pending rebuild (grid_engine
 /// Provider/ProviderScope semantics); an unmounting one flips it back.
 ///
-/// Fail-safe: delivery binds only when BOTH halves are observed — GitHub can
-/// only ADD delivery to a checkout it can commit from, never conjure one.
-/// With either absent the ambient bundle passes through unchanged.
+/// Fail-safe: delivery binds only when an ambient bundle CARRYING A SOURCE
+/// CONTROL is observed AND both halves are — GitHub can only ADD delivery to
+/// a checkout it can commit from, never conjure one, and the guard enforces
+/// that structurally (a standalone mount with no git asset above binds
+/// nothing). With any of the three absent the ambient bundle passes through
+/// unchanged.
 class GitHubGridAssets extends SingleChildStatelessSeed {
   /// Creates the GitHub asset over the optional [composition] PR-shaping
   /// value; [child] is supplied by an enclosing [Nest].
@@ -255,22 +313,40 @@ class GitHubGridAssets extends SingleChildStatelessSeed {
     final knob = composition;
 
     var wired = child;
-    // BOTH halves, or nothing is bound (commit-only).
-    if (ops != null && opener != null) {
-      wired = InheritedSeed<ServiceBundle>(
+    // An ambient CHECKOUT and both halves, or nothing is bound (commit-only):
+    // GitHub only ADDS delivery to a source control it can commit from — a
+    // standalone mount (no git asset above) conjures no delivery-over-nothing.
+    final checkout = ambient?.sourceControl;
+    if (checkout != null && ops != null && opener != null) {
+      final composition = knob ?? const PrComposition();
+      wired = _DerivedBundleSeed(
         // Carry through EVERY field the bundle declares — silently dropping
-        // one here would unbind an unrelated service.
+        // one here would unbind an unrelated service (or, for trustFloor,
+        // RESET the substation's admitted-origin floor to the default
+        // exactly when PR-opening delivery is armed).
         value: ServiceBundle(
-          sourceControl: ambient?.sourceControl,
+          sourceControl: checkout,
           delivery: GitHubPrDelivery(
             gitOps: ops,
             prOpener: opener,
-            composition: knob ?? const PrComposition(),
+            composition: composition,
           ),
           escalation: ambient?.escalation,
           trust: ambient?.trust,
+          trustFloor:
+              ambient?.trustFloor ?? const TrustFloor(TrustLevel.trusted),
           transport: ambient?.transport,
         ),
+        derivedFrom: [
+          checkout,
+          ops,
+          opener,
+          composition,
+          ambient?.escalation,
+          ambient?.trust,
+          ambient?.trustFloor,
+          ambient?.transport,
+        ],
         child: child,
       );
     }
@@ -279,5 +355,49 @@ class GitHubGridAssets extends SingleChildStatelessSeed {
     return knob == null
         ? wired
         : InheritedSeed<PrComposition>(value: knob, child: wired);
+  }
+}
+
+/// An `InheritedSeed<ServiceBundle>` that notifies on its DERIVATION INPUTS,
+/// not on bundle instance identity.
+///
+/// The watch-based assets re-DERIVE a fresh [ServiceBundle] on every rebuild
+/// (that re-derivation is the whole point of space-47t: a later provider
+/// mount must flip the bundle live), but `ServiceBundle` has no value
+/// equality, so the plain `InheritedSeed.updateShouldNotify`
+/// (`value != oldSeed.value`) would notify every dependent on every no-op
+/// re-description — and `grid_engine`'s `WorkList` documents its ambient
+/// bundle as a config-axis dependency that never notifies once mounted
+/// (derailment-invariant 1). The bundle's own collaborators hide their
+/// constructor inputs behind private fields, so equality cannot be computed
+/// on the VALUE from here; instead each construction site passes the exact
+/// inputs the bundle was derived from ([derivedFrom], compared element-wise
+/// with `==` — identity for services, value equality for strings/knobs), and
+/// an input-equal re-derivation does NOT notify. A REAL flip (a provider
+/// mounting or unmounting, a root change) changes an input and notifies as
+/// before.
+///
+/// NOTE for the engine follow-on: `WorkList`'s "fixed-at-mount, never
+/// notifies" invariant text predates the watch-based assets; value equality
+/// on `ServiceBundle` itself (grid_engine) would let this wrapper retire.
+class _DerivedBundleSeed extends InheritedSeed<ServiceBundle> {
+  const _DerivedBundleSeed({
+    required super.value,
+    required this.derivedFrom,
+    required super.child,
+  });
+
+  /// The inputs [value] was derived from, in a fixed site-specific order.
+  final List<Object?> derivedFrom;
+
+  @override
+  bool updateShouldNotify(InheritedSeed<ServiceBundle> oldSeed) {
+    if (oldSeed is! _DerivedBundleSeed) return true;
+    final old = oldSeed.derivedFrom;
+    if (old.length != derivedFrom.length) return true;
+    for (var i = 0; i < derivedFrom.length; i++) {
+      if (derivedFrom[i] != old[i]) return true;
+    }
+    return false;
   }
 }
