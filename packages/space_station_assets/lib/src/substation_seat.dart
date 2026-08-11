@@ -32,8 +32,13 @@
 library;
 
 import 'package:genesis_tree/genesis_tree.dart';
+// GitHubPrDelivery relocated out of grid_assets into github_grid_assets
+// (power_station pow-2ua / PR #109): grid_assets holds the generic assets and
+// the abstractions, GitHub implementations live in the GitHub package.
+import 'package:github_grid_assets/github_grid_assets.dart'
+    show GitHubPrDelivery;
 import 'package:grid_assets/grid_assets.dart'
-    show GitHubPrDelivery, GitSourceControl, PrComposition;
+    show GitSourceControl, PrComposition;
 import 'package:grid_engine/grid_engine.dart'
     show ServiceBundle, TrustFloor, TrustLevel;
 import 'package:grid_runtime/grid_runtime.dart'

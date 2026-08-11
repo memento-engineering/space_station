@@ -38,6 +38,12 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
+  # GitHub implementations relocated here by power_station pow-2ua (PR #109):
+  # grid_assets holds generic assets + abstractions, the GitHub package holds
+  # the implementations, and the dependency runs implementation -> abstraction.
+  # NOT YET PUBLISHED to pub.dev — rides the gitignored pubspec_overrides.yaml
+  # until it is released; see the publish note on pow-2ua.
+  github_grid_assets: ^0.1.0-rc.1
   grid_assets: ^0.5.0-rc.1
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
