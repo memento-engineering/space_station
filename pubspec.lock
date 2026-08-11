@@ -42,11 +42,12 @@ packages:
     source: hosted
     version: "2.13.1"
   beads_dart:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/beads_dart"
-      relative: true
-    source: path
+      name: beads_dart
+      sha256: cbe2e8c69a77c36b63c5d8c801f15e74ac9e97bbce454478133ef6ccb85060cc
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0-rc.2"
   boolean_selector:
     dependency: transitive
@@ -104,14 +105,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.5.2"
-  clock:
-    dependency: transitive
-    description:
-      name: clock
-      sha256: fddb70d9b5277016c77a80201021d40a2247104d9f4aa7bab7157b7e3f05b84b
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.2"
   collection:
     dependency: transitive
     description:
@@ -153,20 +146,13 @@ packages:
     source: hosted
     version: "3.0.7"
   dart_grid_assets:
-    dependency: "direct overridden"
-    description:
-      path: "../power_station/packages/dart_grid_assets"
-      relative: true
-    source: path
-    version: "0.1.0"
-  dart_jsonwebtoken:
     dependency: transitive
     description:
-      name: dart_jsonwebtoken
-      sha256: ad84e60181696513d04d5f2078e0bbc20365b911f46f647797317414bdc88fbe
+      name: dart_grid_assets
+      sha256: "5c84e0f632de1b0a0c97775eb7747e4d5ed34d5c876c2ff8a47f9dbde9c979b2"
       url: "https://pub.dev"
     source: hosted
-    version: "3.4.1"
+    version: "0.1.0"
   extension_discovery:
     dependency: transitive
     description:
@@ -176,11 +162,12 @@ packages:
     source: hosted
     version: "2.1.0"
   federated_grid_assets:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../power_station/packages/federated_grid_assets"
-      relative: true
-    source: path
+      name: federated_grid_assets
+      sha256: "72f6a1bc17f13fed4c9928c88e35726665af53840594c208cfeaedfc5147d7d7"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.3.0-rc.1"
   ffi:
     dependency: transitive
@@ -215,33 +202,29 @@ packages:
     source: hosted
     version: "4.0.0"
   genesis_foundation:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../genesis/packages/foundation"
-      relative: true
-    source: path
+      name: genesis_foundation
+      sha256: "99c1fc5b79d7aadce7b7b887079f400b111c55715b3cb69fce47260c937a5bc3"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0"
   genesis_perception:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../genesis/packages/perception"
-      relative: true
-    source: path
+      name: genesis_perception
+      sha256: "71fafcd4db7148635163496ed710360acbe3baee1fc3181624056972f9f32bca"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0"
   genesis_tree:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../genesis/packages/tree"
-      relative: true
-    source: path
+      name: genesis_tree
+      sha256: e9af052b12c7e7cfc2eec6d54f6013e3416ae3e3b61c22612f91298c3bcc1fc1
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0"
-  github_grid_assets:
-    dependency: "direct overridden"
-    description:
-      path: "../power_station/packages/github_grid_assets"
-      relative: true
-    source: path
-    version: "0.1.0-rc.1"
   glob:
     dependency: transitive
     description:
@@ -259,53 +242,60 @@ packages:
     source: hosted
     version: "2.3.2"
   grid_assets:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../power_station/packages/grid_assets"
-      relative: true
-    source: path
+      name: grid_assets
+      sha256: "5e996caa9de8e61c56219d9e934f92b26de4d5bdb3fb24c57da20adfb41a3830"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.5.0-rc.1"
   grid_cli:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/grid_cli"
-      relative: true
-    source: path
+      name: grid_cli
+      sha256: "448ac13fd34b79a471fb695fd29131c2303bb4193c35827fffa719106bb051a9"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.5.0-rc.4"
   grid_diagnostics_contract:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/grid_diagnostics_contract"
-      relative: true
-    source: path
+      name: grid_diagnostics_contract
+      sha256: "0db40140c101591bed41aa20540cf41bf96e37119eaca7505c8392f0535fb898"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0"
   grid_engine:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/grid_engine"
-      relative: true
-    source: path
+      name: grid_engine
+      sha256: "9c38c6f7d0c6de2376db45df52d4477b44282df6242002a258d301fe0359bfd3"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.3.0-rc.3"
   grid_exploration:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/grid_exploration"
-      relative: true
-    source: path
+      name: grid_exploration
+      sha256: "96e2a915a3eda7a1acc4d4a3014c8f26857a23bf02a1423e63927d41f09b6e8d"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.3.0-rc.1"
   grid_runtime:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/grid_runtime"
-      relative: true
-    source: path
+      name: grid_runtime
+      sha256: ca8a0574b355834a73103d7cddb09c3a22d6887a6c2ae0256a417cbf249c8b0d
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0-rc.2"
   grid_sdk:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../the_grid/packages/grid_sdk"
-      relative: true
-    source: path
+      name: grid_sdk
+      sha256: c4c49ab35ed5b091f63127f5048888c07c927bd856497c431d7179d3553381ec
+      url: "https://pub.dev"
+    source: hosted
     version: "0.3.0-rc.3"
   http:
     dependency: transitive
@@ -459,14 +449,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.6"
-  pointycastle:
-    dependency: transitive
-    description:
-      name: pointycastle
-      sha256: "92aa3841d083cc4b0f4709b5c74fd6409a3e6ba833ffc7dc6a8fee096366acf5"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.0.0"
   pool:
     dependency: transitive
     description:

@@ -43,8 +43,8 @@ dependencies:
   # the implementations, and the dependency runs implementation -> abstraction.
   # NOT YET PUBLISHED to pub.dev — rides the gitignored pubspec_overrides.yaml
   # until it is released; see the publish note on pow-2ua.
-  github_grid_assets: ^0.1.0-rc.1
-  grid_assets: ^0.5.0-rc.1
+  github_grid_assets: ^0.1.0-rc.2
+  grid_assets: ^0.6.0-rc.1
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
