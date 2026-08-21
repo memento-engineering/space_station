@@ -1,7 +1,8 @@
+import 'package:beads_dart/beads_dart.dart' show Bead, BeadStatus, IssueType;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart' show GitSourceControl;
 import 'package:grid_engine/grid_engine.dart'
-    show ServiceBundle, TrustFloor, TrustLevel;
+    show MountEligible, MountRefused, ServiceBundle, TrustFloor, TrustLevel;
 import 'package:grid_runtime/grid_runtime.dart'
     show
         GhPrOpener,
@@ -41,6 +42,70 @@ void main() {
       expect(scope.prefix, 'mn');
     });
 
+    test('THE MOUNT GATE IS COMPOSED: the seat\'s ServiceBundle carries a '
+        'mountEligibility predicate that ADMITS an approved, plan-stamped, '
+        'driveable bead and REFUSES one missing any of the three', () {
+      final walk = _mount(
+        ProviderScope(
+          child: sdk.RawAssetGrid(
+            root: '/home/me/station',
+            assets: [SubstationSeat(name: 'mine', root: '../mine')],
+          ),
+        ),
+      );
+
+      // pow-50l shipped MountEligibilityAssets and NOTHING mounted it, so the
+      // gate was inert on every station: a bead with no `grid.approved` label
+      // and an OPEN blocker was mounted by the live lunar arm within minutes
+      // of being filed. Absence of this predicate is the whole defect.
+      final gated = _gated(walk);
+      final predicate = gated.mountEligibility;
+      // The gate DERIVES: it must carry the git half forward, not replace it.
+      // (GitGridAssets rebuilds the bundle from scratch, which is exactly why
+      // this seed is mounted innermost.)
+      expect(
+        gated.sourceControl,
+        isNotNull,
+        reason:
+            'the gate derives from the ambient bundle — a gate that '
+            'dropped sourceControl would break provisioning for every seat',
+      );
+      expect(
+        predicate,
+        isNotNull,
+        reason:
+            'an unmounted MountEligibilityAssets is an INERT gate — the '
+            'station admits whatever reaches the ready frontier',
+      );
+
+      expect(predicate!(_bead()), isA<MountEligible>());
+      expect(
+        predicate(_bead(labels: const [])),
+        isA<MountRefused>().having(
+          (r) => r.clause,
+          'clause',
+          contains('grid.approved'),
+        ),
+        reason: 'no grid.approved label — the human approval gate',
+      );
+      expect(
+        predicate(_bead(metadata: const {})),
+        isA<MountRefused>().having(
+          (r) => r.clause,
+          'clause',
+          contains('validation_plan'),
+        ),
+        reason:
+            "no validation_plan — the committee's gating lane would run "
+            '`false` and grade F by design',
+      );
+      expect(
+        predicate(_bead(type: IssueType.epic)),
+        isA<MountRefused>().having((r) => r.clause, 'clause', contains('type')),
+        reason: 'an epic is organisational, never driveable',
+      );
+    });
+
     test('app == null mounts NO PrOpener provider — the commit-only posture '
         'is ABSENCE in the tree, never a null-valued provider', () {
       final walk = _mount(
@@ -58,7 +123,7 @@ void main() {
       );
       // And with no opener (and no GitOps) observed, the seat's bundle stays
       // commit-only.
-      expect(walk.values<ServiceBundle>().single.delivery, isNull);
+      expect(_gated(walk).delivery, isNull);
     });
 
     test('app != null on a LIVE tree (GitOps observed) mounts a seat-scoped '
@@ -314,9 +379,14 @@ void main() {
           ),
         ),
       );
+      // Exactly ONE seat binds delivery. Assert it on the EFFECTIVE bundle:
+      // the gate derives from GitHubGridAssets' bundle and carries `delivery`
+      // forward, so a raw `where(delivery != null)` count now sees both.
+      expect(_gated(both).delivery, isNotNull);
       expect(
-        both.values<ServiceBundle>().where((b) => b.delivery != null),
+        both.values<ServiceBundle>().where((b) => b.mountEligibility != null),
         hasLength(1),
+        reason: 'one gated bundle per seat, and this tree mounts one seat',
       );
     });
 
@@ -344,9 +414,9 @@ void main() {
         ),
       );
       owner.flush();
-      var bundles = _Walk(root).values<ServiceBundle>();
+      var gated = _gated(_Walk(root));
       expect(
-        bundles.single.delivery,
+        gated.delivery,
         isNull,
         reason: 'no opener observed yet: commit-only',
       );
@@ -364,9 +434,9 @@ void main() {
       owner.flush();
       await _pump();
       owner.flush();
-      bundles = _Walk(root).values<ServiceBundle>();
+      gated = _gated(_Walk(root));
       expect(
-        bundles.single.delivery,
+        gated.delivery,
         isNull,
         reason: 'a sibling provider is not an ancestor — still commit-only',
       );
@@ -380,10 +450,10 @@ void main() {
       owner.flush();
       await _pump();
       owner.flush();
-      bundles = _Walk(root).values<ServiceBundle>();
+      gated = _gated(_Walk(root));
       expect(
-        bundles.where((b) => b.delivery != null),
-        hasLength(1),
+        gated.delivery,
+        isNotNull,
         reason: 'both halves observed: delivery-bound',
       );
     });
@@ -631,3 +701,28 @@ class _FakePrOpener implements PrOpener {
   }) async =>
       PullRequestResult.opened(const PullRequestRef(url: 'https://x/pr/1'));
 }
+
+/// A work bead shaped for the mount gate: driveable type + `validation_plan` +
+/// the `grid.approved` label. Each argument is overridden individually so a
+/// test can knock out exactly one leg of the three.
+Bead _bead({
+  IssueType type = IssueType.task,
+  List<String> labels = const ['grid.approved'],
+  Map<String, String> metadata = const {
+    'validation_plan': 'dart analyze && dart test',
+  },
+}) => Bead(
+  id: 'mine-1',
+  title: 'a work bead',
+  issueType: type,
+  status: BeadStatus.open,
+  labels: labels,
+  metadata: metadata,
+);
+
+/// The EFFECTIVE seat bundle — the one `SubstationWork` resolves. Each seat now
+/// mounts two: `GitGridAssets`' fresh bundle and, innermost, the bundle
+/// `MountEligibilityAssets` derives from it. Only the latter carries the mount
+/// predicate, so it is the one every assertion about seat posture means.
+ServiceBundle _gated(_Walk walk) =>
+    walk.values<ServiceBundle>().singleWhere((b) => b.mountEligibility != null);

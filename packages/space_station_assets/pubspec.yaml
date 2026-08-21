@@ -44,7 +44,9 @@ dependencies:
   # NOT YET PUBLISHED to pub.dev — rides the gitignored pubspec_overrides.yaml
   # until it is released; see the publish note on pow-2ua.
   github_grid_assets: ^0.1.0-rc.2
-  grid_assets: ^0.6.0-rc.1
+  # rc.2 is the floor: MountEligibilityAssets is absent from the rc.1
+  # archive even though it exists in rc.1 source (pow-w83).
+  grid_assets: ^0.6.0-rc.2
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
@@ -55,7 +57,9 @@ dependencies:
   # directly now that the seat stack lives here).
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint.
-  grid_engine: ^0.3.0-rc.3
+  # rc.5 is the floor: ServiceBundle.mountEligibility (the mount-gate
+  # predicate this package now composes) does not exist in rc.3/rc.4.
+  grid_engine: ^0.3.0-rc.5
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.

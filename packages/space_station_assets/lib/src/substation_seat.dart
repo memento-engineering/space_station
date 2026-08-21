@@ -38,7 +38,7 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart'
     show GitHubPrDelivery;
 import 'package:grid_assets/grid_assets.dart'
-    show GitSourceControl, PrComposition;
+    show GitSourceControl, MountEligibilityAssets, PrComposition;
 import 'package:grid_engine/grid_engine.dart'
     show ServiceBundle, TrustFloor, TrustLevel;
 import 'package:grid_runtime/grid_runtime.dart'
@@ -172,7 +172,17 @@ class SubstationSeat extends StatelessSeed {
       prefix: prefix,
       assets: const [
         Nest(
-          children: [GitGridAssets(), GitHubGridAssets()],
+          // MountEligibilityAssets is INNERMOST on purpose: GitGridAssets
+          // builds a FRESH ServiceBundle and preserves nothing from ambient,
+          // so a gate mounted above it would be silently clobbered and the
+          // predicate would never reach SubstationWork. This seed derives FROM
+          // the ambient bundle — it copies sourceControl/delivery/escalation/
+          // trust/transport forward and adds the predicate.
+          children: [
+            GitGridAssets(),
+            GitHubGridAssets(),
+            MountEligibilityAssets(),
+          ],
           child: sdk.SubstationWork(),
         ),
       ],
