@@ -351,6 +351,12 @@ class GitHubGridAssets extends SingleChildStatelessSeed {
           trustFloor:
               ambient?.trustFloor ?? const TrustFloor(TrustLevel.trusted),
           transport: ambient?.transport,
+          // Derivation is total: every ambient field rides forward. Dropping
+          // one is how the mount gate died in the live arm (grid_sdk's
+          // transport overlay dropped mountEligibility — the_grid #212); in
+          // THIS chain the predicate mounts below us today, but a re-order
+          // must not silently disarm it.
+          mountEligibility: ambient?.mountEligibility,
         ),
         derivedFrom: [
           checkout,
