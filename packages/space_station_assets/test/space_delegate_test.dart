@@ -44,7 +44,7 @@ void main() {
         'providers are ABSENT from the tree, so every seat bundle is '
         'commit-only (space-47t: inertness declared in the tree)', () {
       final bundles = _mountedBundles(_Author(delegate()));
-      expect(bundles, hasLength(5), reason: 'one git bundle per coded seat');
+      expect(bundles, hasLength(5), reason: 'one gated bundle per coded seat');
       expect(bundles.every((b) => b.delivery == null), isTrue);
     });
 
@@ -224,20 +224,16 @@ List<ServiceBundle> _mountedBundles(Seed root) {
   }
 
   walk(branch);
-  // The delivery-bound seats provide TWO bundles (git's, then GitHub's
-  // re-provision). Collapse to the innermost per pair: a bound bundle
-  // supersedes the unbound one directly above it.
-  final collapsed = <ServiceBundle>[];
-  for (var i = 0; i < bundles.length; i++) {
-    final next = i + 1 < bundles.length ? bundles[i + 1] : null;
-    final isOuterOfBoundPair =
-        bundles[i].delivery == null &&
-        next != null &&
-        next.delivery != null &&
-        identical(next.sourceControl, bundles[i].sourceControl);
-    if (!isOuterOfBoundPair) collapsed.add(bundles[i]);
-  }
-  return collapsed;
+  // A seat mounts SEVERAL bundles as its stack assets each re-provide: git's,
+  // GitHub's delivery re-provision, and innermost the one the mount gate
+  // derives. Only the innermost is what `SubstationWork` resolves, so it is
+  // the only one a seat-posture assertion means.
+  //
+  // `MountEligibilityAssets` is mounted innermost on EVERY seat, so
+  // "carries a mount predicate" identifies that bundle exactly — replacing the
+  // pairwise delivery heuristic this helper used to need, which could only
+  // collapse pairs and silently mis-collapsed a triple.
+  return bundles.where((b) => b.mountEligibility != null).toList();
 }
 
 /// A swappable host: [_SwapHostState.swap] re-describes the subtree with

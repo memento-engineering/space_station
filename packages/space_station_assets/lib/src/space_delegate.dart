@@ -56,6 +56,7 @@ import 'package:grid_assets/grid_assets.dart'
         AgentConfig,
         EnvironmentRegistry,
         HarnessProvider,
+        MountEligibilityAssets,
         buildBuiltinEnvironmentRegistry,
         buildCodeRegistry,
         mountedRosterOf;
@@ -610,7 +611,12 @@ sdk.Substation _parseSubstation(String raw) {
     rootPath,
     prefix: prefix,
     assets: const [
-      Nest(children: [GitGridAssets()], child: sdk.SubstationWork()),
+      Nest(
+        // INNERMOST — see SubstationSeat: GitGridAssets rebuilds the bundle
+        // from scratch, so the gate must derive from it, not above it.
+        children: [GitGridAssets(), MountEligibilityAssets()],
+        child: sdk.SubstationWork(),
+      ),
     ],
   );
 }
