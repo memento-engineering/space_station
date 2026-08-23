@@ -110,6 +110,7 @@ class SubstationSeat extends StatelessSeed {
     this.prefix,
     this.app,
     this.githubPoll,
+    this.landingPolicy,
     Key? key,
   }) : super(key: key ?? ValueKey<String>('seat:$name'));
 
@@ -133,13 +134,20 @@ class SubstationSeat extends StatelessSeed {
   /// inferred from [root], a git remote, the environment, or station defaults.
   final github.GitHubReconcilerConfig? githubPoll;
 
+  /// The seat's explicitly selected GitHub landing posture.
+  ///
+  /// Null preserves `github.GitHubGridAssets`' default
+  /// `github.PrNoMergePolicy`: open or reuse a PR and leave it unmerged.
+  final github.GitHubDeliveryPolicy? landingPolicy;
+
   @override
   Seed build(TreeContext context) {
     final githubPoll = this.githubPoll;
+    final landingPolicy = this.landingPolicy;
     final children = <SingleChildSeed>[
       const GitGridAssets(),
       if (githubPoll != null) github.GitHubReconcilerAssets(config: githubPoll),
-      const github.GitHubGridAssets(),
+      github.GitHubGridAssets(policy: landingPolicy),
       const MountEligibilityAssets(),
     ];
     final substation = sdk.Substation(
