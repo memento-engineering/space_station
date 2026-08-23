@@ -8,6 +8,7 @@ import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
+import 'package:space_station_assets/src/substation_seat.dart';
 import 'package:test/test.dart';
 
 /// Track G-space / H2 (tg-r81), re-cut by space-47t: offline coverage for
@@ -24,7 +25,7 @@ import 'package:test/test.dart';
 void main() {
   SpaceDelegate delegate({
     String gridRoot = '/home/memento/space_station',
-    List<sdk.Substation> appended = const [],
+    List<SubstationSeat> appended = const [],
     bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
@@ -63,7 +64,11 @@ void main() {
         'coded org (space-6ds: the five coded seats are always authored)', () {
       expect(
         () => _mount(
-          _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
+          _Author(
+            delegate(
+              appended: [SubstationSeat(name: 'tgdog', root: '/work/td')],
+            ),
+          ),
         ),
         returnsNormally,
       );

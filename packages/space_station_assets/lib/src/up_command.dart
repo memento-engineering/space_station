@@ -347,7 +347,7 @@ class UpCommand extends Command<int> {
     for (final s in config.appended) {
       try {
         locator.locateWorkStore(root: s.root, substationName: s.name);
-        armed.add((name: s.name, root: s.root, prefix: s.prefix));
+        armed.add((name: s.name, root: s.root, prefix: s.prefix ?? s.name));
       } on ArgumentError catch (e) {
         err('space up: ${e.message}');
         return 64;

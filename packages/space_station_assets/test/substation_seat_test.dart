@@ -18,6 +18,81 @@ import 'package:test/test.dart';
 /// production root).
 void main() {
   group('SubstationSeat — the composed seat', () {
+    test(
+      'explicit landing policies are observable on the effective gated seat',
+      () {
+        const policies = <github.GitHubDeliveryPolicy>[
+          github.PrNoMergePolicy(),
+          github.PrAutoMergePolicy(),
+          github.DirectMergePolicy(),
+        ];
+
+        for (final policy in policies) {
+          final walk = _mount(
+            ProviderScope(
+              child: sdk.RawAssetGrid(
+                root: '/home/me/station',
+                assets: [
+                  Provider<GitOps>(
+                    create: (_) => GitOps(SystemGitRunner()),
+                    child: Provider<PrOpener>.value(
+                      _FakePrOpener(),
+                      child: SubstationSeat(
+                        name: 'mine',
+                        root: '../mine',
+                        landingPolicy: policy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          expect(
+            walk.values<github.GitHubDeliveryPolicy>().single,
+            same(policy),
+          );
+          final gated = _gated(walk);
+          final deliveryMatcher = switch (policy) {
+            github.PrNoMergePolicy() => isA<github.GitHubPrDelivery>(),
+            github.PrAutoMergePolicy() => isA<github.GitHubAutoMergeDelivery>(),
+            github.DirectMergePolicy() =>
+              isA<github.GitHubDirectMergeDelivery>(),
+          };
+          expect(gated.delivery, deliveryMatcher);
+          expect(gated.sourceControl, isNotNull);
+          expect(gated.mountEligibility, isNotNull);
+        }
+      },
+    );
+
+    test(
+      'omitted landing policy preserves PR-without-merge and mounts no value',
+      () {
+        final walk = _mount(
+          ProviderScope(
+            child: sdk.RawAssetGrid(
+              root: '/home/me/station',
+              assets: [
+                Provider<GitOps>(
+                  create: (_) => GitOps(SystemGitRunner()),
+                  child: Provider<PrOpener>.value(
+                    _FakePrOpener(),
+                    child: SubstationSeat(name: 'mine', root: '../mine'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(walk.values<github.GitHubDeliveryPolicy>(), isEmpty);
+        final gated = _gated(walk);
+        expect(gated.delivery, isA<github.GitHubPrDelivery>());
+        expect(gated.sourceControl, isNotNull);
+        expect(gated.mountEligibility, isNotNull);
+      },
+    );
+
     test('mounts its Substation UNDER the wrapper: the offline roster '
         'enumeration still finds the SubstationScope (space-47t b: '
         'codedRosterOf/mountedRosterOf are unaffected)', () {
