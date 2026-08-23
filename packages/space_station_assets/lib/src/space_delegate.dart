@@ -6,7 +6,8 @@
 /// canonical §2 tree —
 /// `RawAssetGrid → Station → HarnessProvider → Substations → Substation`, with
 /// each substation's per-project git a **substation-scoped asset**
-/// ([GitGridAssets] / [GitHubGridAssets], Track F) rather than a runner-built
+/// ([GitGridAssets] plus the imported GitHub extension, Track F) rather than a
+/// runner-built
 /// `ServiceBundle` map. The station's shape is authored in Dart, as a tree
 /// (v3 §1: "the tree IS the configuration"); the verbs re-seat over it.
 ///
@@ -295,7 +296,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// stores that resolve), that seat drives no work.
   ///
   /// Each seat's git is substation-scoped (Track F, re-cut by space-47t):
-  /// the seat's `const` [GitGridAssets] / [GitHubGridAssets] WATCH the
+  /// the seat's [GitGridAssets] and imported GitHub extension WATCH the
   /// station machinery individually — `StationGitService` (adopted from the
   /// work runtime), `GitOps` and `PrOpener` (created IN-TREE here, LIVE arms
   /// only) — and a seat-scoped `Provider<PrOpener>` (a [GitHubAppConfig]
@@ -567,8 +568,8 @@ void addSpaceStationFlags(
 /// ambient `Provider<StationGitService>`). The GitHub delivery node is
 /// deliberately ABSENT: PR-opening for an appended substation waits until it
 /// is CODED into the roster (round 3: flags append a seat, they do not rewire
-/// one), and under the watch-based assets (space-47t) that policy is authored
-/// STRUCTURALLY — no [GitHubGridAssets] node, so no delivery can bind even on
+/// one), and under the composed assets that policy is authored STRUCTURALLY —
+/// no imported GitHub extension node, so no delivery can bind even on
 /// a live arm. Throws [FormatException] on a malformed pairing (no `=`, empty
 /// name/prefix/root) — a config defect the operator sees immediately. The
 /// optional `@<prefix>` names the store's issue-id prefix when it differs

@@ -245,10 +245,10 @@ packages:
     dependency: transitive
     description:
       name: github_grid_assets
-      sha256: "553258891e955766217200aff655593aa84a82a73f57e318ee4c6df49c5217e8"
+      sha256: "9bbb5aa03728bce0f0e3b861115087d54a4afee7c87020fd9bf83c08fb5e25e3"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-rc.2"
+    version: "0.1.0-rc.3"
   glob:
     dependency: transitive
     description:
@@ -269,18 +269,18 @@ packages:
     dependency: transitive
     description:
       name: grid_assets
-      sha256: "72f8afb0aa4aa3da0b5a621448bb7cb7c225cac57553bdb9270b93731cd978c3"
+      sha256: "4849d6b02f2ac5e017d26969894b393864dd7ce90958e441c032f592fb69d9c6"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0-rc.2"
+    version: "0.6.0-rc.3"
   grid_cli:
     dependency: transitive
     description:
       name: grid_cli
-      sha256: fd709c7fb9cd263a5d5017b87c5e88740c7afb99078f70387fa5ab41b9cf3cc6
+      sha256: a91d4f3cf6f60d12b41314fb2286b675f0d9c9d0922e9d5536207112ee5ae18d
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0-rc.6"
+    version: "0.5.0-rc.7"
   grid_diagnostics_contract:
     dependency: transitive
     description:
@@ -293,10 +293,10 @@ packages:
     dependency: transitive
     description:
       name: grid_engine
-      sha256: "0049f67910382e31ac6db2383e8a4790b19b864f3ad6af4f3184e4c356182478"
+      sha256: d3d619558fd59ede9dc21100c90fcbd0d690bf7f7e249a926599619493918373
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.6"
+    version: "0.3.0-rc.7"
   grid_exploration:
     dependency: transitive
     description:
@@ -309,18 +309,18 @@ packages:
     dependency: transitive
     description:
       name: grid_runtime
-      sha256: dd5b4372a75f93cdbd524a55890421124b1579153dd14a92ba029588e7fba683
+      sha256: "81705028d4660c1918edd8f4c0d40c48e4a81bf00b2340a3951a64f81ae745c3"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-rc.4"
+    version: "0.2.0-rc.5"
   grid_sdk:
     dependency: transitive
     description:
       name: grid_sdk
-      sha256: "96ef435caeb1b98344709fd323a8b32adca04da6cc910cedeca313d7dfee068e"
+      sha256: "5f0a541c4ffdf3635b95d6a4fa353ac19fa96c512f15a2eb2a82bb310e6cbd53"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.5"
+    version: "0.3.0-rc.6"
   http:
     dependency: transitive
     description:
