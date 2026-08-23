@@ -57,6 +57,7 @@ import 'package:grid_assets/grid_assets.dart'
         AgentConfig,
         EnvironmentRegistry,
         HarnessProvider,
+        MountEligibilityAssets,
         buildBuiltinEnvironmentRegistry,
         buildCodeRegistry,
         mountedRosterOf;
@@ -79,7 +80,7 @@ typedef SpaceDelegateFactory =
     SpaceDelegate Function({
       required String gridRoot,
       AgentConfig? agentConfig,
-      List<SubstationSeat> appended,
+      List<sdk.Substation> appended,
       EnvironmentRegistry? harnesses,
       sdk.StationWorkWiring? wiring,
       StationGitService? provisioner,
@@ -229,13 +230,11 @@ class SpaceDelegate extends sdk.GridDelegate {
   sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) =>
       buildCodeRegistry();
 
-  /// The operator's `--substation` flags, parsed into standard
-  /// [SubstationSeat] compositions — the APPEND layer (Fork B, round 3): they
-  /// spread AFTER the coded roster in [build], in flag order. Landing posture
-  /// remains a Dart-authored seat value and is never parsed from argv. Never a
-  /// merge, never an override — the coded roster is changed in code
-  /// ([substations], the subclass hook).
-  final List<SubstationSeat> appended;
+  /// The operator's `--substation` flags, parsed into ready [sdk.Substation]
+  /// seats — the APPEND layer (Fork B, round 3): they spread AFTER the coded
+  /// roster in [build], in flag order. Never a merge, never an override — the
+  /// coded roster is changed in code ([substations], the subclass hook).
+  final List<sdk.Substation> appended;
 
   /// The station-default agent scope (harness / model / target) — the ambient
   /// rung of the agent-config ladder (ADR-0008 D10).
@@ -481,13 +480,12 @@ class SpaceStationConfig {
   final String gridHome;
 
   /// The operator's `--substation` flags, parsed into APPENDED
-  /// [SubstationSeat] compositions (Fork B, round 3: append-only — the coded
-  /// roster lives in [SpaceDelegate.substations], never here). Landing posture
-  /// remains a Dart-authored seat value and is never parsed from argv. Every
-  /// appended seat is operator-named: `up`'s store guard refuses LOUD when one
-  /// resolves no work store (their error), while an absent CODED sibling is
-  /// skipped loud so the rest of the org still arms.
-  final List<SubstationSeat> appended;
+  /// [sdk.Substation] seats (Fork B, round 3: append-only — the coded roster
+  /// lives in [SpaceDelegate.substations], never here). Every appended seat is
+  /// operator-named: `up`'s store guard refuses LOUD when one resolves no
+  /// work store (their error), while an absent CODED sibling is skipped loud
+  /// so the rest of the org still arms.
+  final List<sdk.Substation> appended;
 
   /// Observe-only (the SAFE DEFAULT): the tree arms over INERT seams — no
   /// spawn, no store write, no git. The first LIVE arm (`--no-dry-run`) stays
@@ -565,13 +563,18 @@ void addSpaceStationFlags(
 }
 
 /// Parses one `--substation <name>[@<prefix>]=<root>` value into an APPENDED
-/// [SubstationSeat] carrying the standard composed stack. Landing posture
-/// remains a Dart-authored value and is never parsed from argv. Throws
-/// [FormatException] on a malformed pairing (no `=`, empty
+/// [sdk.Substation] seat carrying the GIT half of the substation stack —
+/// `Nest[GitGridAssets] → SubstationWork` (provisioning observed from the
+/// ambient `Provider<StationGitService>`). The GitHub delivery node is
+/// deliberately ABSENT: PR-opening for an appended substation waits until it
+/// is CODED into the roster (round 3: flags append a seat, they do not rewire
+/// one), and under the composed assets that policy is authored STRUCTURALLY —
+/// no imported GitHub extension node, so no delivery can bind even on
+/// a live arm. Throws [FormatException] on a malformed pairing (no `=`, empty
 /// name/prefix/root) — a config defect the operator sees immediately. The
 /// optional `@<prefix>` names the store's issue-id prefix when it differs
 /// from the name (names ≠ prefixes); absent, the prefix IS the name.
-SubstationSeat _parseSubstation(String raw) {
+sdk.Substation _parseSubstation(String raw) {
   final eq = raw.indexOf('=');
   if (eq < 0) {
     throw FormatException(
@@ -604,7 +607,19 @@ SubstationSeat _parseSubstation(String raw) {
       'space up: --substation "$raw" has an empty root after "="',
     );
   }
-  return SubstationSeat(name: name, root: rootPath, prefix: prefix);
+  return sdk.Substation(
+    name,
+    rootPath,
+    prefix: prefix,
+    assets: const [
+      Nest(
+        // INNERMOST — see SubstationSeat: GitGridAssets rebuilds the bundle
+        // from scratch, so the gate must derive from it, not above it.
+        children: [GitGridAssets(), MountEligibilityAssets()],
+        child: sdk.SubstationWork(),
+      ),
+    ],
+  );
 }
 
 /// Builds [SpaceStationConfig] from space's own flags ([addSpaceStationFlags]).
@@ -626,7 +641,7 @@ SpaceStationConfig? spaceStationConfigFrom(
       ?.trim();
   if (gridHome == null || gridHome.isEmpty) return null;
 
-  final appended = <SubstationSeat>[];
+  final appended = <sdk.Substation>[];
   final seen = <String>{};
   for (final raw in args.multiOption('substation')) {
     if (raw.trim().isEmpty) continue;

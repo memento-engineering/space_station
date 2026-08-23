@@ -1,8 +1,6 @@
 import 'package:args/args.dart';
 import 'package:genesis_tree/genesis_tree.dart';
-import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart' show AgentConfig;
-import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
 import 'package:space_station_assets/src/substation_seat.dart';
@@ -32,7 +30,7 @@ void main() {
     'lenny',
   };
 
-  SpaceDelegate delegate({List<SubstationSeat> appended = const []}) =>
+  SpaceDelegate delegate({List<sdk.Substation> appended = const []}) =>
       SpaceDelegate(
         gridRoot: gridHome,
         appended: appended,
@@ -82,8 +80,8 @@ void main() {
         _Author(
           delegate(
             appended: [
-              SubstationSeat(name: 'tgdog', root: '/work/td'),
-              SubstationSeat(name: 'extra', root: '/work/x', prefix: 'ex'),
+              sdk.Substation('tgdog', '/work/td'),
+              sdk.Substation('extra', '/work/x', prefix: 'ex'),
             ],
           ),
         ),
@@ -164,18 +162,6 @@ void main() {
         expect(seat.name, 'tgdog');
         expect(seat.root, '/work/td');
         expect(seat.prefix, 'td');
-        expect(seat.landingPolicy, isNull);
-        expect(
-          _mountedValues<github.GitHubDeliveryPolicy>(
-            _Author(delegate(appended: config.appended)),
-          ),
-          isEmpty,
-        );
-        final appendedBundle = _mountedValues<ServiceBundle>(
-          _Author(delegate(appended: config.appended)),
-        ).where((bundle) => bundle.mountEligibility != null).last;
-        expect(appendedBundle.sourceControl, isNotNull);
-        expect(appendedBundle.mountEligibility, isNotNull);
         // The parsed seat carries the standard substation stack — it mounts
         // clean after the coded five.
         final seats = _mountedSeats(
@@ -258,21 +244,6 @@ List<sdk.SubstationScope> _mountedSeats(Seed root) {
 
   walk(branch);
   return seats;
-}
-
-List<T> _mountedValues<T extends Object>(Seed root) {
-  final owner = TreeOwner();
-  addTearDown(owner.dispose);
-  final branch = owner.mountRoot(root);
-  owner.flush();
-  final values = <T>[];
-  void walk(Branch current) {
-    if (current is InheritedBranch<T>) values.add(current.value);
-    current.visitChildren(walk);
-  }
-
-  walk(branch);
-  return values;
 }
 
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the

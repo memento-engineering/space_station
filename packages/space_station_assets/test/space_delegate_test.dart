@@ -3,12 +3,16 @@ import 'dart:io';
 import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
-    show AgentConfig, buildCodeRegistry, kCodeCircuit;
+    show
+        AgentConfig,
+        GitGridAssets,
+        MountEligibilityAssets,
+        buildCodeRegistry,
+        kCodeCircuit;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
-import 'package:space_station_assets/src/substation_seat.dart';
 import 'package:test/test.dart';
 
 /// Track G-space / H2 (tg-r81), re-cut by space-47t: offline coverage for
@@ -25,7 +29,7 @@ import 'package:test/test.dart';
 void main() {
   SpaceDelegate delegate({
     String gridRoot = '/home/memento/space_station',
-    List<SubstationSeat> appended = const [],
+    List<sdk.Substation> appended = const [],
     bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
@@ -64,15 +68,45 @@ void main() {
         'coded org (space-6ds: the five coded seats are always authored)', () {
       expect(
         () => _mount(
-          _Author(
-            delegate(
-              appended: [SubstationSeat(name: 'tgdog', root: '/work/td')],
-            ),
-          ),
+          _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
         ),
         returnsNormally,
       );
     });
+
+    test(
+      'a LIVE flag-appended seat retains git and gate but binds no delivery',
+      () {
+        final bundles = _mountedBundles(
+          _Author(
+            delegate(
+              live: true,
+              appended: [
+                sdk.Substation(
+                  'tgdog',
+                  '/work/td',
+                  assets: const [
+                    Nest(
+                      children: [GitGridAssets(), MountEligibilityAssets()],
+                      child: sdk.SubstationWork(),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(bundles, hasLength(6));
+        expect(
+          bundles.take(5).every((bundle) => bundle.delivery != null),
+          isTrue,
+        );
+        final appended = bundles.last;
+        expect(appended.delivery, isNull);
+        expect(appended.sourceControl, isNotNull);
+        expect(appended.mountEligibility, isNotNull);
+      },
+    );
 
     test('the LIVE effect providers are TREE-OWNED (create:, STYLE rule 2): '
         'a full re-description keeps the SAME GitOps/PrOpener instances — a '
