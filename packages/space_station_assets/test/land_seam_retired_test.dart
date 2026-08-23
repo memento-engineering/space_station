@@ -5,7 +5,7 @@
 // into every substation — a substation BINDS a `DeliveryMethod` on its
 // `ServiceBundle`, and binding NONE is the commit-only posture. space's runner
 // therefore names NO land flag and NO land factory: `up` hands the real
-// delivery halves (`GitOps` + `GhPrOpener`) to its seats' `GitHubGridAssets` on
+// delivery halves (`GitOps` + `PrOpener`) to the imported GitHub asset on
 // a LIVE arm, and NOTHING on a dry run.
 //
 // This mirrors grid_sdk's own `land_seam_retired_test.dart` one repo down: if

@@ -460,7 +460,7 @@ class UpCommand extends Command<int> {
     // DELIVERY IS A BINDING, NOT AN ARM (the_grid ADR-0000 A51). A substation
     // BINDS a `DeliveryMethod` on its `ServiceBundle`, and binding NONE is the
     // commit-only posture — a real posture, not an unarmed one. space's coded
-    // seats author the watch-based `GitHubGridAssets` (space-47t), which binds
+    // seats compose github_grid_assets' `GitHubGridAssets`, which binds
     // a `GitHubPrDelivery` iff it OBSERVES both halves (commit/push `GitOps` +
     // a `PrOpener`) from the tree. ADR-0006 D3 is preserved: the bound method
     // pushes and opens a PR from the per-bead branch, and nothing auto-merges.

@@ -43,7 +43,7 @@ dependencies:
   # the implementations, and the dependency runs implementation -> abstraction.
   # NOT YET PUBLISHED to pub.dev — rides the gitignored pubspec_overrides.yaml
   # until it is released; see the publish note on pow-2ua.
-  github_grid_assets: ^0.1.0-rc.2
+  github_grid_assets: ^0.1.0-rc.3
   # rc.2 is the floor: MountEligibilityAssets is absent from the rc.1
   # archive even though it exists in rc.1 source (pow-w83).
   grid_assets: ^0.6.0-rc.2
