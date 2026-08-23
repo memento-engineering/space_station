@@ -458,9 +458,9 @@ void main() {
       );
     });
 
-    test('a non-default ambient trustFloor SURVIVES the delivery rebind — '
-        'silently dropping it would reset the substation\'s admitted-origin '
-        'floor to `trusted` exactly when PR-opening delivery is armed', () {
+    test('non-default ambient fields SURVIVE the delivery rebind — deriving '
+        'delivery cannot reset trustFloor or drop mountEligibility', () {
+      MountEligible mountEligibility(Bead _) => const MountEligible();
       final walk = _mount(
         ProviderScope(
           child: sdk.RawAssetGrid(
@@ -471,9 +471,10 @@ void main() {
                 child: Provider<PrOpener>.value(
                   _FakePrOpener(),
                   child: InheritedSeed<ServiceBundle>(
-                    value: const ServiceBundle(
-                      sourceControl: GitSourceControl(),
-                      trustFloor: TrustFloor(TrustLevel.self),
+                    value: ServiceBundle(
+                      sourceControl: const GitSourceControl(),
+                      trustFloor: const TrustFloor(TrustLevel.self),
+                      mountEligibility: mountEligibility,
                     ),
                     child: const GitHubGridAssets(child: _Leaf()),
                   ),
@@ -490,7 +491,12 @@ void main() {
       expect(
         bound.trustFloor.level,
         TrustLevel.self,
-        reason: 'every ambient field rides the rebind — the floor included',
+        reason: 'total derivation carries the non-default ambient floor',
+      );
+      expect(
+        bound.mountEligibility,
+        same(mountEligibility),
+        reason: 'total derivation carries the ambient mount predicate',
       );
     });
 

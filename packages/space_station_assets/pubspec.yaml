@@ -57,9 +57,9 @@ dependencies:
   # directly now that the seat stack lives here).
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint.
-  # rc.5 is the floor: ServiceBundle.mountEligibility (the mount-gate
-  # predicate this package now composes) does not exist in rc.3/rc.4.
-  grid_engine: ^0.3.0-rc.5
+  # rc.7 is the floor: ServiceBundle.derive exhaustively forwards every
+  # collaborator when an asset overlays one field onto an ambient bundle.
+  grid_engine: ^0.3.0-rc.7
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.

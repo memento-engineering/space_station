@@ -39,8 +39,7 @@ import 'package:github_grid_assets/github_grid_assets.dart'
     show GitHubPrDelivery;
 import 'package:grid_assets/grid_assets.dart'
     show GitSourceControl, MountEligibilityAssets, PrComposition;
-import 'package:grid_engine/grid_engine.dart'
-    show ServiceBundle, TrustFloor, TrustLevel;
+import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, PrOpener, RootCheckout, StationGitService;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
@@ -332,41 +331,29 @@ class GitHubGridAssets extends SingleChildStatelessSeed {
     // GitHub only ADDS delivery to a source control it can commit from — a
     // standalone mount (no git asset above) conjures no delivery-over-nothing.
     final checkout = ambient?.sourceControl;
-    if (checkout != null && ops != null && opener != null) {
+    if (ambient != null && checkout != null && ops != null && opener != null) {
       final composition = knob ?? const PrComposition();
       wired = _DerivedBundleSeed(
-        // Carry through EVERY field the bundle declares — silently dropping
-        // one here would unbind an unrelated service (or, for trustFloor,
-        // RESET the substation's admitted-origin floor to the default
-        // exactly when PR-opening delivery is armed).
-        value: ServiceBundle(
-          sourceControl: checkout,
+        // The engine owns exhaustive forwarding: adding a ServiceBundle field
+        // breaks its all-required derivation constructor until it is carried.
+        value: ServiceBundle.derive(
+          ambient,
           delivery: GitHubPrDelivery(
             gitOps: ops,
             prOpener: opener,
             composition: composition,
           ),
-          escalation: ambient?.escalation,
-          trust: ambient?.trust,
-          trustFloor:
-              ambient?.trustFloor ?? const TrustFloor(TrustLevel.trusted),
-          transport: ambient?.transport,
-          // Derivation is total: every ambient field rides forward. Dropping
-          // one is how the mount gate died in the live arm (grid_sdk's
-          // transport overlay dropped mountEligibility — the_grid #212); in
-          // THIS chain the predicate mounts below us today, but a re-order
-          // must not silently disarm it.
-          mountEligibility: ambient?.mountEligibility,
         ),
         derivedFrom: [
           checkout,
           ops,
           opener,
           composition,
-          ambient?.escalation,
-          ambient?.trust,
-          ambient?.trustFloor,
-          ambient?.transport,
+          ambient.escalation,
+          ambient.trust,
+          ambient.trustFloor,
+          ambient.transport,
+          ambient.mountEligibility,
         ],
         child: child,
       );

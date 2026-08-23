@@ -293,10 +293,10 @@ packages:
     dependency: transitive
     description:
       name: grid_engine
-      sha256: "0049f67910382e31ac6db2383e8a4790b19b864f3ad6af4f3184e4c356182478"
+      sha256: d3d619558fd59ede9dc21100c90fcbd0d690bf7f7e249a926599619493918373
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.6"
+    version: "0.3.0-rc.7"
   grid_exploration:
     dependency: transitive
     description:
@@ -309,10 +309,10 @@ packages:
     dependency: transitive
     description:
       name: grid_runtime
-      sha256: dd5b4372a75f93cdbd524a55890421124b1579153dd14a92ba029588e7fba683
+      sha256: "81705028d4660c1918edd8f4c0d40c48e4a81bf00b2340a3951a64f81ae745c3"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-rc.4"
+    version: "0.2.0-rc.5"
   grid_sdk:
     dependency: transitive
     description:
