@@ -111,6 +111,8 @@ class SubstationSeat extends StatelessSeed {
     this.app,
     this.githubPoll,
     this.landingPolicy,
+    this.githubAppCredentialLoader = const github.GitHubAppCredentialLoader(),
+    this.githubTransportFactory = github.createGitHubHttpTransport,
     Key? key,
   }) : super(key: key ?? ValueKey<String>('seat:$name'));
 
@@ -139,6 +141,12 @@ class SubstationSeat extends StatelessSeed {
   /// Null preserves `github.GitHubGridAssets`' default
   /// `github.PrNoMergePolicy`: open or reuse a PR and leave it unmerged.
   final github.GitHubDeliveryPolicy? landingPolicy;
+
+  /// Loads this seat's App private key; injectable for deterministic tests.
+  final github.GitHubAppCredentialLoader githubAppCredentialLoader;
+
+  /// Creates this seat's GitHub transport; injectable for deterministic tests.
+  final github.GitHubHttpTransportFactory githubTransportFactory;
 
   @override
   Seed build(TreeContext context) {
@@ -172,7 +180,7 @@ class SubstationSeat extends StatelessSeed {
     final ops = context.watch<GitOps>();
     final pollAllowsEffects =
         githubPoll == null || githubPoll.arm == github.GitHubReconcilerArm.live;
-    final wired = ops == null || !pollAllowsEffects
+    final openerWired = ops == null || !pollAllowsEffects
         ? substation
         : github.GitHubPrOpenerAssets(
             config: github.GitHubAppConfig(
@@ -183,7 +191,19 @@ class SubstationSeat extends StatelessSeed {
             repository: githubPoll?.repository,
             child: substation,
           );
-    return Provider<GitHubAppConfig>.value(identity, child: wired);
+    final clientWired = !pollAllowsEffects
+        ? openerWired
+        : github.GitHubAppClientAssets(
+            config: github.GitHubAppConfig(
+              appId: identity.appId,
+              installationId: int.parse(identity.installationId),
+            ),
+            privateKeyVar: identity.privateKeyVar,
+            credentialLoader: githubAppCredentialLoader,
+            transportFactory: githubTransportFactory,
+            child: openerWired,
+          );
+    return Provider<GitHubAppConfig>.value(identity, child: clientWired);
   }
 }
 
