@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:beads_dart/beads_dart.dart' show Bead, BeadStatus, IssueType;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
@@ -266,6 +268,159 @@ void main() {
       expect(a, b);
       expect(a.hashCode, b.hashCode);
       expect('$a', contains('MY_APP_KEY'), reason: 'the NAME is config');
+    });
+
+    test('app identity on an effects-enabled seat provides its own '
+        'GitHubAppClient', () async {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final root = owner.mountRoot(
+        ProviderScope(
+          child: sdk.RawAssetGrid(
+            root: '/home/me/station',
+            assets: [
+              SubstationSeat(
+                name: 'org',
+                root: '../org',
+                app: const GitHubAppConfig(
+                  appId: '101',
+                  installationId: '201',
+                  privateKeyVar: 'ORG_APP_KEY',
+                ),
+                githubPoll: const github.GitHubReconcilerConfig(
+                  owner: 'memento',
+                  repository: 'org',
+                  substation: 'org',
+                  installationId: '201',
+                ),
+                githubAppCredentialLoader: _FakeGitHubAppCredentials.loader(),
+                githubTransportFactory: _FakeGitHubAppCredentials.transport,
+              ),
+            ],
+          ),
+        ),
+      );
+      await _settle(owner);
+      final walk = _Walk(root);
+      expect(walk.values<github.GitHubAppClient>(), hasLength(1));
+      final identity = walk.values<GitHubAppConfig>().single;
+      expect((identity.appId, identity.installationId), ('101', '201'));
+    });
+
+    test('app identity on a dry arm provides no GitHubAppClient', () async {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final root = owner.mountRoot(
+        ProviderScope(
+          child: sdk.RawAssetGrid(
+            root: '/home/me/station',
+            assets: [
+              SubstationSeat(
+                name: 'org',
+                root: '../org',
+                app: const GitHubAppConfig(
+                  appId: '101',
+                  installationId: '201',
+                  privateKeyVar: 'ORG_APP_KEY',
+                ),
+                githubPoll: const github.GitHubReconcilerConfig(
+                  owner: 'memento',
+                  repository: 'org',
+                  substation: 'org',
+                  installationId: '201',
+                  arm: github.GitHubReconcilerArm.dry,
+                ),
+                githubAppCredentialLoader: _FakeGitHubAppCredentials.loader(),
+                githubTransportFactory: _FakeGitHubAppCredentials.transport,
+              ),
+            ],
+          ),
+        ),
+      );
+      await _settle(owner);
+      expect(_Walk(root).values<github.GitHubAppClient>(), isEmpty);
+    });
+
+    test(
+      'no app identity provides no client and preserves ambient opener',
+      () async {
+        final owner = TreeOwner();
+        addTearDown(owner.dispose);
+        final ambient = _FakePrOpener();
+        final root = owner.mountRoot(
+          ProviderScope(
+            child: Provider<PrOpener>.value(
+              ambient,
+              child: Provider<GitOps>(
+                create: (_) => GitOps(SystemGitRunner()),
+                child: sdk.RawAssetGrid(
+                  root: '/home/me/station',
+                  assets: [SubstationSeat(name: 'ambient', root: '../ambient')],
+                ),
+              ),
+            ),
+          ),
+        );
+        await _settle(owner);
+        final walk = _Walk(root);
+        expect(walk.values<github.GitHubAppClient>(), isEmpty);
+        expect(identical(walk.values<PrOpener>().single, ambient), isTrue);
+      },
+    );
+
+    test('sibling app identities provide distinct GitHubAppClients', () async {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final root = owner.mountRoot(
+        ProviderScope(
+          child: sdk.RawAssetGrid(
+            root: '/home/me/station',
+            assets: [
+              SubstationSeat(
+                name: 'org',
+                root: '../org',
+                app: const GitHubAppConfig(
+                  appId: '101',
+                  installationId: '201',
+                  privateKeyVar: 'ORG_APP_KEY',
+                ),
+                githubAppCredentialLoader: _FakeGitHubAppCredentials.loader(),
+                githubTransportFactory: _FakeGitHubAppCredentials.transport,
+              ),
+              SubstationSeat(
+                name: 'personal',
+                root: '../personal',
+                app: const GitHubAppConfig(
+                  appId: '102',
+                  installationId: '202',
+                  privateKeyVar: 'PERSONAL_APP_KEY',
+                ),
+                githubAppCredentialLoader: _FakeGitHubAppCredentials.loader(),
+                githubTransportFactory: _FakeGitHubAppCredentials.transport,
+              ),
+            ],
+          ),
+        ),
+      );
+      await _settle(owner);
+      final identities = _Walk(root).branches<GitHubAppConfig>();
+      final org = identities.singleWhere(
+        (branch) => branch.value.appId == '101',
+      );
+      final personal = identities.singleWhere(
+        (branch) => branch.value.appId == '102',
+      );
+      final orgClient = _Walk(org).values<github.GitHubAppClient>().single;
+      final personalClient = _Walk(
+        personal,
+      ).values<github.GitHubAppClient>().single;
+      expect(identical(orgClient, personalClient), isFalse);
+      expect(
+        identities
+            .map((branch) => (branch.value.appId, branch.value.installationId))
+            .toList(),
+        [('101', '201'), ('102', '202')],
+      );
     });
   });
 
@@ -708,6 +863,14 @@ class _Walk {
 /// so the next flush observes the pinged rebuilds.
 Future<void> _pump() => Future<void>.delayed(Duration.zero);
 
+Future<void> _settle(TreeOwner owner) async {
+  owner.flush();
+  await _pump();
+  owner.flush();
+  await _pump();
+  owner.flush();
+}
+
 /// A swappable host: [swap] replaces the described subtree entirely.
 class _Host extends StatefulSeed {
   const _Host({required this.onCreate, required this.describe});
@@ -776,6 +939,32 @@ class _FakePrOpener implements PrOpener {
 final class _FakeTokens implements github.GitHubAppTokenProvider {
   @override
   Future<String> accessToken() async => 'token';
+}
+
+final class _FakeGitHubAppCredentials {
+  static const keyPath = '/fake/app.pem';
+
+  static Map<String, String> environment() => const {
+    'ORG_APP_KEY': keyPath,
+    'PERSONAL_APP_KEY': keyPath,
+  };
+
+  static Future<github.GitHubKeyFileStat> stat(String path) async =>
+      const github.GitHubKeyFileStat(
+        type: FileSystemEntityType.file,
+        mode: 0x180,
+      );
+
+  static Future<String> read(String path) async => 'fake-private-key';
+
+  static github.GitHubAppCredentialLoader loader() =>
+      github.GitHubAppCredentialLoader(
+        environment: environment,
+        stat: stat,
+        read: read,
+      );
+
+  static github.GitHubHttpTransport transport() => _FakeTransport();
 }
 
 final class _FakeTransport implements github.GitHubHttpTransport {

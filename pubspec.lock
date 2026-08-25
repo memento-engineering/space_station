@@ -245,10 +245,10 @@ packages:
     dependency: transitive
     description:
       name: github_grid_assets
-      sha256: "9bbb5aa03728bce0f0e3b861115087d54a4afee7c87020fd9bf83c08fb5e25e3"
+      sha256: "5eb1864e8c048c67e739c9395f92146d188f79ddbc38343b90be1090364eb623"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-rc.3"
+    version: "0.1.0-rc.5"
   glob:
     dependency: transitive
     description:
@@ -269,18 +269,18 @@ packages:
     dependency: transitive
     description:
       name: grid_assets
-      sha256: "4849d6b02f2ac5e017d26969894b393864dd7ce90958e441c032f592fb69d9c6"
+      sha256: "4ce7475601a9ce523e797174c51db94810a9ec0fe7a1f6f199299763ff38b8f7"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0-rc.3"
+    version: "0.6.0-rc.5"
   grid_cli:
     dependency: transitive
     description:
       name: grid_cli
-      sha256: a91d4f3cf6f60d12b41314fb2286b675f0d9c9d0922e9d5536207112ee5ae18d
+      sha256: "7a20edd20964042bf2732d3d51692e812321312c2e5280acd82c0a60ec777edb"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0-rc.7"
+    version: "0.5.0-rc.8"
   grid_diagnostics_contract:
     dependency: transitive
     description:
@@ -293,10 +293,10 @@ packages:
     dependency: transitive
     description:
       name: grid_engine
-      sha256: d3d619558fd59ede9dc21100c90fcbd0d690bf7f7e249a926599619493918373
+      sha256: "2ca0055b8a9d41e2457492540047eb1a98aeaf3fe9d3e024a286395c0c86dfe8"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.7"
+    version: "0.3.0-rc.8"
   grid_exploration:
     dependency: transitive
     description:
@@ -309,10 +309,10 @@ packages:
     dependency: transitive
     description:
       name: grid_runtime
-      sha256: "81705028d4660c1918edd8f4c0d40c48e4a81bf00b2340a3951a64f81ae745c3"
+      sha256: f9e381d139e93e8afe4607cd7c475200717600c0bedb5f6d87f6c1d99b0fc98c
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-rc.5"
+    version: "0.2.0-rc.6"
   grid_sdk:
     dependency: transitive
     description:
