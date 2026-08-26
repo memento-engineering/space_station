@@ -88,27 +88,52 @@ typedef GitHubLoginProcess =
 
 /// Resolves station-global SELF trust from the authenticated `gh` CLI login.
 ///
-/// A missing executable, non-zero exit, or blank stdout is the absent-trust
-/// posture; login case is preserved for GitHubSelfTrust's exact comparison.
+/// When [githubPollingConfigured] is false no process is started. A missing
+/// executable, non-zero exit, blank stdout, or timeout is the absent-trust
+/// posture; timeout is reported through [writeDiagnostic], and login case is
+/// preserved for GitHubSelfTrust's exact comparison.
 Future<github.GitHubSelfTrust?> resolveGitHubSelfTrustFromGh({
   required String workingDirectory,
+  required bool githubPollingConfigured,
+  required void Function(String message) writeDiagnostic,
+  Duration timeout = const Duration(seconds: 5),
   GitHubLoginProcess run = Process.run,
 }) async {
-  final ProcessResult result;
+  if (!githubPollingConfigured) return null;
+
+  final timeoutSignal = Completer<ProcessResult?>();
+  final timer = Timer(timeout, () => timeoutSignal.complete());
   try {
-    result = await run('gh', const [
-      'api',
-      'user',
-      '-q',
-      '.login',
-    ], workingDirectory: workingDirectory);
+    Future<ProcessResult?> invokeGh() async {
+      return await run('gh', const [
+        'api',
+        'user',
+        '-q',
+        '.login',
+      ], workingDirectory: workingDirectory);
+    }
+
+    final result = await Future.any<ProcessResult?>([
+      invokeGh(),
+      timeoutSignal.future,
+    ]);
+    if (result == null) {
+      writeDiagnostic(
+        'space up: gh api user login probe timed out after '
+        '${timeout.inMilliseconds}ms; continuing without GitHub self trust — '
+        'polling intake remains inert.',
+      );
+      return null;
+    }
+    if (result.exitCode != 0) return null;
+    final githubUser = '${result.stdout}'.trim();
+    if (githubUser.isEmpty) return null;
+    return github.GitHubSelfTrust(githubUser: githubUser);
   } on ProcessException {
     return null;
+  } finally {
+    timer.cancel();
   }
-  if (result.exitCode != 0) return null;
-  final githubUser = '${result.stdout}'.trim();
-  if (githubUser.isEmpty) return null;
-  return github.GitHubSelfTrust(githubUser: githubUser);
 }
 
 /// One substation `up` armed — a name, its resolved ABSOLUTE root, and its
@@ -125,9 +150,10 @@ class UpCommand extends Command<int> {
   /// the agent scope's). [delegateFactory] is the ONE downstream seam: which
   /// [SpaceDelegate] subclass authors this station (its identity, roster and
   /// seat stacks live on the CLASS as override points). The coded roster is
-  /// read by MOUNTING the delegate's tree offline (`mountedRosterOf` — the
-  /// same enumeration `search` uses) for the help text, the refusal set, and
-  /// the store guard — the tree stays the single source.
+  /// read by MOUNTING the delegate's tree offline (`mountedValuesOf` through
+  /// [codedRosterSnapshotOf] — the same enumeration `search` uses) for the
+  /// help text, the refusal set, and the store guard — the tree stays the
+  /// single source.
   UpCommand({SpaceDelegateFactory delegateFactory = SpaceDelegate.new})
     : _delegateFactory = delegateFactory {
     addSpaceStationFlags(
@@ -298,10 +324,10 @@ class UpCommand extends Command<int> {
     // duplicate, or coded-name --substation is an uncaught FormatException (a
     // config defect the operator sees immediately).
     // The coded roster, read off the REAL tree: one owned offline authoring
-    // mount at the real grid home ([codedRosterOf] — no wiring, no effects,
-    // enumeration delegate disposed). Scopes arrive with their roots RESOLVED
-    // by the SDK itself (relative against the ambient GridRoot, absolute
-    // as-is), so the off-tree machinery and the armed tree agree by
+    // mount at the real grid home ([codedRosterSnapshotOf] — no wiring, no
+    // effects, enumeration delegate disposed). Scopes arrive with their roots
+    // RESOLVED by the SDK itself (relative against the ambient GridRoot,
+    // absolute as-is), so the off-tree machinery and the armed tree agree by
     // construction — the hand-kept mirror this replaced could diverge (a
     // prefix divergence silently un-owned every `space-` bead).
     // A missing or RELATIVE home falls back to the placeholder mount: only
@@ -311,13 +337,14 @@ class UpCommand extends Command<int> {
     final homeFlag =
         (results.option('grid-home') ?? results.option('state-workspace'))
             ?.trim();
-    final codedScopes = codedRosterOf(
+    final codedRoster = codedRosterSnapshotOf(
       _delegateFactory,
       gridRoot:
           (homeFlag == null || homeFlag.isEmpty || !p.isAbsolute(homeFlag))
           ? '/'
           : homeFlag,
     );
+    final codedScopes = codedRoster.scopes;
     final config = spaceStationConfigFrom(
       results,
       codedNames: {for (final s in codedScopes) s.name},
@@ -398,6 +425,9 @@ class UpCommand extends Command<int> {
       );
       return 1;
     }
+    final githubPollingArmed = armed.any(
+      (seat) => codedRoster.githubPollingSeatNames.contains(seat.name),
+    );
 
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
     // Acquired before anything stateful; a LIVE holder is a LOUD refusal (exit
@@ -430,15 +460,20 @@ class UpCommand extends Command<int> {
     // with an expiry, not a permanent seam.
     final live = !config.dryRun;
     final githubSelfTrust = live
-        ? await resolveGitHubSelfTrustFromGh(workingDirectory: config.gridHome)
+        ? await resolveGitHubSelfTrustFromGh(
+            workingDirectory: config.gridHome,
+            githubPollingConfigured: githubPollingArmed,
+            writeDiagnostic: err,
+          )
         : null;
     // ASSEMBLY-ONLY and deliberately DRY (live omitted ⇒ false): this
     // delegate exists for its policy hooks (circuitOverrideFor /
     // buildWorkRegistry) and its build never runs — but if it were ever
-    // mounted for an enumeration (the codedRosterOf pattern), a live-postured
-    // instance would author the GitOps/PrOpener effect providers into an
-    // offline tree, the exact boot-leak class space-47t removed. The armed
-    // tree's delegate (buildDelegate below) is the ONE that carries `live`.
+    // mounted for an enumeration (the codedRosterSnapshotOf pattern), a
+    // live-postured instance would author the GitOps/PrOpener effect providers
+    // into an offline tree, the exact boot-leak class space-47t removed. The
+    // armed tree's delegate (buildDelegate below) is the ONE that carries
+    // `live`.
     final workPolicyDelegate = _delegateFactory(
       gridRoot: config.gridHome,
       appended: config.appended,

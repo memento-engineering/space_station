@@ -66,7 +66,12 @@ import 'src/up_command.dart';
 // [buildRunner] as a SpaceDelegateFactory. codedRosterOf is the owned
 // (construct → mount → dispose) roster enumeration over that factory.
 export 'src/space_delegate.dart'
-    show NoteAppender, SpaceDelegate, SpaceDelegateFactory, codedRosterOf;
+    show
+        NoteAppender,
+        SpaceDelegate,
+        SpaceDelegateFactory,
+        codedRosterOf,
+        codedRosterSnapshotOf;
 // The COMPOSED SEAT (space-47t): the ONE per-substation seat class a
 // station's substations() authors (value config: name/root/prefix + an
 // optional GitHubAppConfig delivery identity). Exported so a downstream

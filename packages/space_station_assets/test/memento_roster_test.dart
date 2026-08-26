@@ -1,5 +1,6 @@
 import 'package:args/args.dart';
 import 'package:genesis_tree/genesis_tree.dart';
+import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart' show AgentConfig;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
@@ -131,6 +132,35 @@ void main() {
       expect(scopes.map((s) => s.name), contains('mine'));
       expect(scopes, hasLength(6));
     });
+
+    test(
+      'coded roster snapshot keeps scopes and reports only GitHub polling seats',
+      () {
+        final base = codedRosterSnapshotOf(
+          SpaceDelegate.new,
+          gridRoot: gridHome,
+        );
+        expect(base.scopes.map((scope) => scope.name), [
+          'genesis',
+          'the_grid',
+          'power_station',
+          'space_station',
+          'lenny',
+        ]);
+        expect(base.githubPollingSeatNames, isEmpty);
+
+        final downstream = codedRosterSnapshotOf(_DownstreamDelegate.new);
+        expect(downstream.scopes.map((scope) => scope.name), [
+          'genesis',
+          'the_grid',
+          'power_station',
+          'space_station',
+          'lenny',
+          'mine',
+        ]);
+        expect(downstream.githubPollingSeatNames, {'mine'});
+      },
+    );
   });
 
   group(
@@ -287,6 +317,17 @@ class _DownstreamDelegate extends SpaceDelegate {
     sdk.GridConfiguration configuration,
   ) => [
     ...super.substations(context, configuration),
-    SubstationSeat(name: 'mine', root: '../mine', prefix: 'mn'),
+    SubstationSeat(
+      name: 'mine',
+      root: '../mine',
+      prefix: 'mn',
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento',
+        repository: 'mine',
+        substation: 'mine',
+        installationId: '1',
+        arm: github.GitHubReconcilerArm.offline,
+      ),
+    ),
   ];
 }
