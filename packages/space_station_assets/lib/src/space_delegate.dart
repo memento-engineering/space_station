@@ -60,7 +60,7 @@ import 'package:grid_assets/grid_assets.dart'
         MountEligibilityAssets,
         buildBuiltinEnvironmentRegistry,
         buildCodeRegistry,
-        mountedRosterOf;
+        mountedValuesOf;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, PrOpener, StationGitService, SystemGitRunner;
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
@@ -93,33 +93,42 @@ typedef SpaceDelegateFactory =
 /// station-owned write chokepoint.
 typedef NoteAppender = Future<void> Function(String beadId, String line);
 
-/// Enumerates the CODED roster of the station [factory] authors — an offline
-/// authoring mount of one delegate at [gridRoot], walked for its
-/// [sdk.SubstationScope]s (the vended `mountedRosterOf`), with the
-/// enumeration delegate DISPOSED before returning.
+/// Enumerates the CODED roster plus its GitHub-polling seat names from one
+/// shared offline mount of the station [factory] authors.
 ///
-/// A [SpaceDelegate] is a `StateNotifier` (a lifecycle object, not a value):
-/// construction is legal exactly at an effect boundary, ONE instance per
-/// effect, always disposed — this helper is that discipline made a function.
-/// Only `runGrid`'s ARMED delegate lives longer, and `runGrid` documentedly
-/// owns that one (hot-restart retires it through `dispose`/`onTeardown`).
+/// The mount lifecycle and tree walk are owned by `grid_assets`'
+/// `mountedValuesOf`; this package projects the [MountedSubstationSeat] values
+/// authored by its seat class and disposes the delegate it constructed.
 ///
 /// [gridRoot] defaults to `'/'` — a deterministic ABSOLUTE placeholder
 /// (v3 §0: the tree refuses a relative root) for reads that only need
 /// names/prefixes (seat names are grid-home-independent); pass the real home
 /// when the resolved roots matter (they arrive resolved by the SDK's own
 /// seat build).
-List<sdk.SubstationScope> codedRosterOf(
-  SpaceDelegateFactory factory, {
-  String gridRoot = '/',
-}) {
+({List<sdk.SubstationScope> scopes, Set<String> githubPollingSeatNames})
+codedRosterSnapshotOf(SpaceDelegateFactory factory, {String gridRoot = '/'}) {
   final delegate = factory(gridRoot: gridRoot);
   try {
-    return mountedRosterOf(delegate);
+    final seats = mountedValuesOf<MountedSubstationSeat>(delegate);
+    return (
+      scopes: List<sdk.SubstationScope>.unmodifiable(
+        seats.map((seat) => seat.scope),
+      ),
+      githubPollingSeatNames: Set<String>.unmodifiable({
+        for (final seat in seats)
+          if (seat.githubPollingConfigured) seat.scope.name,
+      }),
+    );
   } finally {
     delegate.dispose();
   }
 }
+
+/// Enumerates the CODED roster of the station [factory] authors.
+List<sdk.SubstationScope> codedRosterOf(
+  SpaceDelegateFactory factory, {
+  String gridRoot = '/',
+}) => codedRosterSnapshotOf(factory, gridRoot: gridRoot).scopes;
 
 /// The delegate seat memento's `space` verbs re-seat over — space_station
 /// authored as a Seed.
@@ -175,10 +184,10 @@ List<sdk.SubstationScope> codedRosterOf(
 /// The subclass's constructor mirrors the base via super-parameters so its
 /// tear-off satisfies [SpaceDelegateFactory] — the seam `buildRunner`
 /// threads into the composed commands. The off-tree machinery reads the
-/// roster by mounting the tree offline (`mountedRosterOf` finds the
-/// `Substation` branches UNDER the seat wrappers), so overriding
-/// [substations] is the WHOLE change — guard, help, refusal set and specs
-/// all follow.
+/// roster by mounting the tree offline (`mountedValuesOf` finds the
+/// [MountedSubstationSeat] values UNDER the seat wrappers through
+/// [codedRosterSnapshotOf]), so overriding [substations] is the WHOLE change —
+/// guard, help, refusal set and specs all follow.
 class SpaceDelegate extends sdk.GridDelegate {
   /// Creates the delegate over space's resolved station config.
   /// [agentConfig] defaults to the authoring-only claude scope (what the
@@ -336,7 +345,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     // and a watch MISS parks a pending registration with the enclosing
     // ProviderScope. runGrid mounts one at the production root; this tree
     // authors its OWN so every mount of the SAME tree — the offline roster
-    // enumeration (`mountedRosterOf`), the test mounts — carries the
+    // enumeration (`mountedValuesOf`), the test mounts — carries the
     // registry too (the nearest scope wins under runGrid, consistently for
     // every provider and watcher authored below).
     //
@@ -414,10 +423,10 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// memento-engineering org, five seats at their [umbrella]-relative roots.
   ///
   /// Returns `List<Seed>` (space-47t): a seat is the COMPOSED wrapper, and
-  /// the offline enumeration (`mountedRosterOf` / [codedRosterOf]) still
-  /// finds the `Substation` branches UNDER the wrappers — the tree stays the
-  /// single source for `up`'s store guard and work specs, the codedNames
-  /// refusal set, and the `--substation` help.
+  /// the offline enumeration (`mountedValuesOf` / [codedRosterSnapshotOf])
+  /// still finds the [MountedSubstationSeat] values UNDER the wrappers — the
+  /// tree stays the single source for `up`'s store guard and work specs, the
+  /// codedNames refusal set, and the `--substation` help.
   ///
   /// OVERRIDE POINT: a downstream station composes, it does not replace
   /// blindly — `[...super.substations(context, configuration),

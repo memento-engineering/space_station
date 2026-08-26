@@ -79,6 +79,25 @@ class GitHubAppConfig {
       'privateKeyVar: $privateKeyVar)';
 }
 
+/// The offline-enumerable projection mounted by one [SubstationSeat].
+///
+/// [scope] is the SDK-resolved seat identity and root. The polling bit records
+/// only whether the authored [SubstationSeat.githubPoll] value is non-null; it
+/// does not arm polling or construct an effect.
+final class MountedSubstationSeat {
+  /// Creates one mounted seat projection.
+  const MountedSubstationSeat({
+    required this.scope,
+    required this.githubPollingConfigured,
+  });
+
+  /// The SDK-resolved scope for this seat.
+  final sdk.SubstationScope scope;
+
+  /// Whether this seat carries an authored GitHub polling configuration.
+  final bool githubPollingConfigured;
+}
+
 /// THE composed seat — one substation of the composing station, authored as a
 /// value-configured `StatelessSeed` (space-47t; ADR-0008 D2: a seed that
 /// BUILDS a `Substation`, never subclasses it).
@@ -154,6 +173,7 @@ class SubstationSeat extends StatelessSeed {
     final githubPoll = this.githubPoll;
     final landingPolicy = this.landingPolicy;
     final children = <SingleChildSeed>[
+      _MountedSubstationSeatAssets(githubPollingConfigured: githubPoll != null),
       const GitGridAssets(),
       if (githubPoll != null &&
           githubPoll.arm == github.GitHubReconcilerArm.live)
@@ -208,6 +228,28 @@ class SubstationSeat extends StatelessSeed {
             child: openerWired,
           );
     return Provider<GitHubAppConfig>.value(identity, child: clientWired);
+  }
+}
+
+final class _MountedSubstationSeatAssets extends SingleChildStatelessSeed {
+  const _MountedSubstationSeatAssets({
+    required this.githubPollingConfigured,
+    // Nest supplies this fold child; direct call sites deliberately omit it.
+    // ignore: unused_element_parameter
+    super.child,
+  });
+
+  final bool githubPollingConfigured;
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) {
+    return Provider<MountedSubstationSeat>.value(
+      MountedSubstationSeat(
+        scope: sdk.SubstationScope.of(context),
+        githubPollingConfigured: githubPollingConfigured,
+      ),
+      child: child,
+    );
   }
 }
 

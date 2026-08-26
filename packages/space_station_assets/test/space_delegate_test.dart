@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:beads_dart/beads_dart.dart' show Bead;
@@ -71,6 +72,7 @@ void main() {
     test(
       'GitHub self trust resolves through gh and mounts once only for live station',
       () async {
+        final diagnostics = <String>[];
         final calls =
             <
               ({
@@ -94,6 +96,9 @@ void main() {
 
         final trust = await resolveGitHubSelfTrustFromGh(
           workingDirectory: '/home/memento/space_station',
+          githubPollingConfigured: true,
+          writeDiagnostic: diagnostics.add,
+          timeout: const Duration(milliseconds: 50),
           run: fakeGh,
         );
         expect(calls, hasLength(1));
@@ -127,6 +132,9 @@ void main() {
           expect(
             await resolveGitHubSelfTrustFromGh(
               workingDirectory: '/home/memento/space_station',
+              githubPollingConfigured: true,
+              writeDiagnostic: diagnostics.add,
+              timeout: const Duration(milliseconds: 50),
               run: absentGh,
             ),
             isNull,
@@ -144,10 +152,85 @@ void main() {
         expect(
           await resolveGitHubSelfTrustFromGh(
             workingDirectory: '/home/memento/space_station',
+            githubPollingConfigured: true,
+            writeDiagnostic: diagnostics.add,
+            timeout: const Duration(milliseconds: 50),
             run: unavailableGh,
           ),
           isNull,
         );
+        expect(diagnostics, isEmpty);
+      },
+    );
+
+    test(
+      'GitHub self trust timeout is loud and leaves live intake trust absent',
+      () async {
+        final never = Completer<ProcessResult>();
+        final diagnostics = <String>[];
+        Future<ProcessResult> hangingGh(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+        }) async {
+          return await never.future;
+        }
+
+        final elapsed = Stopwatch()..start();
+        final trust = await resolveGitHubSelfTrustFromGh(
+          workingDirectory: '/home/memento/space_station',
+          githubPollingConfigured: true,
+          writeDiagnostic: diagnostics.add,
+          timeout: const Duration(milliseconds: 10),
+          run: hangingGh,
+        );
+        elapsed.stop();
+
+        expect(trust, isNull);
+        expect(elapsed.elapsed, lessThan(const Duration(seconds: 1)));
+        expect(diagnostics, [
+          'space up: gh api user login probe timed out after 10ms; '
+              'continuing without GitHub self trust — polling intake remains inert.',
+        ]);
+        expect(
+          _mountedValues<github.GitHubSelfTrust>(
+            _Author(delegate(live: true, githubSelfTrust: trust)),
+          ),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      'live boot skips gh when the coded roster has no GitHub polling seats',
+      () async {
+        final roster = codedRosterSnapshotOf(
+          SpaceDelegate.new,
+          gridRoot: '/home/memento/space_station',
+        );
+        var calls = 0;
+        final diagnostics = <String>[];
+        Future<ProcessResult> fakeGh(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+        }) async {
+          calls += 1;
+          return ProcessResult(1, 0, 'NiCo\n', '');
+        }
+
+        final trust = await resolveGitHubSelfTrustFromGh(
+          workingDirectory: '/home/memento/space_station',
+          githubPollingConfigured: roster.githubPollingSeatNames.isNotEmpty,
+          writeDiagnostic: diagnostics.add,
+          timeout: const Duration(milliseconds: 10),
+          run: fakeGh,
+        );
+
+        expect(roster.githubPollingSeatNames, isEmpty);
+        expect(calls, 0);
+        expect(trust, isNull);
+        expect(diagnostics, isEmpty);
       },
     );
 
