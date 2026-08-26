@@ -11,8 +11,10 @@ import 'package:grid_assets/grid_assets.dart'
         kCodeCircuit;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
+import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
+import 'package:space_station_assets/src/up_command.dart';
 import 'package:test/test.dart';
 
 /// Track G-space / H2 (tg-r81), re-cut by space-47t: offline coverage for
@@ -30,11 +32,13 @@ void main() {
   SpaceDelegate delegate({
     String gridRoot = '/home/memento/space_station',
     List<sdk.Substation> appended = const [],
+    github.GitHubSelfTrust? githubSelfTrust,
     bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
     appended: appended,
     agentConfig: const AgentConfig(harness: 'claude'),
+    githubSelfTrust: githubSelfTrust,
     live: live,
   );
 
@@ -63,6 +67,89 @@ void main() {
         reason: 'each coded seat re-provides its bundle delivery-bound',
       );
     });
+
+    test(
+      'GitHub self trust resolves through gh and mounts once only for live station',
+      () async {
+        final calls =
+            <
+              ({
+                String executable,
+                List<String> arguments,
+                String? workingDirectory,
+              })
+            >[];
+        Future<ProcessResult> fakeGh(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+        }) async {
+          calls.add((
+            executable: executable,
+            arguments: List<String>.of(arguments),
+            workingDirectory: workingDirectory,
+          ));
+          return ProcessResult(1, 0, 'NiCo\n', '');
+        }
+
+        final trust = await resolveGitHubSelfTrustFromGh(
+          workingDirectory: '/home/memento/space_station',
+          run: fakeGh,
+        );
+        expect(calls, hasLength(1));
+        expect(calls.single.executable, 'gh');
+        expect(calls.single.arguments, ['api', 'user', '-q', '.login']);
+        expect(calls.single.workingDirectory, '/home/memento/space_station');
+        expect(trust, isNotNull);
+        expect(trust!.githubUser, 'NiCo');
+        expect(
+          _mountedValues<github.GitHubSelfTrust>(
+            _Author(delegate(live: true, githubSelfTrust: trust)),
+          ),
+          [same(trust)],
+        );
+        expect(
+          _mountedValues<github.GitHubSelfTrust>(
+            _Author(delegate(githubSelfTrust: trust)),
+          ),
+          isEmpty,
+        );
+
+        for (final result in [
+          ProcessResult(2, 1, '', 'not authenticated'),
+          ProcessResult(3, 0, '  \n', ''),
+        ]) {
+          Future<ProcessResult> absentGh(
+            String executable,
+            List<String> arguments, {
+            String? workingDirectory,
+          }) async => result;
+          expect(
+            await resolveGitHubSelfTrustFromGh(
+              workingDirectory: '/home/memento/space_station',
+              run: absentGh,
+            ),
+            isNull,
+          );
+        }
+
+        Future<ProcessResult> unavailableGh(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+        }) async {
+          throw ProcessException(executable, arguments);
+        }
+
+        expect(
+          await resolveGitHubSelfTrustFromGh(
+            workingDirectory: '/home/memento/space_station',
+            run: unavailableGh,
+          ),
+          isNull,
+        );
+      },
+    );
 
     test('an appended (--substation) seat mounts clean after the literal '
         'coded org (space-6ds: the five coded seats are always authored)', () {
@@ -244,6 +331,21 @@ void _mount(Seed root) {
   final owner = TreeOwner();
   owner.mountRoot(root);
   owner.flush();
+}
+
+List<T> _mountedValues<T extends Object>(Seed seed) {
+  final owner = TreeOwner();
+  final root = owner.mountRoot(seed);
+  owner.flush();
+  final values = <T>[];
+  void walk(Branch branch) {
+    if (branch is InheritedBranch<T>) values.add(branch.value);
+    branch.visitChildren(walk);
+  }
+
+  walk(root);
+  owner.dispose();
+  return values;
 }
 
 /// Mounts [root], flushes once, and collects every provided [ServiceBundle]

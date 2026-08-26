@@ -63,6 +63,7 @@ import 'package:grid_assets/grid_assets.dart'
         mountedRosterOf;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, PrOpener, StationGitService, SystemGitRunner;
+import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
@@ -84,6 +85,7 @@ typedef SpaceDelegateFactory =
       EnvironmentRegistry? harnesses,
       sdk.StationWorkWiring? wiring,
       StationGitService? provisioner,
+      github.GitHubSelfTrust? githubSelfTrust,
       bool live,
     });
 
@@ -196,6 +198,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     EnvironmentRegistry? harnesses,
     this.wiring,
     this.provisioner,
+    this.githubSelfTrust,
     this.live = false,
   }) : agentConfig = agentConfig ?? const AgentConfig(harness: 'claude'),
        harnesses = harnesses ?? buildBuiltinEnvironmentRegistry();
@@ -253,6 +256,12 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// adopts the wiring's values); each seat's [GitGridAssets] observes it
   /// individually (the retired `GitServices` bundle's split, space-47t).
   final StationGitService? provisioner;
+
+  /// The station-global SELF-only GitHub trust value.
+  ///
+  /// Null keeps intake binding absent. The live boot resolves this once through
+  /// `gh`; every polling seat observes the same value from the station tree.
+  final github.GitHubSelfTrust? githubSelfTrust;
 
   /// The LIVE posture VALUE — the boot's one remaining say on effects
   /// (space-47t; the old `gitOps`/`prOpener` reference params are retired,
@@ -321,6 +330,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   Seed build(TreeContext context, sdk.GridConfiguration configuration) {
     final armedWiring = wiring;
     final git = provisioner;
+    final selfTrust = githubSelfTrust;
     // The availability registry (tg-1fa2.5): the seat assets OBSERVE their
     // collaborators (`watch<T>()` — nullable always, absence is a posture),
     // and a watch MISS parks a pending registration with the enclosing
@@ -368,6 +378,8 @@ class SpaceDelegate extends sdk.GridDelegate {
                       Provider<PrOpener>(
                         create: (_) => GhPrOpener(sdk.ghRunner),
                       ),
+                      if (selfTrust != null)
+                        Provider<github.GitHubSelfTrust>.value(selfTrust),
                     ],
                     // ARMED: StationWork provides the engine's ambient
                     // work-axis stack above the fan-out (the runGrid→engine

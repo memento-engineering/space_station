@@ -245,10 +245,10 @@ packages:
     dependency: transitive
     description:
       name: github_grid_assets
-      sha256: "5eb1864e8c048c67e739c9395f92146d188f79ddbc38343b90be1090364eb623"
+      sha256: "2b295f1a1d0529ab6a867670be2cf3fba53a05d9d35210e2eb2181f34efcd0bf"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-rc.5"
+    version: "0.1.0-rc.6"
   glob:
     dependency: transitive
     description:

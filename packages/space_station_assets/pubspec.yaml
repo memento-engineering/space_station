@@ -38,9 +38,9 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  # rc.5 is the floor: GitHubAppClientAssets provides the per-seat
-  # authenticated client consumed by the GitHub reconciler and PR opener.
-  github_grid_assets: ^0.1.0-rc.5
+  # rc.6 is the floor: GitHubReconcilerBindingAssets provides each live seat's
+  # durable cursor store and deferred-intake sink to GitHubReconcilerAssets.
+  github_grid_assets: ^0.1.0-rc.6
   # rc.2 is the floor: MountEligibilityAssets is absent from the rc.1
   # archive even though it exists in rc.1 source (pow-w83).
   grid_assets: ^0.6.0-rc.2
