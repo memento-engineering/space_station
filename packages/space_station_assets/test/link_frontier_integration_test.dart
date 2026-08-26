@@ -39,6 +39,7 @@ class _FixtureDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.githubSelfTrust,
     super.live,
   });
 

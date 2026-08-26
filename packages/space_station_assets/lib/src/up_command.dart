@@ -62,6 +62,7 @@ import 'package:grid_assets/grid_assets.dart'
 // the WHOLE dev-mode gate.
 import 'package:grid_exploration/grid_exploration.dart'
     show stationVmServiceUri;
+import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         GridHandle,
@@ -76,6 +77,39 @@ import 'package:path/path.dart' as p;
 
 import 'dev_mode.dart';
 import 'space_delegate.dart';
+
+/// Runs the `gh` login probe used to construct station-global GitHub trust.
+typedef GitHubLoginProcess =
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+    });
+
+/// Resolves station-global SELF trust from the authenticated `gh` CLI login.
+///
+/// A missing executable, non-zero exit, or blank stdout is the absent-trust
+/// posture; login case is preserved for GitHubSelfTrust's exact comparison.
+Future<github.GitHubSelfTrust?> resolveGitHubSelfTrustFromGh({
+  required String workingDirectory,
+  GitHubLoginProcess run = Process.run,
+}) async {
+  final ProcessResult result;
+  try {
+    result = await run('gh', const [
+      'api',
+      'user',
+      '-q',
+      '.login',
+    ], workingDirectory: workingDirectory);
+  } on ProcessException {
+    return null;
+  }
+  if (result.exitCode != 0) return null;
+  final githubUser = '${result.stdout}'.trim();
+  if (githubUser.isEmpty) return null;
+  return github.GitHubSelfTrust(githubUser: githubUser);
+}
 
 /// One substation `up` armed — a name, its resolved ABSOLUTE root, and its
 /// work store's issue-id prefix. The off-tree work machinery (the store
@@ -395,6 +429,9 @@ class UpCommand extends Command<int> {
     // shape-agnostic resolver and that file is deleted. This is scaffolding
     // with an expiry, not a permanent seam.
     final live = !config.dryRun;
+    final githubSelfTrust = live
+        ? await resolveGitHubSelfTrustFromGh(workingDirectory: config.gridHome)
+        : null;
     // ASSEMBLY-ONLY and deliberately DRY (live omitted ⇒ false): this
     // delegate exists for its policy hooks (circuitOverrideFor /
     // buildWorkRegistry) and its build never runs — but if it were ever
@@ -487,6 +524,7 @@ class UpCommand extends Command<int> {
       harnesses: harnesses,
       wiring: workRuntime.wiring,
       provisioner: workRuntime.git,
+      githubSelfTrust: githubSelfTrust,
       live: live,
     );
 

@@ -18,6 +18,7 @@ class _DownstreamDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.githubSelfTrust,
     super.live,
   });
 

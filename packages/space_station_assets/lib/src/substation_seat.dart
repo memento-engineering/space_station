@@ -26,6 +26,7 @@
 /// [SubstationSeat] and [GitHubAppConfig] downstream.
 library;
 
+import 'package:beads_dart/beads_dart.dart' show ProcessBdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
@@ -154,6 +155,9 @@ class SubstationSeat extends StatelessSeed {
     final landingPolicy = this.landingPolicy;
     final children = <SingleChildSeed>[
       const GitGridAssets(),
+      if (githubPoll != null &&
+          githubPoll.arm == github.GitHubReconcilerArm.live)
+        _SeatGitHubReconcilerBindingAssets(config: githubPoll),
       if (githubPoll != null) github.GitHubReconcilerAssets(config: githubPoll),
       github.GitHubGridAssets(policy: landingPolicy),
       const MountEligibilityAssets(),
@@ -204,6 +208,31 @@ class SubstationSeat extends StatelessSeed {
             child: openerWired,
           );
     return Provider<GitHubAppConfig>.value(identity, child: clientWired);
+  }
+}
+
+final class _SeatGitHubReconcilerBindingAssets
+    extends SingleChildStatelessSeed {
+  const _SeatGitHubReconcilerBindingAssets({
+    required this.config,
+    // Nest supplies this fold child; direct call sites deliberately omit it.
+    // ignore: unused_element_parameter
+    super.child,
+  });
+
+  final github.GitHubReconcilerConfig config;
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) {
+    final trust = context.watch<github.GitHubSelfTrust>();
+    if (trust == null) return child;
+    final scope = sdk.SubstationScope.of(context);
+    return github.GitHubReconcilerBindingAssets(
+      config: config,
+      runner: ProcessBdRunner(workspaceRoot: scope.root),
+      trust: trust,
+      child: child,
+    );
   }
 }
 

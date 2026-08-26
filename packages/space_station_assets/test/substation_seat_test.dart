@@ -424,18 +424,18 @@ void main() {
     });
   });
 
-  test('per-seat poll opt-in', () async {
-    final owner = TreeOwner();
-    addTearDown(owner.dispose);
-    final transport = _FakeTransport();
-    final root = owner.mountRoot(
-      ProviderScope(
-        child: Provider<github.GitHubAppClient>.value(
-          _fakeClient(transport),
-          child: Provider<github.GitHubCursorStore>.value(
-            _FakeCursorStore(),
-            child: Provider<github.GitHubEventSink>.value(
-              _emit,
+  test(
+    'live poll binding constructs the runtime from a fake client and seat-owned stores',
+    () async {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final transport = _FakeTransport();
+      final root = owner.mountRoot(
+        ProviderScope(
+          child: Provider<github.GitHubAppClient>.value(
+            _fakeClient(transport),
+            child: Provider<github.GitHubSelfTrust>.value(
+              github.GitHubSelfTrust(githubUser: 'NiCo'),
               child: sdk.RawAssetGrid(
                 root: '/home/me/station',
                 assets: [
@@ -456,81 +456,211 @@ void main() {
             ),
           ),
         ),
-      ),
-    );
-    owner.flush();
-    await _pump();
-    owner.flush();
-    final scopes = _Walk(root).branches<sdk.SubstationScope>();
-    final armed = scopes.singleWhere((b) => b.value.name == 'armed');
-    final absent = scopes.singleWhere((b) => b.value.name == 'absent');
-    final runtime = _Walk(
-      armed,
-    ).values<github.GitHubReconcilerRuntime>().single;
-    expect(_Walk(absent).values<github.GitHubReconcilerRuntime>(), isEmpty);
-    expect(runtime.reconciler.owner, 'private-owner');
-    expect(runtime.reconciler.repository, 'personal-repo');
-    expect(runtime.reconciler.substation, 'armed');
-  });
+      );
+      await _settle(owner);
+      final scopes = _Walk(root).branches<sdk.SubstationScope>();
+      final armed = scopes.singleWhere((b) => b.value.name == 'armed');
+      final absent = scopes.singleWhere((b) => b.value.name == 'absent');
+      final armedWalk = _Walk(armed);
+      final cursor =
+          armedWalk.values<github.GitHubCursorStore>().single
+              as github.FileGitHubCursorStore;
+      expect(
+        cursor.cursorPath,
+        '/home/me/private/.grid/github/private-owner-personal-repo.cursor.json',
+      );
+      expect(armedWalk.values<github.GitHubEventSink>(), hasLength(1));
+      final runtime = armedWalk.values<github.GitHubReconcilerRuntime>().single;
+      expect(runtime.reconciler.owner, 'private-owner');
+      expect(runtime.reconciler.repository, 'personal-repo');
+      expect(runtime.reconciler.substation, 'armed');
+      expect(_Walk(absent).values<github.GitHubCursorStore>(), isEmpty);
+      expect(_Walk(absent).values<github.GitHubEventSink>(), isEmpty);
+      expect(_Walk(absent).values<github.GitHubReconcilerRuntime>(), isEmpty);
+    },
+  );
 
-  test('dry and offline poll arms are inert', () async {
-    for (final arm in const [
-      github.GitHubReconcilerArm.dry,
-      github.GitHubReconcilerArm.offline,
-    ]) {
+  test(
+    'binding stays absent without poll config, live trust, or effects-enabled arm',
+    () async {
+      final trust = github.GitHubSelfTrust(githubUser: 'NiCo');
+      final cases =
+          <
+            ({
+              String name,
+              github.GitHubReconcilerConfig? config,
+              github.GitHubSelfTrust? trust,
+            })
+          >[
+            (name: 'no config', config: null, trust: trust),
+            (
+              name: 'dry arm',
+              config: const github.GitHubReconcilerConfig(
+                owner: 'private-owner',
+                repository: 'personal-repo',
+                substation: 'inert',
+                installationId: '99',
+                arm: github.GitHubReconcilerArm.dry,
+              ),
+              trust: trust,
+            ),
+            (
+              name: 'offline arm',
+              config: const github.GitHubReconcilerConfig(
+                owner: 'private-owner',
+                repository: 'personal-repo',
+                substation: 'inert',
+                installationId: '99',
+                arm: github.GitHubReconcilerArm.offline,
+              ),
+              trust: trust,
+            ),
+            (
+              name: 'no trust',
+              config: const github.GitHubReconcilerConfig(
+                owner: 'private-owner',
+                repository: 'personal-repo',
+                substation: 'inert',
+                installationId: '99',
+              ),
+              trust: null,
+            ),
+          ];
+
+      for (final posture in cases) {
+        final owner = TreeOwner();
+        final transport = _FakeTransport();
+        final arm = posture.config?.arm;
+        final app =
+            arm == github.GitHubReconcilerArm.dry ||
+                arm == github.GitHubReconcilerArm.offline
+            ? const GitHubAppConfig(
+                appId: '1234',
+                installationId: '99',
+                privateKeyVar: 'MY_APP_KEY',
+              )
+            : null;
+        Seed seat = sdk.RawAssetGrid(
+          root: '/home/me/station',
+          assets: [
+            SubstationSeat(
+              name: 'inert',
+              root: '../private',
+              app: app,
+              githubPoll: posture.config,
+            ),
+          ],
+        );
+        final selfTrust = posture.trust;
+        if (selfTrust != null) {
+          seat = Provider<github.GitHubSelfTrust>.value(selfTrust, child: seat);
+        }
+        final root = owner.mountRoot(
+          ProviderScope(
+            child: Provider<github.GitHubAppClient>.value(
+              _fakeClient(transport),
+              child: Provider<GitOps>(
+                create: (_) => GitOps(SystemGitRunner()),
+                child: seat,
+              ),
+            ),
+          ),
+        );
+        await _settle(owner);
+        final walk = _Walk(root);
+        expect(
+          walk.values<github.GitHubCursorStore>(),
+          isEmpty,
+          reason: posture.name,
+        );
+        expect(
+          walk.values<github.GitHubEventSink>(),
+          isEmpty,
+          reason: posture.name,
+        );
+        expect(
+          walk.values<github.GitHubReconcilerRuntime>(),
+          isEmpty,
+          reason: posture.name,
+        );
+        expect(transport.calls, 0, reason: posture.name);
+        if (arm == github.GitHubReconcilerArm.dry ||
+            arm == github.GitHubReconcilerArm.offline) {
+          expect(walk.values<PrOpener>(), isEmpty);
+          expect(
+            walk.values<ServiceBundle>().where((b) => b.delivery != null),
+            isEmpty,
+          );
+        }
+        owner.dispose();
+      }
+    },
+  );
+
+  test(
+    'sibling live seats own distinct cursor stores under their resolved roots',
+    () async {
       final owner = TreeOwner();
+      addTearDown(owner.dispose);
       final transport = _FakeTransport();
       final root = owner.mountRoot(
         ProviderScope(
           child: Provider<github.GitHubAppClient>.value(
             _fakeClient(transport),
-            child: Provider<github.GitHubCursorStore>.value(
-              _FakeCursorStore(),
-              child: Provider<github.GitHubEventSink>.value(
-                _emit,
-                child: Provider<GitOps>(
-                  create: (_) => GitOps(SystemGitRunner()),
-                  child: sdk.RawAssetGrid(
-                    root: '/home/me/station',
-                    assets: [
-                      SubstationSeat(
-                        name: 'inert',
-                        root: '../private',
-                        app: const GitHubAppConfig(
-                          appId: '1234',
-                          installationId: '99',
-                          privateKeyVar: 'MY_APP_KEY',
-                        ),
-                        githubPoll: github.GitHubReconcilerConfig(
-                          owner: 'private-owner',
-                          repository: 'personal-repo',
-                          substation: 'inert',
-                          installationId: '99',
-                          arm: arm,
-                        ),
-                      ),
-                    ],
+            child: Provider<github.GitHubSelfTrust>.value(
+              github.GitHubSelfTrust(githubUser: 'NiCo'),
+              child: sdk.RawAssetGrid(
+                root: '/station',
+                assets: [
+                  SubstationSeat(
+                    name: 'one',
+                    root: '/work/one',
+                    githubPoll: const github.GitHubReconcilerConfig(
+                      owner: 'memento',
+                      repository: 'one',
+                      substation: 'one',
+                      installationId: '99',
+                      interval: Duration(days: 1),
+                    ),
                   ),
-                ),
+                  SubstationSeat(
+                    name: 'two',
+                    root: '/work/two',
+                    githubPoll: const github.GitHubReconcilerConfig(
+                      owner: 'memento',
+                      repository: 'two',
+                      substation: 'two',
+                      installationId: '99',
+                      interval: Duration(days: 1),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       );
-      owner.flush();
-      await _pump();
-      owner.flush();
-      final walk = _Walk(root);
-      expect(transport.calls, 0, reason: '$arm must make no request');
-      expect(walk.values<github.GitHubReconcilerRuntime>(), isEmpty);
-      expect(walk.values<PrOpener>(), isEmpty);
+      await _settle(owner);
+      final scopes = _Walk(root).branches<sdk.SubstationScope>();
+      final first = scopes.singleWhere((branch) => branch.value.name == 'one');
+      final second = scopes.singleWhere((branch) => branch.value.name == 'two');
+      final firstStore =
+          _Walk(first).values<github.GitHubCursorStore>().single
+              as github.FileGitHubCursorStore;
+      final secondStore =
+          _Walk(second).values<github.GitHubCursorStore>().single
+              as github.FileGitHubCursorStore;
+      expect(identical(firstStore, secondStore), isFalse);
       expect(
-        walk.values<ServiceBundle>().where((b) => b.delivery != null),
-        isEmpty,
+        firstStore.cursorPath,
+        '/work/one/.grid/github/memento-one.cursor.json',
       );
-      owner.dispose();
-    }
-  });
+      expect(
+        secondStore.cursorPath,
+        '/work/two/.grid/github/memento-two.cursor.json',
+      );
+    },
+  );
 
   group('GitHubGridAssets — the watch-based delivery binding', () {
     test('delivery fail-safe and private repository coordinates', () {
@@ -979,23 +1109,12 @@ final class _FakeTransport implements github.GitHubHttpTransport {
   }
 }
 
-final class _FakeCursorStore implements github.GitHubCursorStore {
-  @override
-  Future<github.GitHubReconcilerCursor> load() async =>
-      const github.GitHubReconcilerCursor();
-
-  @override
-  Future<void> save(github.GitHubReconcilerCursor cursor) async {}
-}
-
 github.GitHubAppClient _fakeClient(_FakeTransport transport) =>
     github.GitHubAppClient(
       config: github.GitHubAppConfig(appId: '1234', installationId: 99),
       tokens: _FakeTokens(),
       transport: transport,
     );
-
-Future<void> _emit(github.NormalizedGitHubEvent event) async {}
 
 /// A work bead shaped for the mount gate: driveable type + `validation_plan` +
 /// the `grid.approved` label. Each argument is overridden individually so a
