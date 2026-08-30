@@ -45,7 +45,7 @@ void main() {
 
   group('SpaceDelegate.build — space_station as a Seed (v3 §2)', () {
     test('the well-formed offline tree mounts clean (ProviderScope → '
-        'RawAssetGrid → Station → HarnessProvider → Substations → the five '
+        'RawAssetGrid → Station → HarnessProvider → Substations → the six '
         'coded SubstationSeat wrappers validate end to end)', () {
       expect(() => _mount(_Author(delegate())), returnsNormally);
     });
@@ -54,7 +54,7 @@ void main() {
         'providers are ABSENT from the tree, so every seat bundle is '
         'commit-only (space-47t: inertness declared in the tree)', () {
       final bundles = _mountedBundles(_Author(delegate()));
-      expect(bundles, hasLength(5), reason: 'one gated bundle per coded seat');
+      expect(bundles, hasLength(6), reason: 'one gated bundle per coded seat');
       expect(bundles.every((b) => b.delivery == null), isTrue);
     });
 
@@ -64,7 +64,7 @@ void main() {
       final bundles = _mountedBundles(_Author(delegate(live: true)));
       expect(
         bundles.where((b) => b.delivery != null),
-        hasLength(5),
+        hasLength(6),
         reason: 'each coded seat re-provides its bundle delivery-bound',
       );
     });
@@ -235,7 +235,7 @@ void main() {
     );
 
     test('an appended (--substation) seat mounts clean after the literal '
-        'coded org (space-6ds: the five coded seats are always authored)', () {
+        'coded org (space-6ds: the six coded seats are always authored)', () {
       expect(
         () => _mount(
           _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
@@ -266,9 +266,9 @@ void main() {
             ),
           ),
         );
-        expect(bundles, hasLength(6));
+        expect(bundles, hasLength(7));
         expect(
-          bundles.take(5).every((bundle) => bundle.delivery != null),
+          bundles.take(6).every((bundle) => bundle.delivery != null),
           isTrue,
         );
         final appended = bundles.last;

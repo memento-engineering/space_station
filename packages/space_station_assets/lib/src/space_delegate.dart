@@ -35,9 +35,9 @@
 /// ## space-6ds — the roster is CODE: the [SpaceDelegate.substations] hook
 ///
 /// space_station IS memento's grid instance
-/// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the five
-/// org substations — genesis, the_grid, power_station, space_station, lenny —
-/// are authored as literal seats in [SpaceDelegate.substations], the ONE
+/// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the six
+/// org substations — genesis, the_grid, power_station, space_station, lenny,
+/// decisions — are authored as literal seats in [SpaceDelegate.substations], the ONE
 /// definition both [SpaceDelegate.build] and `space up`'s off-tree machinery
 /// consume (the old hand-kept mirror in `up_command.dart` is gone — the
 /// divergence it risked silently un-owned beads). A seat roots at its
@@ -399,7 +399,7 @@ class SpaceDelegate extends sdk.GridDelegate {
                   child: sdk.Substations(
                     substations: [
                       // ── The CODED roster (space-6ds): the [substations]
-                      // build hook — memento's five org seats unless a
+                      // build hook — memento's six org seats unless a
                       // subclass overrides. ──
                       ...substations(context, configuration),
                       // ── The append layer (Fork B): `--substation` seats
@@ -420,7 +420,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// signature (the template-method idiom the substrate is built on): the
   /// station's coded drive set as authored [SubstationSeat] values, spread
   /// into [build] BEFORE the [appended] layer. Base = the
-  /// memento-engineering org, five seats at their [umbrella]-relative roots.
+  /// memento-engineering org, six seats at their [umbrella]-relative roots.
   ///
   /// Returns `List<Seed>` (space-47t): a seat is the COMPOSED wrapper, and
   /// the offline enumeration (`mountedValuesOf` / [codedRosterSnapshotOf])
@@ -463,6 +463,13 @@ class SpaceDelegate extends sdk.GridDelegate {
     ),
     // the debug harness (memento-engineering/lenny)
     SubstationSeat(name: 'lenny', root: p.join(umbrella, 'lenny')),
+    // the decision record (memento-engineering/decisions); its store mints
+    // `dec-`, so the prefix differs from the repository name.
+    SubstationSeat(
+      name: 'decisions',
+      root: p.join(umbrella, 'decisions'),
+      prefix: 'dec',
+    ),
   ];
 }
 
