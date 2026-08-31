@@ -39,6 +39,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:args/args.dart' show ArgResults;
 import 'package:args/command_runner.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -71,6 +72,10 @@ import 'package:grid_sdk/grid_sdk.dart'
         StoreLocator,
         StoreRefusal,
         SubstationWorkSpec,
+        TrajectoryConfig,
+        TrajectoryConfigMode,
+        TrajectoryHarnessMode,
+        TrajectoryHarnessStatus,
         assembleStationWork,
         runGrid;
 import 'package:path/path.dart' as p;
@@ -208,6 +213,23 @@ class UpCommand extends Command<int> {
         help:
             'The station-wide concurrency ceiling (tg-42f): the most work '
             'beads mounted (agents live) at once across every substation.',
+      )
+      // TRI-STATE on purpose (`defaultsTo: null` — see
+      // [trajectoryConfigFrom]): absent is `auto`, not `--no-trajectory`.
+      ..addFlag(
+        'trajectory',
+        defaultsTo: null,
+        help:
+            'The Stage-1 trajectory shadow window (stage1-wiring §1.3). '
+            'ABSENT (the default) is AUTO: the harness arms iff the home is '
+            'provisioned (`.grid/trajectory/trajectory.secret`), and an '
+            'unprovisioned home boots legacy-only with a one-line notice. '
+            '--trajectory is REQUIRED: a failed connect/claim still never '
+            'blocks the boot — the trajectory can degrade, work cannot — but '
+            'the degradation is LOUD (`/status` reads DEGRADED). '
+            '--no-trajectory is DISABLED: no connection, no epoch claim, a '
+            'silent counting no-op. --dry-run forces DISABLED whatever this '
+            'says: a dry arm claims no epoch and writes nothing.',
       );
   }
 
@@ -363,6 +385,12 @@ class UpCommand extends Command<int> {
       err('space up: --max-agents must be an integer.');
       return 64;
     }
+    // The Stage-1 trajectory posture (stage1-wiring §1.3). The DRY-RUN force
+    // is deliberately NOT applied here: `assembleStationWork` owns it
+    // (`config: dryRun ? trajectoryConfig.asDisabled : trajectoryConfig`), so
+    // every runner that reaches the assembly gets the same physics and the
+    // runner never has a second, drifting copy of the rule.
+    final trajectoryConfig = trajectoryConfigFrom(results);
 
     // --- stores at roots (the discoverWorkspaces replacement). The grid state
     // store lives under `<grid-home>/.grid/`; a cwd-relative home re-imports
@@ -503,6 +531,7 @@ class UpCommand extends Command<int> {
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
         transport: diagnostics,
+        trajectoryConfig: trajectoryConfig,
       );
     } on Object catch (e) {
       diagnostics.dispose();
@@ -670,6 +699,17 @@ class UpCommand extends Command<int> {
       'stores: read-path {${workRuntime.readPathName}}  ·  state partition: '
       '${workRuntime.stateSubstation}',
     );
+    // The trajectory posture, read off the STARTED harness — never off the
+    // requested config: the assembly's dry-run force and every boot-time
+    // degradation (unprovisioned home, refused connect, refused claim, a
+    // halted belt verify) have already resolved by here, so the banner
+    // reports what the station IS, not what the operator asked for.
+    out(
+      trajectoryBannerLine(
+        workRuntime.trajectory.status,
+        dryRun: config.dryRun,
+      ),
+    );
     out('control: ${control.url}  ·  token: (see ${stationLock.path}, 0600)');
     out(
       devMode == null
@@ -742,7 +782,8 @@ class UpCommand extends Command<int> {
         .where((s) => !s.isTerminal)
         .length;
     final capturedAt = latest.graph.capturedAt;
-    return StationStatus(
+    return SpaceStationStatus(
+      trajectory: workRuntime.trajectory.status,
       substation: armed.map((s) => s.name).join(','),
       stateStore: config.gridHome,
       workRoot: armed.map((s) => '${s.name}=${s.root}').join(', '),
@@ -782,4 +823,133 @@ class UpCommand extends Command<int> {
 
   void _out(String message) => stdout.writeln(message);
   void _err(String message) => stderr.writeln(message);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The Stage-1 trajectory runner surface (stage1-wiring §1.1 chunk WS): the
+// flag → config mapping, the banner line, and the `/status` block. All three
+// are PURE functions over values so they are provable without a station.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps `up`'s tri-state `--trajectory` flag onto the assembly's
+/// [TrajectoryConfig] (stage1-wiring §1.3).
+///
+/// The flag is declared `defaultsTo: null` precisely so ABSENT is a third
+/// state: absent ⇒ [TrajectoryConfigMode.auto] (arm iff the home carries the
+/// provisioning artifact), `--trajectory` ⇒ [TrajectoryConfigMode.required]
+/// (degrade LOUD, never block the boot), `--no-trajectory` ⇒
+/// [TrajectoryConfigMode.disabled] (no connection, no claim, a silent
+/// counting no-op).
+///
+/// The dry-run force is NOT applied here — `assembleStationWork` applies
+/// `TrajectoryConfig.asDisabled` when `dryRun` is set, which is the one place
+/// the rule lives.
+TrajectoryConfig trajectoryConfigFrom(ArgResults args) {
+  if (!args.wasParsed('trajectory')) return const TrajectoryConfig();
+  return args.flag('trajectory')
+      ? const TrajectoryConfig(mode: TrajectoryConfigMode.required)
+      : const TrajectoryConfig(mode: TrajectoryConfigMode.disabled);
+}
+
+/// The boot banner's trajectory line, rendered from a STARTED harness's
+/// [TrajectoryHarnessStatus] (stage1-wiring §3's operator-surface column).
+///
+/// Every non-live posture says the same two things in the same order: what
+/// the posture is (with its cause), and that the station is running
+/// legacy-only with the shadow window not counting — because that, not the
+/// mode name, is the thing an operator must not misread.
+///
+/// [dryRun] only re-words the disabled cause. The assembly's dry-run force
+/// lands as a plain `disabled by config`, which reads like a flag the
+/// operator did not pass — on a dry arm the banner names the REAL reason
+/// instead, so `--trajectory --dry-run` never looks like a refused flag.
+String trajectoryBannerLine(
+  TrajectoryHarnessStatus status, {
+  bool dryRun = false,
+}) {
+  final cause = status.cause == null ? '' : ' (${status.cause})';
+  const legacyOnly = ' — running legacy-only; shadow window not counting';
+  switch (status.mode) {
+    case TrajectoryHarnessMode.live:
+      return 'trajectory: LIVE  ·  epoch ${status.epoch}  ·  '
+          'appended ${status.appended}  ·  deduped ${status.deduped}  ·  '
+          'dropped ${status.dropped}  ·  queue ${status.queueDepth}';
+    case TrajectoryHarnessMode.disabled:
+      return dryRun
+          ? 'trajectory: DISABLED (dry arm — a dry run claims no epoch and '
+                'writes nothing)$legacyOnly'
+          : 'trajectory: DISABLED$cause$legacyOnly';
+    case TrajectoryHarnessMode.unprovisioned:
+      return 'trajectory: INERT$cause$legacyOnly';
+    case TrajectoryHarnessMode.down:
+      return 'trajectory: DOWN$cause$legacyOnly';
+    case TrajectoryHarnessMode.degraded:
+      return 'trajectory: DEGRADED$cause  ·  dropped ${status.dropped}'
+          '$legacyOnly';
+    case TrajectoryHarnessMode.fencedOut:
+      return 'trajectory: FENCED-OUT$cause  ·  epoch ${status.epoch}$legacyOnly';
+    case TrajectoryHarnessMode.halted:
+      return 'trajectory: HALTED — ${status.cause ?? 'reason unrecorded'}; the '
+          'log is presumed damaged until a human looks$legacyOnly';
+  }
+}
+
+/// The `/status` trajectory block (stage1-wiring §3): the posture, its cause,
+/// the claimed epoch, the queue depth, and the divergence counters the cut
+/// criterion is read off — a round with any dropped append cannot count as a
+/// clean round, so `dropped` is a first-class field, not a log line.
+///
+/// [armed] is the derived one-bit read a watcher polls; [mode] keeps the
+/// harness's own vocabulary so the wire never invents a second one.
+Map<String, Object?> trajectoryStatusJson(TrajectoryHarnessStatus status) =>
+    <String, Object?>{
+      'mode': status.mode.name,
+      'armed': status.mode == TrajectoryHarnessMode.live,
+      'cause': status.cause,
+      'epoch': status.epoch,
+      'queueDepth': status.queueDepth,
+      'appended': status.appended,
+      'deduped': status.deduped,
+      'dropped': status.dropped,
+      'suppressed': status.suppressed,
+      'exitJoinGaps': status.exitJoinGaps,
+    };
+
+/// space's `/status` snapshot: grid_cli's [StationStatus] plus the Stage-1
+/// trajectory block, added by overriding [toJson].
+///
+/// It is a SUBCLASS rather than a new grid_cli field on purpose. The block is
+/// a space_station deliverable (stage1-wiring §1.1 lists `/status` under
+/// chunk WS), and the wire type belongs to grid_cli, whose constraint here is
+/// a hosted release pin that must not move inside the shadow window
+/// (§5: no publish, no version bumps — the release train is a cut
+/// deliverable). Overriding the serializer keeps `trajectory` TOP-LEVEL on
+/// the wire — a peer of `work` and `wedge`, not smuggled into `sync` — with
+/// no producer change at all.
+class SpaceStationStatus extends StationStatus {
+  /// Creates the snapshot; every base field is forwarded unchanged.
+  SpaceStationStatus({
+    required this.trajectory,
+    required super.substation,
+    required super.stateStore,
+    required super.workRoot,
+    required super.dryRun,
+    required super.pid,
+    required super.startedAt,
+    required super.version,
+    required super.ready,
+    required super.mounted,
+    required super.liveSessions,
+    required super.lastSyncAt,
+    super.sync,
+  });
+
+  /// The harness's fresh status read at the moment `/status` was served.
+  final TrajectoryHarnessStatus trajectory;
+
+  @override
+  Map<String, Object?> toJson() => <String, Object?>{
+    ...super.toJson(),
+    'trajectory': trajectoryStatusJson(trajectory),
+  };
 }
