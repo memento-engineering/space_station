@@ -10,7 +10,7 @@ import 'package:test/test.dart';
 
 /// The LAST-MILE composition: `space search` is the VENDED `grid_assets`
 /// Command curried with space's resident-station context, so the roster it
-/// searches is the BAKED memento org ([SpaceDelegate.build]) — five coded
+/// searches is the BAKED memento org ([SpaceDelegate.build]) — six coded
 /// seats at their `../<repo>` umbrella siblings, resolved against the grid
 /// home. The Command's own behaviour is pinned in power_station; this suite
 /// pins the WIRING. Offline: a Fake bead source + a Fake directory probe +
@@ -71,7 +71,7 @@ void main() {
     return (runner: runner, out: out, err: err);
   }
 
-  test('`search --json <q>` searches the BAKED memento roster — the five coded '
+  test('`search --json <q>` searches the BAKED memento roster — the six coded '
       'seats, in tree order, at their ../<repo> siblings, with the coded '
       'prefixes', () async {
     final h = harness();
@@ -86,7 +86,14 @@ void main() {
     ];
     expect(
       stores.map((s) => s['substation']),
-      ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
+      [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+      ],
       reason: "the roster is SpaceDelegate.build's, not a hardcoded list",
     );
     expect(
@@ -97,6 +104,7 @@ void main() {
         'power_station': 'pow',
         'space_station': 'space',
         'lenny': 'lenny',
+        'decisions': 'dec',
       },
     );
     expect(stores.first['root'], '$umbrella/genesis');
@@ -109,7 +117,7 @@ void main() {
         for (final s in stores)
           if (s['outcome'] == 'absent') s['substation'],
       ],
-      ['power_station', 'space_station', 'lenny'],
+      ['power_station', 'space_station', 'lenny', 'decisions'],
     );
   });
 

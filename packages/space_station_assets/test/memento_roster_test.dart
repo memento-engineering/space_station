@@ -8,7 +8,7 @@ import 'package:space_station_assets/src/substation_seat.dart';
 import 'package:test/test.dart';
 
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
-/// evolved): the memento org is authored as five literal seats in
+/// evolved): the memento org is authored as six literal seats in
 /// [SpaceDelegate.substations] (the roster BUILD HOOK) and `--substation`
 /// flags APPEND new seats after it — no merge, no override-by-name (Fork B
 /// as re-ruled: the roster changes in CODE — space edits [substations]; a
@@ -29,6 +29,7 @@ void main() {
     'power_station',
     'space_station',
     'lenny',
+    'decisions',
   };
 
   SpaceDelegate delegate({List<sdk.Substation> appended = const []}) =>
@@ -39,13 +40,20 @@ void main() {
       );
 
   group('SpaceDelegate.build — the hardcoded memento org (Fork A)', () {
-    test('a BARE delegate mounts the five coded seats at their ../<repo> '
+    test('a BARE delegate mounts the six coded seats at their ../<repo> '
         'umbrella siblings with the coded prefixes — the roster is the tree, '
         'not config', () {
       final seats = _mountedSeats(_Author(delegate()));
       expect(
         seats.map((s) => s.name),
-        ['genesis', 'the_grid', 'power_station', 'space_station', 'lenny'],
+        [
+          'genesis',
+          'the_grid',
+          'power_station',
+          'space_station',
+          'lenny',
+          'decisions',
+        ],
         reason: 'the org, in mount order, from the literal Substation seats',
       );
       // Roots are the umbrella siblings `../<repo>`, resolved by the SDK
@@ -58,11 +66,13 @@ void main() {
           'power_station': '$umbrella/power_station',
           'space_station': '$umbrella/space_station',
           'lenny': '$umbrella/lenny',
+          'decisions': '$umbrella/decisions',
         },
       );
       // Prefix is a SEPARATE axis from the name wherever the store mints
       // differently (the_grid → `tg-…`, power_station → `pow-…`,
-      // space_station → `space-…`); the rest default to the name (round 3).
+      // space_station → `space-…`, decisions → `dec-…`); genesis and lenny
+      // default to their names (round 3).
       expect(
         {for (final s in seats) s.name: s.prefix},
         {
@@ -71,6 +81,7 @@ void main() {
           'power_station': 'pow',
           'space_station': 'space',
           'lenny': 'lenny',
+          'decisions': 'dec',
         },
       );
     });
@@ -93,10 +104,11 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'decisions',
         'tgdog',
         'extra',
       ]);
-      expect(seats[5].root, '/work/td');
+      expect(seats[6].root, '/work/td');
       expect(seats.last.prefix, 'ex');
     });
   });
@@ -115,6 +127,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'decisions',
         'mine',
       ]);
       // The org resolves at the OVERRIDDEN umbrella (relative to the
@@ -130,7 +143,7 @@ void main() {
         'offline mount (construct → mount → dispose)', () {
       final scopes = codedRosterOf(_DownstreamDelegate.new);
       expect(scopes.map((s) => s.name), contains('mine'));
-      expect(scopes, hasLength(6));
+      expect(scopes, hasLength(7));
     });
 
     test(
@@ -146,6 +159,7 @@ void main() {
           'power_station',
           'space_station',
           'lenny',
+          'decisions',
         ]);
         expect(base.githubPollingSeatNames, isEmpty);
 
@@ -156,6 +170,7 @@ void main() {
           'power_station',
           'space_station',
           'lenny',
+          'decisions',
           'mine',
         ]);
         expect(downstream.githubPollingSeatNames, {'mine'});
@@ -193,7 +208,7 @@ void main() {
         expect(seat.root, '/work/td');
         expect(seat.prefix, 'td');
         // The parsed seat carries the standard substation stack — it mounts
-        // clean after the coded five.
+        // clean after the coded six.
         final seats = _mountedSeats(
           _Author(delegate(appended: config.appended)),
         );
@@ -203,6 +218,7 @@ void main() {
           'power_station',
           'space_station',
           'lenny',
+          'decisions',
           'tgdog',
         ]);
         expect(seats.last.prefix, 'td');
