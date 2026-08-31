@@ -4,8 +4,10 @@ import 'package:grid_sdk/grid_sdk.dart'
         TrajectoryConfig,
         TrajectoryConfigMode,
         TrajectoryHarnessMode,
-        TrajectoryHarnessStatus;
-import 'package:space_station_assets/src/up_command.dart';
+        TrajectoryHarnessStatus,
+        kNotWedged;
+import 'package:space_station_assets/src/trajectory_surface.dart';
+import 'package:space_station_assets/src/up_command.dart' show UpCommand;
 import 'package:test/test.dart';
 
 /// Chunk WS of stage1-wiring (`the_grid/docs/design/trajectory/`): the
@@ -172,11 +174,44 @@ void main() {
       String lineFor(TrajectoryHarnessMode mode) =>
           trajectoryBannerLine(status(mode, cause: 'why'));
       expect(lineFor(TrajectoryHarnessMode.disabled), contains('DISABLED'));
-      expect(lineFor(TrajectoryHarnessMode.unprovisioned), contains('INERT'));
+      expect(
+        lineFor(TrajectoryHarnessMode.unprovisioned),
+        contains('UNPROVISIONED'),
+      );
       expect(lineFor(TrajectoryHarnessMode.down), contains('DOWN'));
       expect(lineFor(TrajectoryHarnessMode.degraded), contains('DEGRADED'));
       expect(lineFor(TrajectoryHarnessMode.fencedOut), contains('FENCED-OUT'));
       expect(lineFor(TrajectoryHarnessMode.halted), contains('HALTED'));
+    });
+
+    test('the banner keeps the HARNESS vocabulary — it never invents a word '
+        'the wire, the enum, and the design doc do not share', () {
+      for (final mode in TrajectoryHarnessMode.values) {
+        final word = trajectoryPostureWord(mode.name);
+        expect(
+          trajectoryBannerLine(status(mode, cause: 'why')),
+          contains('trajectory: $word'),
+          reason: mode.name,
+        );
+        // The word is the mode's own name, modulo case and the one
+        // hyphenation §3 itself writes.
+        expect(
+          word.replaceAll('-', '').toLowerCase(),
+          mode.name.toLowerCase(),
+          reason: '${mode.name} must not render as a second vocabulary',
+        );
+      }
+    });
+
+    test('INERT is gone: an unprovisioned home renders the mode the harness '
+        'and the wire both name', () {
+      final line = trajectoryBannerLine(
+        status(TrajectoryHarnessMode.unprovisioned, cause: 'no secret'),
+      );
+      expect(line, contains('UNPROVISIONED'));
+      expect(line, isNot(contains('INERT')));
+      // The cause stays a PARENTHETICAL suffix, never the posture word.
+      expect(line, contains('(no secret)'));
     });
 
     test('DEGRADED surfaces the drop count inline (§3: a dropped append '
@@ -195,26 +230,126 @@ void main() {
       expect(line, contains('presumed damaged'));
     });
 
-    test('a DRY arm names the dry run as the cause — the assembly force reads '
-        '`disabled by config`, which would look like a flag the operator '
-        'never passed', () {
+    test('an IMPLICIT dry-run force names the dry run as the cause — the '
+        'assembly force reads `disabled by config`, which would look like a '
+        'flag the operator never passed', () {
+      for (final requested in const [
+        TrajectoryConfigMode.auto,
+        TrajectoryConfigMode.required,
+      ]) {
+        final line = trajectoryBannerLine(
+          status(TrajectoryHarnessMode.disabled, cause: 'disabled by config'),
+          dryRun: true,
+          requested: requested,
+        );
+        expect(line, contains('DISABLED'), reason: requested.name);
+        expect(line, contains('dry arm'), reason: requested.name);
+        expect(line, contains('claims no epoch'), reason: requested.name);
+        expect(
+          line,
+          isNot(contains('disabled by config')),
+          reason: requested.name,
+        );
+      }
+    });
+
+    test('an EXPLICIT --no-trajectory under the default dry run renders the '
+        "OPERATOR's choice, not `dry arm` — both are true, and reporting only "
+        'the dry run hides the choice that was actually made', () {
       final line = trajectoryBannerLine(
         status(TrajectoryHarnessMode.disabled, cause: 'disabled by config'),
         dryRun: true,
+        requested: TrajectoryConfigMode.disabled,
       );
-      expect(line, contains('DISABLED'));
-      expect(line, contains('dry arm'));
-      expect(line, contains('claims no epoch'));
-      expect(line, isNot(contains('disabled by config')));
+      expect(line, contains('DISABLED (--no-trajectory'));
+      // The dry run is still named — as a secondary clause, not the cause.
+      expect(line, contains('also a dry arm'));
+      expect(line.indexOf('--no-trajectory'), lessThan(line.indexOf('dry')));
     });
 
-    test('a LIVE arm with --no-trajectory keeps the config cause', () {
+    test('a LIVE arm with --no-trajectory names the flag and nothing about a '
+        'dry run', () {
+      final line = trajectoryBannerLine(
+        status(TrajectoryHarnessMode.disabled, cause: 'disabled by config'),
+        requested: TrajectoryConfigMode.disabled,
+      );
+      expect(line, contains('--no-trajectory'));
+      expect(line, isNot(contains('dry')));
+    });
+
+    test('a disabled posture the operator did NOT request keeps the harness '
+        'cause verbatim', () {
       expect(
         trajectoryBannerLine(
           status(TrajectoryHarnessMode.disabled, cause: 'disabled by config'),
         ),
         contains('disabled by config'),
       );
+    });
+  });
+
+  group("required mode's LOUD warning (§1.3)", () {
+    test('every degraded posture under --trajectory warns, and it names the '
+        'posture, the cause, and that no round can be scored', () {
+      for (final mode in TrajectoryHarnessMode.values) {
+        if (mode == TrajectoryHarnessMode.live) continue;
+        if (mode == TrajectoryHarnessMode.disabled) continue;
+        final warning = trajectoryRequiredWarning(
+          status(mode, cause: 'why ${mode.name}'),
+          requested: TrajectoryConfigMode.required,
+        );
+        expect(warning, isNotNull, reason: mode.name);
+        expect(warning, contains('WARNING'), reason: mode.name);
+        expect(warning, contains('REQUIRED'), reason: mode.name);
+        expect(
+          warning,
+          contains(trajectoryPostureWord(mode.name)),
+          reason: mode.name,
+        );
+        expect(warning, contains('why ${mode.name}'), reason: mode.name);
+        expect(warning, contains('NOT counting'), reason: mode.name);
+      }
+    });
+
+    test('a LIVE harness under --trajectory is silent — the flag got what it '
+        'asked for', () {
+      expect(
+        trajectoryRequiredWarning(
+          status(TrajectoryHarnessMode.live, epoch: 3),
+          requested: TrajectoryConfigMode.required,
+        ),
+        isNull,
+      );
+    });
+
+    test("the dry-run force is NOT a degradation — it is the operator's own "
+        'instruction (§1.3), so `--trajectory --dry-run` does not warn', () {
+      expect(
+        trajectoryRequiredWarning(
+          status(TrajectoryHarnessMode.disabled, cause: 'disabled by config'),
+          requested: TrajectoryConfigMode.required,
+        ),
+        isNull,
+      );
+    });
+
+    test('auto and disabled never warn — §1.3 designs auto to be a one-line '
+        'notice, NOT a warning storm', () {
+      for (final requested in const [
+        TrajectoryConfigMode.auto,
+        TrajectoryConfigMode.disabled,
+      ]) {
+        for (final mode in TrajectoryHarnessMode.values) {
+          expect(
+            trajectoryRequiredWarning(
+              status(mode, cause: 'why'),
+              requested: requested,
+            ),
+            isNull,
+            reason: '${requested.name}/${mode.name}',
+          );
+        }
+      }
     });
   });
 
@@ -280,6 +415,175 @@ void main() {
     test('the block keeps the harness vocabulary — no second mode set', () {
       for (final mode in TrajectoryHarnessMode.values) {
         expect(trajectoryStatusJson(status(mode))['mode'], mode.name);
+      }
+    });
+
+    test('the forwarding constructor reaches EVERY base field — a base '
+        'parameter this subclass forgets is unreachable, silently', () {
+      final json = SpaceStationStatus(
+        trajectory: status(TrajectoryHarnessMode.live, epoch: 1),
+        substation: 'space_station',
+        stateStore: '/home/memento/space_station',
+        workRoot: 'space_station=/home/memento/space_station',
+        dryRun: false,
+        pid: 4242,
+        startedAt: DateTime.utc(2026, 8, 31),
+        version: '3.11.0',
+        ready: 3,
+        mounted: 1,
+        liveSessions: 1,
+        lastSyncAt: null,
+        perSubstation: const [],
+        wedge: kNotWedged,
+        sync: const {'stats': <String, Object?>{}},
+      ).toJson();
+      expect(json.keys, contains('trajectory'));
+      expect(json.keys, contains('wedge'));
+    });
+  });
+
+  group('`status` renders the block (§3: loud on every status read)', () {
+    Map<String, Object?> payload(TrajectoryHarnessStatus s) =>
+        <String, Object?>{
+          'station': <String, Object?>{'dryRun': false},
+          'trajectory': trajectoryStatusJson(s),
+        };
+
+    test('an ABSENT block renders nothing and does not throw — an older '
+        'producer, or a station booted before chunk WS', () {
+      expect(
+        trajectoryStatusLine(<String, Object?>{
+          'station': <String, Object?>{'dryRun': true},
+        }),
+        isNull,
+      );
+      expect(trajectoryStatusLine(const <String, Object?>{}), isNull);
+      // A malformed block is absence, never a crash on the operator's only
+      // read of the station.
+      expect(
+        trajectoryStatusLine(<String, Object?>{'trajectory': 'nonsense'}),
+        isNull,
+      );
+    });
+
+    test('a clean LIVE harness renders ONE quiet line carrying every counter '
+        'the cut criterion is scored on', () {
+      final rendered = trajectoryStatusLine(
+        payload(
+          status(
+            TrajectoryHarnessMode.live,
+            epoch: 4,
+            appended: 118,
+            queueDepth: 2,
+          ),
+        ),
+      );
+      expect(rendered, isNotNull);
+      expect(rendered!.loud, isFalse);
+      expect(rendered.line, startsWith('trajectory: LIVE'));
+      expect(rendered.line, contains('armed'));
+      expect(rendered.line, contains('epoch 4'));
+      expect(rendered.line, contains('queue 2'));
+      expect(rendered.line, contains('appended 118'));
+      expect(rendered.line, contains('dropped 0'));
+    });
+
+    test('DISABLED renders ONE quiet line — a flag the operator passed is not '
+        'an alarm', () {
+      final rendered = trajectoryStatusLine(
+        payload(
+          status(TrajectoryHarnessMode.disabled, cause: 'disabled by config'),
+        ),
+      )!;
+      expect(rendered.loud, isFalse);
+      expect(rendered.line, contains('DISABLED'));
+      expect(rendered.line, contains('not armed'));
+      expect(rendered.line, contains('disabled by config'));
+      expect(rendered.line, isNot(startsWith('!!')));
+    });
+
+    test('UNPROVISIONED stays quiet too — §1.3: a one-line notice, NOT a '
+        'warning storm', () {
+      expect(
+        trajectoryStatusLine(
+          payload(
+            status(TrajectoryHarnessMode.unprovisioned, cause: 'no secret'),
+          ),
+        )!.loud,
+        isFalse,
+      );
+    });
+
+    test('every posture that can latch AFTER boot renders LOUD — the banner '
+        'fired once and the harness flared once, so this read is the only '
+        'thing that repeats', () {
+      for (final mode in const [
+        TrajectoryHarnessMode.halted,
+        TrajectoryHarnessMode.fencedOut,
+        TrajectoryHarnessMode.degraded,
+        TrajectoryHarnessMode.down,
+      ]) {
+        final rendered = trajectoryStatusLine(
+          payload(status(mode, cause: 'why ${mode.name}')),
+        )!;
+        expect(rendered.loud, isTrue, reason: mode.name);
+        expect(rendered.line, startsWith('!! trajectory: '), reason: mode.name);
+        expect(
+          rendered.line,
+          contains(trajectoryPostureWord(mode.name)),
+          reason: mode.name,
+        );
+        expect(rendered.line, contains('why ${mode.name}'), reason: mode.name);
+        expect(rendered.line, contains('legacy-only'), reason: mode.name);
+      }
+    });
+
+    test('HALTED matches §3 verbatim: `trajectory: HALTED — <reason>`', () {
+      expect(
+        trajectoryStatusLine(
+          payload(
+            status(TrajectoryHarnessMode.halted, cause: 'belt seq 42 skipped'),
+          ),
+        )!.line,
+        contains('trajectory: HALTED — belt seq 42 skipped'),
+      );
+    });
+
+    test('a LIVE harness with ANY dropped append is LOUD — §3: a round with a '
+        'dropped append cannot count as a clean round', () {
+      final rendered = trajectoryStatusLine(
+        payload(
+          status(
+            TrajectoryHarnessMode.live,
+            epoch: 4,
+            appended: 90,
+            dropped: 7,
+          ),
+        ),
+      )!;
+      expect(rendered.loud, isTrue);
+      expect(rendered.line, startsWith('!!'));
+      expect(rendered.line, contains('7 dropped append'));
+      expect(rendered.line, contains('clean round'));
+    });
+
+    test('a LIVE harness with an exit-join gap is LOUD, the same '
+        'disqualification', () {
+      final rendered = trajectoryStatusLine(
+        payload(status(TrajectoryHarnessMode.live, epoch: 4, exitJoinGaps: 3)),
+      )!;
+      expect(rendered.loud, isTrue);
+      expect(rendered.line, contains('3 exit-join gap'));
+    });
+
+    test('the render keeps the harness vocabulary — no third word set across '
+        'banner, wire, and status', () {
+      for (final mode in TrajectoryHarnessMode.values) {
+        expect(
+          trajectoryStatusLine(payload(status(mode, cause: 'why')))!.line,
+          contains('trajectory: ${trajectoryPostureWord(mode.name)}'),
+          reason: mode.name,
+        );
       }
     });
   });
