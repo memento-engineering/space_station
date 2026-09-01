@@ -55,10 +55,10 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
+        AgentRole,
         EnvironmentRegistry,
         HarnessProvider,
         MountEligibilityAssets,
-        buildBuiltinEnvironmentRegistry,
         buildCodeRegistry,
         mountedValuesOf;
 import 'package:grid_runtime/grid_runtime.dart'
@@ -68,6 +68,7 @@ import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
 
+import 'agent_arming.dart';
 import 'substation_seed.dart';
 
 /// The factory signature the runner compositions construct a station's
@@ -130,6 +131,24 @@ List<sdk.SubstationScope> codedRosterOf(
   String gridRoot = '/',
 }) => codedRosterSnapshotOf(factory, gridRoot: gridRoot).scopes;
 
+/// The station [factory]'s CODED arming and NAMED environments, read from ONE
+/// owned instance (construct → read → dispose — a delegate is a `StateNotifier`,
+/// never a throwaway value).
+///
+/// The [codedRosterOf] precedent, at the same deterministic ABSOLUTE placeholder
+/// home (`'/'`): both are CLASS-level policy and independent of the grid home,
+/// and neither mounts a tree.
+({AgentArming arming, EnvironmentRegistry environments}) codedArmingOf(
+  SpaceDelegateFactory factory,
+) {
+  final delegate = factory(gridRoot: '/');
+  try {
+    return (arming: delegate.arming, environments: delegate.environments);
+  } finally {
+    delegate.dispose();
+  }
+}
+
 /// The delegate seat memento's `space` verbs re-seat over — space_station
 /// authored as a Seed.
 ///
@@ -149,6 +168,8 @@ List<sdk.SubstationScope> codedRosterOf(
 ///
 ///  * [stationName] — the station's identity;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
+///  * [environments] — the station's named inference environments;
+///  * [arming] — the station's coded role-to-environment posture;
 ///  * [circuitOverrideFor] — bead-scoped non-code routing; null retains the
 ///    migration-aware code policy;
 ///  * [buildWorkRegistry] — the resident capability composition, built over
@@ -190,16 +211,17 @@ List<sdk.SubstationScope> codedRosterOf(
 /// guard, help, refusal set and specs all follow.
 class SpaceDelegate extends sdk.GridDelegate {
   /// Creates the delegate over space's resolved station config.
-  /// [agentConfig] defaults to the authoring-only claude scope (what the
-  /// offline mounts — `search`, `assets`, roster enumeration — need; a live
-  /// `up` passes the real one). [harnesses] defaults to the first-party
-  /// claude/copilot/pi/opencode set. [provisioner] is the work runtime's
-  /// worktree machinery (null ⇒ provisioning no-ops — the offline authoring,
-  /// where the worktree layout still resolves — Track F). [live] is the
-  /// boot's ONE remaining posture say (space-47t): false — the default —
-  /// authors NO effect providers (the inert dry-run tree, declared by
-  /// ABSENCE); true has [build] author the commit/push and PR-opening
-  /// providers IN-TREE. No effect instance passes through this constructor.
+  /// [agentConfig] defaults to the station's coded [arming] over a claude
+  /// ambient scope (what offline mounts — `search`, `assets`, roster
+  /// enumeration — need; a live `up` passes its resolved boot value).
+  /// [harnesses] defaults to the station's coded [environments]. [provisioner]
+  /// is the work runtime's worktree machinery (null ⇒ provisioning no-ops —
+  /// the offline authoring, where the worktree layout still resolves — Track
+  /// F). [live] is the boot's ONE remaining posture say (space-47t): false —
+  /// the default — authors NO effect providers (the inert dry-run tree,
+  /// declared by ABSENCE); true has [build] author the commit/push and
+  /// PR-opening providers IN-TREE. No effect instance passes through this
+  /// constructor.
   SpaceDelegate({
     required this.gridRoot,
     AgentConfig? agentConfig,
@@ -209,8 +231,14 @@ class SpaceDelegate extends sdk.GridDelegate {
     this.provisioner,
     this.githubSelfTrust,
     this.live = false,
-  }) : agentConfig = agentConfig ?? const AgentConfig(harness: 'claude'),
-       harnesses = harnesses ?? buildBuiltinEnvironmentRegistry();
+  }) : _bootAgentConfig = agentConfig,
+       _bootHarnesses = harnesses;
+
+  /// The boot's agent config, as supplied (null ⇒ the coded arming alone).
+  final AgentConfig? _bootAgentConfig;
+
+  /// The boot's environment registry, as supplied (null ⇒ [environments]).
+  final EnvironmentRegistry? _bootHarnesses;
 
   /// The station's home (absolute): the `RawAssetGrid` root the [build] tree
   /// roots at; the grid's state store lives under `<gridRoot>/.grid/` (Q5a).
@@ -248,14 +276,30 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// coded roster is changed in code ([substations], the subclass hook).
   final List<sdk.Substation> appended;
 
-  /// The station-default agent scope (harness / model / target) — the ambient
-  /// rung of the agent-config ladder (ADR-0008 D10).
-  final AgentConfig agentConfig;
+  /// The station's NAMED inference environments — memento's semantic names
+  /// (`frontier`/`mid`/`cheap`/`codex-frontier`) over the five first-party
+  /// builtins. OVERRIDE POINT: a downstream station arms its own set here
+  /// (`{...kMementoEnvironments, 'house': ...}`); the NAMES and their meaning
+  /// are committed Dart, the machine facts are the site binding's (ADR-0002
+  /// D2/D3). No endpoint url appears here.
+  EnvironmentRegistry get environments => buildMementoEnvironmentRegistry();
 
-  /// The station's environment registry (which named inference environments —
-  /// claude/copilot/pi/opencode/codex — the machine can run). Passed as the
-  /// `HarnessProvider.registry`.
-  final EnvironmentRegistry harnesses;
+  /// The station's CODED agent arming — the DART rung of the ladder
+  /// (ADR-0002 D2): codex builds under a claude committee. OVERRIDE POINT: a
+  /// downstream station (lunar) authors its own posture in code, never through
+  /// an operator flag (ADR-0002 D4).
+  AgentArming get arming => kMementoStationArming;
+
+  /// The station-default agent scope — the ambient rung of the agent-config
+  /// ladder. The CODED [arming] applies UNDER the boot config, so an explicit
+  /// operator rung is never silently ignored (A20(2)).
+  late final AgentConfig agentConfig = arming.underlay(
+    _bootAgentConfig ?? const AgentConfig(),
+  );
+
+  /// The station's environment registry, mounted as `HarnessProvider.registry`:
+  /// the boot's, else the class's coded [environments].
+  late final EnvironmentRegistry harnesses = _bootHarnesses ?? environments;
 
   /// The station's shared worktree-provisioning service (leased per
   /// substation), built and OWNED by the off-tree work runtime; null ⇒
@@ -446,11 +490,20 @@ class SpaceDelegate extends sdk.GridDelegate {
       root: p.join(umbrella, 'the_grid'),
       prefix: 'tg',
     ),
-    // the asset packs — self-host
+    // the asset packs — self-host, and the org's EVALUATION seat: its BUILD
+    // role is armed on `frontier` (claude/opus) while every other seat rides
+    // the station's coded `codex-frontier`, so the SAME committee grades both
+    // and the environments can be compared instead of guessed at (ADR-0002 D5;
+    // D5's worked example arms this seat, in the inverse direction). power_station
+    // is the seat where the rubrics and the committee itself are authored, so
+    // its builds benefit most from being written by the family that grades them.
     SubstationSeed(
       name: 'power_station',
       root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
+      arming: const AgentArming(
+        roleEnvironments: {AgentRole.build: 'frontier'},
+      ),
     ),
     // the runner — self-host; for space this IS the grid home. Its store
     // mints `space-` (NOT `space_station-`), so the prefix MUST be set

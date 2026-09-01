@@ -41,11 +41,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:grid_assets/grid_assets.dart'
-    show
-        AgentConfig,
-        AgentRole,
-        buildBuiltinEnvironmentRegistry,
-        resolveAgentConfig;
+    show AgentConfig, AgentRole, EnvironmentRegistry, resolveAgentConfig;
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
@@ -75,6 +71,7 @@ import 'package:grid_sdk/grid_sdk.dart'
         runGrid;
 import 'package:path/path.dart' as p;
 
+import 'agent_arming.dart';
 import 'dev_mode.dart';
 import 'space_delegate.dart';
 
@@ -176,15 +173,14 @@ class UpCommand extends Command<int> {
       )
       ..addOption(
         'build-harness',
-        defaultsTo: 'codex',
         allowed: ['claude', 'copilot', 'pi', 'opencode', 'codex'],
         help:
-            'The harness for the BUILD role ONLY (role → env, ADR-0002 the '
-            'ladder): builders run on this environment while grade/gather '
-            'stay on the ambient --harness. Defaults to codex — the coded '
-            'station posture is codex builds under a claude committee; pass '
-            '--build-harness claude to collapse build onto the ambient '
-            'harness.',
+            'Diverges the BUILD role onto a named environment for THIS run '
+            '(role → env, ADR-0002 the ladder); grade/gather stay on the '
+            'ambient --harness. Absent: the CODED station posture '
+            '(SpaceDelegate.arming — codex builds under a claude committee). '
+            'An explicit value OUT-RANKS the coded posture; it is never '
+            'silently ignored.',
       )
       ..addOption(
         'model',
@@ -265,7 +261,7 @@ class UpCommand extends Command<int> {
     // --build-harness arms JUST the BUILD role on its own environment (role →
     // env, ADR-0002 the ladder); grade/gather keep the ambient --harness.
     final buildHarness = results.option('build-harness');
-    final agentConfig = AgentConfig(
+    final flagConfig = AgentConfig(
       harness: results.option('harness') ?? 'claude',
       params: {if (model != null) 'model': model},
       graderModel: graderModel,
@@ -273,6 +269,13 @@ class UpCommand extends Command<int> {
         if (buildHarness != null) AgentRole.build: buildHarness,
       },
     );
+    // The station's posture is CODED on the delegate CLASS, never in an
+    // argparse default: `underlay` fills only the role rungs the operator left
+    // unarmed, and the delegate's own registry supplies the named environments
+    // those rungs resolve against.
+    final codedArming = codedArmingOf(_delegateFactory);
+    final agentConfig = codedArming.arming.underlay(flagConfig);
+    final EnvironmentRegistry harnesses = codedArming.environments;
     // Boot-eager (OQ-c moment 1): the STATION-DEFAULT environment must name an
     // armed, self-consistent environment — a misconfigured MACHINE fails loud
     // before any tree mounts (a misconfigured BEAD fails per-work at
@@ -282,7 +285,6 @@ class UpCommand extends Command<int> {
     // not wired yet (bead pow-ebf.6/pow-2eg) — a whole-registry validate would
     // refuse every `up` on pi's unbound endpoint. The default (claude) is
     // providerManaged and needs no endpoint.
-    final harnesses = buildBuiltinEnvironmentRegistry();
     if (!harnesses.names.contains(agentConfig.harness)) {
       err(
         'space up: harness "${agentConfig.harness}" names no armed environment '
@@ -298,23 +300,13 @@ class UpCommand extends Command<int> {
       );
       return 64;
     }
-    // Same boot-eager check for the BUILD-role override, when armed.
-    if (buildHarness != null) {
-      if (!harnesses.names.contains(buildHarness)) {
-        err(
-          'space up: --build-harness "$buildHarness" names no armed environment '
-          '(armed: ${harnesses.names.join(', ')}).',
-        );
-        return 64;
-      }
-      final buildSelfCheck = harnesses.resolve(buildHarness).validate();
-      if (buildSelfCheck != null) {
-        err(
-          'space up: build environment "$buildHarness" is misconfigured: '
-          '$buildSelfCheck',
-        );
-        return 64;
-      }
+    // Boot-eager, over EVERY armed role rung — the coded posture's included, so
+    // a delegate that arms a role at an unarmed environment fails LOUD here
+    // rather than per-spawn.
+    final roleRefusal = roleArmingRefusal(agentConfig, harnesses);
+    if (roleRefusal != null) {
+      err('space up: $roleRefusal (armed: ${harnesses.names.join(', ')}).');
+      return 64;
     }
 
     // --- space's OWN resident-station config (v3 stores-at-roots). The coded
