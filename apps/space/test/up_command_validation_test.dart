@@ -57,6 +57,44 @@ void main() {
     );
   });
 
+  group('deleted agent-scope flags (ADR-0002 D4)', () {
+    // A20(2)'s no-wedge rule is SATISFIED by deletion: a removed flag is a
+    // loud argparse usage error (exit 64), never a silent drop. Model
+    // selection is the named environment's (D2) and the per-role posture is
+    // the delegate's coded arming (D5) — neither is an operator flag.
+    for (final flag in const <String>[
+      'harness',
+      'build-harness',
+      'model',
+      'grader-model',
+    ]) {
+      test('--$flag is gone — refused by the PARSER (exit 64)', () async {
+        final result = await _runUp(['--$flag', 'claude']);
+        expect(result.exitCode, 64);
+        // Split rather than one literal: args 2.7 renders `Could not find an
+        // option named "--x".` while older args omits the dashes.
+        expect(
+          '${result.stderr}',
+          allOf(contains('Could not find an option named'), contains(flag)),
+        );
+      });
+    }
+
+    test('an UNARMED --env name is refused LOUD (exit 64) before any tree '
+        'mounts, and the refusal lists the armed registry', () async {
+      final result = await _runUp(['--env', 'nope']);
+      expect(result.exitCode, 64);
+      expect(
+        '${result.stderr}',
+        allOf(
+          contains('--env "nope"'),
+          contains('names no armed environment'),
+          contains('codex-frontier'),
+        ),
+      );
+    });
+  });
+
   group('v3 stores-at-roots arming (returns before the lock / tree mount)', () {
     test(
       'NO --grid-home is refused LOUD (exit 64) — v3 §0: no default grid home '
