@@ -609,14 +609,14 @@ class UpCommand extends Command<int> {
     }
     await stationLock.updateControl(controlUrl: control.url, token: token);
 
-    // --- the DEV-MODE seat, JIT only: the exploration host — the SOLE registrar
+    // --- the DEV-MODE host, JIT only: the exploration host — the SOLE registrar
     // — carrying the OPTIONAL ReassembleTool, so `ext.exploration.grid.reload`
     // exists and `space reload` re-composes THIS running station (no second
     // process). The lock then advertises the VM-service URI so the client can
     // find it; the lock is 0600 because that URI carries the service auth code.
-    // No VM service ⇒ no seat, no tool, no advertisement, and `space reload`
+    // No VM service ⇒ no host, no tool, no advertisement, and `space reload`
     // refuses LOUD.
-    final DevModeSeat? devMode;
+    final DevModeHost? devMode;
     try {
       devMode = await armDevMode(
         vmServiceUri: vmServiceUri,

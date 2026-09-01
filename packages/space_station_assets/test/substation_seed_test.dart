@@ -10,16 +10,16 @@ import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, PullRequestRef, PullRequestResult, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderScope;
-import 'package:space_station_assets/src/substation_seat.dart';
+import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
-/// space-47t: the ONE composed seat ([SubstationSeat]) and its `const`,
+/// space-47t: the ONE composed seed ([SubstationSeed]) and its `const`,
 /// watch-based stack assets ([GitGridAssets] / imported GitHub assets). Pure +
 /// offline — every tree mounts in a bare genesis [TreeOwner] under a
 /// [ProviderScope] (the availability registry `runGrid` mounts at the
 /// production root).
 void main() {
-  group('SubstationSeat — the composed seat', () {
+  group('SubstationSeed — the composed seed', () {
     test(
       'explicit landing policies are observable on the effective gated seat',
       () {
@@ -39,7 +39,7 @@ void main() {
                     create: (_) => GitOps(SystemGitRunner()),
                     child: Provider<PrOpener>.value(
                       _FakePrOpener(),
-                      child: SubstationSeat(
+                      child: SubstationSeed(
                         name: 'mine',
                         root: '../mine',
                         landingPolicy: policy,
@@ -80,7 +80,7 @@ void main() {
                   create: (_) => GitOps(SystemGitRunner()),
                   child: Provider<PrOpener>.value(
                     _FakePrOpener(),
-                    child: SubstationSeat(name: 'mine', root: '../mine'),
+                    child: SubstationSeed(name: 'mine', root: '../mine'),
                   ),
                 ),
               ],
@@ -103,7 +103,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(name: 'mine', root: '../mine', prefix: 'mn'),
+              SubstationSeed(name: 'mine', root: '../mine', prefix: 'mn'),
             ],
           ),
         ),
@@ -121,7 +121,7 @@ void main() {
         ProviderScope(
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
-            assets: [SubstationSeat(name: 'mine', root: '../mine')],
+            assets: [SubstationSeed(name: 'mine', root: '../mine')],
           ),
         ),
       );
@@ -195,7 +195,7 @@ void main() {
               child: sdk.RawAssetGrid(
                 root: '/home/me/station',
                 assets: [
-                  SubstationSeat(name: 'mine', root: '../mine', app: identity),
+                  SubstationSeed(name: 'mine', root: '../mine', app: identity),
                 ],
               ),
             ),
@@ -215,7 +215,7 @@ void main() {
                 ambient,
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
-                  assets: [SubstationSeat(name: 'mine', root: '../mine')],
+                  assets: [SubstationSeed(name: 'mine', root: '../mine')],
                 ),
               ),
             ),
@@ -234,7 +234,7 @@ void main() {
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
                   assets: [
-                    SubstationSeat(
+                    SubstationSeed(
                       name: 'mine',
                       root: '../mine',
                       app: const GitHubAppConfig(
@@ -279,7 +279,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(
+              SubstationSeed(
                 name: 'org',
                 root: '../org',
                 app: const GitHubAppConfig(
@@ -315,7 +315,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(
+              SubstationSeed(
                 name: 'org',
                 root: '../org',
                 app: const GitHubAppConfig(
@@ -355,7 +355,7 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
-                  assets: [SubstationSeat(name: 'ambient', root: '../ambient')],
+                  assets: [SubstationSeed(name: 'ambient', root: '../ambient')],
                 ),
               ),
             ),
@@ -376,7 +376,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(
+              SubstationSeed(
                 name: 'org',
                 root: '../org',
                 app: const GitHubAppConfig(
@@ -387,7 +387,7 @@ void main() {
                 githubAppCredentialLoader: _FakeGitHubAppCredentials.loader(),
                 githubTransportFactory: _FakeGitHubAppCredentials.transport,
               ),
-              SubstationSeat(
+              SubstationSeed(
                 name: 'personal',
                 root: '../personal',
                 app: const GitHubAppConfig(
@@ -439,7 +439,7 @@ void main() {
               child: sdk.RawAssetGrid(
                 root: '/home/me/station',
                 assets: [
-                  SubstationSeat(
+                  SubstationSeed(
                     name: 'armed',
                     root: '../private',
                     githubPoll: const github.GitHubReconcilerConfig(
@@ -450,7 +450,7 @@ void main() {
                       interval: Duration(days: 1),
                     ),
                   ),
-                  SubstationSeat(name: 'absent', root: '../other'),
+                  SubstationSeed(name: 'absent', root: '../other'),
                 ],
               ),
             ),
@@ -543,7 +543,7 @@ void main() {
         Seed seat = sdk.RawAssetGrid(
           root: '/home/me/station',
           assets: [
-            SubstationSeat(
+            SubstationSeed(
               name: 'inert',
               root: '../private',
               app: app,
@@ -612,7 +612,7 @@ void main() {
               child: sdk.RawAssetGrid(
                 root: '/station',
                 assets: [
-                  SubstationSeat(
+                  SubstationSeed(
                     name: 'one',
                     root: '/work/one',
                     githubPoll: const github.GitHubReconcilerConfig(
@@ -623,7 +623,7 @@ void main() {
                       interval: Duration(days: 1),
                     ),
                   ),
-                  SubstationSeat(
+                  SubstationSeed(
                     name: 'two',
                     root: '/work/two',
                     githubPoll: const github.GitHubReconcilerConfig(
@@ -672,7 +672,7 @@ void main() {
             assets: [
               Provider<GitOps>(
                 create: (_) => GitOps(SystemGitRunner()),
-                child: SubstationSeat(name: 'mine', root: '../mine'),
+                child: SubstationSeed(name: 'mine', root: '../mine'),
               ),
             ],
           ),
@@ -695,7 +695,7 @@ void main() {
             assets: [
               Provider<PrOpener>.value(
                 _FakePrOpener(),
-                child: SubstationSeat(name: 'mine', root: '../mine'),
+                child: SubstationSeed(name: 'mine', root: '../mine'),
               ),
             ],
           ),
@@ -717,7 +717,7 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: Provider<PrOpener>.value(
                   _FakePrOpener(),
-                  child: SubstationSeat(name: 'mine', root: '../mine'),
+                  child: SubstationSeed(name: 'mine', root: '../mine'),
                 ),
               ),
             ],
@@ -751,7 +751,7 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: _Host(
                   onCreate: (s) => host = s,
-                  describe: () => _seatStack(),
+                  describe: () => _seedStack(),
                 ),
               ),
             ],
@@ -773,7 +773,7 @@ void main() {
       host.swap(
         () => _Slots([
           Provider<PrOpener>.value(_FakePrOpener(), child: const _Leaf()),
-          _seatStack(),
+          _seedStack(),
         ]),
       );
       owner.flush();
@@ -790,7 +790,7 @@ void main() {
       // value gains an app identity, or the station's live arm authors the
       // ambient opener): the re-described subtree observes it and BINDS.
       host.swap(
-        () => Provider<PrOpener>.value(_FakePrOpener(), child: _seatStack()),
+        () => Provider<PrOpener>.value(_FakePrOpener(), child: _seedStack()),
       );
       owner.flush();
       await _pump();
@@ -912,7 +912,7 @@ void main() {
     });
   });
 
-  group('a non-git seat (STYLE rule 4: no provider is universal)', () {
+  group('a non-git seed (STYLE rule 4: no provider is universal)', () {
     test('a composed seat whose stack carries NO git assets mounts clean '
         'with neither StationGitService nor GitOps anywhere in the tree, '
         'and the roster enumeration still sees it', () {
@@ -920,7 +920,7 @@ void main() {
         ProviderScope(
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
-            assets: [const _NonGitSeat(name: 'notes', root: '../notes')],
+            assets: [const _NonGitSeed(name: 'notes', root: '../notes')],
           ),
         ),
       );
@@ -935,11 +935,11 @@ void main() {
   });
 }
 
-/// A composed seat with a DIFFERENT stack — the test-only proof that a
+/// A composed seed with a DIFFERENT stack — the test-only proof that a
 /// non-git substation composes without `StationGitService`/`GitOps` (no
-/// production seat needs this yet, so none ships in lib).
-class _NonGitSeat extends StatelessSeed {
-  const _NonGitSeat({required this.name, required this.root});
+/// production seed needs this yet, so none ships in lib).
+class _NonGitSeed extends StatelessSeed {
+  const _NonGitSeed({required this.name, required this.root});
 
   final String name;
   final String root;
@@ -949,9 +949,9 @@ class _NonGitSeat extends StatelessSeed {
       sdk.Substation(name, root, assets: const [sdk.SubstationWork()]);
 }
 
-/// The standard seat stack under test (no app identity — the opener, when
+/// The standard seed stack under test (no app identity — the opener, when
 /// present, is ambient).
-Seed _seatStack() => SubstationSeat(name: 'mine', root: '../mine');
+Seed _seedStack() => SubstationSeed(name: 'mine', root: '../mine');
 
 /// Mounts [root] in a bare tree, flushes once, and returns the branch walker.
 _Walk _mount(Seed root) {

@@ -24,8 +24,8 @@ import 'package:test/test.dart';
 /// (no kernel, no live git/claude — the dry authoring mounts NO effect
 /// providers, and the seat assets observe that absence as the commit-only /
 /// offline posture), the same tree `runGrid(SpaceDelegate())` mounts under
-/// `space up`. The composed seat itself ([SubstationSeat] and its watch-based
-/// assets) is proven in `substation_seat_test.dart`; this proves space
+/// `space up`. The composed seed itself ([SubstationSeed] and its watch-based
+/// assets) is proven in `substation_seed_test.dart`; this proves space
 /// COMPOSES it into a valid v3 tree with the memento org hardcoded in it
 /// (space-6ds — see `memento_roster_test.dart` for the roster/append
 /// coverage).
@@ -46,7 +46,7 @@ void main() {
   group('SpaceDelegate.build — space_station as a Seed (v3 §2)', () {
     test('the well-formed offline tree mounts clean (ProviderScope → '
         'RawAssetGrid → Station → HarnessProvider → Substations → the six '
-        'coded SubstationSeat wrappers validate end to end)', () {
+        'coded SubstationSeed wrappers validate end to end)', () {
       expect(() => _mount(_Author(delegate())), returnsNormally);
     });
 

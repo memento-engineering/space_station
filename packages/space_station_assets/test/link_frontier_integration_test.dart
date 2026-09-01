@@ -51,8 +51,8 @@ class _FixtureDelegate extends SpaceDelegate {
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
-    SubstationSeat(name: 'alpha', root: alphaRoot),
-    SubstationSeat(name: 'beta', root: betaRoot),
+    SubstationSeed(name: 'alpha', root: alphaRoot),
+    SubstationSeed(name: 'beta', root: betaRoot),
   ];
 }
 

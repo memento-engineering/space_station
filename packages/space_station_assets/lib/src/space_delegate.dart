@@ -68,7 +68,7 @@ import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
 
-import 'substation_seat.dart';
+import 'substation_seed.dart';
 
 /// The factory signature the runner compositions construct a station's
 /// delegate through — [SpaceDelegate.new] satisfies it, and so does a
@@ -97,8 +97,8 @@ typedef NoteAppender = Future<void> Function(String beadId, String line);
 /// shared offline mount of the station [factory] authors.
 ///
 /// The mount lifecycle and tree walk are owned by `grid_assets`'
-/// `mountedValuesOf`; this package projects the [MountedSubstationSeat] values
-/// authored by its seat class and disposes the delegate it constructed.
+/// `mountedValuesOf`; this package projects the [MountedSubstationSeed] values
+/// authored by its seed class and disposes the delegate it constructed.
 ///
 /// [gridRoot] defaults to `'/'` — a deterministic ABSOLUTE placeholder
 /// (v3 §0: the tree refuses a relative root) for reads that only need
@@ -109,7 +109,7 @@ typedef NoteAppender = Future<void> Function(String beadId, String line);
 codedRosterSnapshotOf(SpaceDelegateFactory factory, {String gridRoot = '/'}) {
   final delegate = factory(gridRoot: gridRoot);
   try {
-    final seats = mountedValuesOf<MountedSubstationSeat>(delegate);
+    final seats = mountedValuesOf<MountedSubstationSeed>(delegate);
     return (
       scopes: List<sdk.SubstationScope>.unmodifiable(
         seats.map((seat) => seat.scope),
@@ -154,14 +154,14 @@ List<sdk.SubstationScope> codedRosterOf(
 ///  * [buildWorkRegistry] — the resident capability composition, built over
 ///    the station-owned note appender;
 ///  * [substations] — THE roster hook: the coded drive set as authored
-///    [SubstationSeat] values. Compose, don't replace.
+///    [SubstationSeed] values. Compose, don't replace.
 ///
-/// The per-seat stack is [SubstationSeat] — EXACTLY ONE composed seat class
+/// The per-substation stack is [SubstationSeed] — EXACTLY ONE composed seed class
 /// (space-47t; the old `seat(...)` build helper died with it — the
 /// helper-method-returns-widget anti-pattern). Stations differ only in the
 /// VALUES their [substations] passes (name, root, prefix, an optional
-/// [GitHubAppConfig] delivery identity); a different seat class enters only
-/// when a seat's STACK genuinely differs — none does yet, so none ships.
+/// [GitHubAppConfig] delivery identity); a different seed class enters only
+/// when a substation's STACK genuinely differs — none does yet, so none ships.
 ///
 /// ```dart
 /// class LunarDelegate extends SpaceDelegate {
@@ -176,7 +176,7 @@ List<sdk.SubstationScope> codedRosterOf(
 ///     sdk.GridConfiguration configuration,
 ///   ) => [
 ///     ...super.substations(context, configuration),
-///     SubstationSeat(name: 'butane_flutter', root: '../butane_flutter'),
+///     SubstationSeed(name: 'butane_flutter', root: '../butane_flutter'),
 ///   ];
 /// }
 /// ```
@@ -185,7 +185,7 @@ List<sdk.SubstationScope> codedRosterOf(
 /// tear-off satisfies [SpaceDelegateFactory] — the seam `buildRunner`
 /// threads into the composed commands. The off-tree machinery reads the
 /// roster by mounting the tree offline (`mountedValuesOf` finds the
-/// [MountedSubstationSeat] values UNDER the seat wrappers through
+/// [MountedSubstationSeed] values UNDER the seed wrappers through
 /// [codedRosterSnapshotOf]), so overriding [substations] is the WHOLE change —
 /// guard, help, refusal set and specs all follow.
 class SpaceDelegate extends sdk.GridDelegate {
@@ -418,36 +418,36 @@ class SpaceDelegate extends sdk.GridDelegate {
 
   /// THE roster hook — a BUILD METHOD, decomposed out of [build] with its
   /// signature (the template-method idiom the substrate is built on): the
-  /// station's coded drive set as authored [SubstationSeat] values, spread
+  /// station's coded drive set as authored [SubstationSeed] values, spread
   /// into [build] BEFORE the [appended] layer. Base = the
   /// memento-engineering org, six seats at their [umbrella]-relative roots.
   ///
-  /// Returns `List<Seed>` (space-47t): a seat is the COMPOSED wrapper, and
+  /// Returns `List<Seed>` (space-47t): a seed is the COMPOSED wrapper, and
   /// the offline enumeration (`mountedValuesOf` / [codedRosterSnapshotOf])
-  /// still finds the [MountedSubstationSeat] values UNDER the wrappers — the
+  /// still finds the [MountedSubstationSeed] values UNDER the wrappers — the
   /// tree stays the single source for `up`'s store guard and work specs, the
   /// codedNames refusal set, and the `--substation` help.
   ///
   /// OVERRIDE POINT: a downstream station composes, it does not replace
   /// blindly — `[...super.substations(context, configuration),
-  /// SubstationSeat(name: 'mine', root: '../mine')]`. Identity is the
-  /// seat's VALUES; there is no name-keyed lookup anywhere (space-47t).
+  /// SubstationSeed(name: 'mine', root: '../mine')]`. Identity is the
+  /// seed's VALUES; there is no name-keyed lookup anywhere (space-47t).
   List<Seed> substations(
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
-    SubstationSeat(name: 'genesis', root: p.join(umbrella, 'genesis')),
+    SubstationSeed(name: 'genesis', root: p.join(umbrella, 'genesis')),
     // the framework — self-host; `tg` is the shared Dolt server (gc
     // coexists: read tg's frontier, write sessions to houston — A37)
-    SubstationSeat(
+    SubstationSeed(
       name: 'the_grid',
       root: p.join(umbrella, 'the_grid'),
       prefix: 'tg',
     ),
     // the asset packs — self-host
-    SubstationSeat(
+    SubstationSeed(
       name: 'power_station',
       root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
@@ -456,16 +456,16 @@ class SpaceDelegate extends sdk.GridDelegate {
     // mints `space-` (NOT `space_station-`), so the prefix MUST be set
     // explicitly — the default (prefix ?? name) would own `space_station`
     // and drive nothing (ownership matches name OR prefix).
-    SubstationSeat(
+    SubstationSeed(
       name: 'space_station',
       root: p.join(umbrella, 'space_station'),
       prefix: 'space',
     ),
     // the debug harness (memento-engineering/lenny)
-    SubstationSeat(name: 'lenny', root: p.join(umbrella, 'lenny')),
+    SubstationSeed(name: 'lenny', root: p.join(umbrella, 'lenny')),
     // the decision record (memento-engineering/decisions); its store mints
     // `dec-`, so the prefix differs from the repository name.
-    SubstationSeat(
+    SubstationSeed(
       name: 'decisions',
       root: p.join(umbrella, 'decisions'),
       prefix: 'dec',
@@ -641,7 +641,7 @@ sdk.Substation _parseSubstation(String raw) {
     prefix: prefix,
     assets: const [
       Nest(
-        // INNERMOST — see SubstationSeat: GitGridAssets rebuilds the bundle
+        // INNERMOST — see SubstationSeed: GitGridAssets rebuilds the bundle
         // from scratch, so the gate must derive from it, not above it.
         children: [GitGridAssets(), MountEligibilityAssets()],
         child: sdk.SubstationWork(),
