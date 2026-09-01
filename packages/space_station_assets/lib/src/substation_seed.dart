@@ -1,12 +1,12 @@
-/// The COMPOSED SEAT (space-47t) — the tg-1fa2 composition model adopted for
+/// The COMPOSED SEED (space-47t) — the tg-1fa2 composition model adopted for
 /// space's substations.
 ///
 /// The old `SpaceDelegate.seat(...)` helper was the helper-method-returns-widget
 /// anti-pattern: no identity in reconcile, no scope for providers, an override
 /// point by convention rather than by type. It is replaced by EXACTLY ONE
-/// composed seat class — [SubstationSeat], a `StatelessSeed` carrying VALUE
+/// composed seed class — [SubstationSeed], a `StatelessSeed` carrying VALUE
 /// config — plus the local [GitGridAssets] and imported
-/// `github.GitHubGridAssets` seat-stack assets. They OBSERVE collaborators via
+/// `github.GitHubGridAssets` seed-stack assets. They OBSERVE collaborators via
 /// the tree (`the_grid/docs/STYLE.md` rules 3–4).
 ///
 /// **Per-seat identity is COMPOSITION, never lookup**: there is no
@@ -23,7 +23,7 @@
 ///
 /// The GitHub binding and reconciler lifecycle belong to `github_grid_assets`.
 /// This library composes those imported extensions but exports only
-/// [SubstationSeat] and [GitHubAppConfig] downstream.
+/// [SubstationSeed] and [GitHubAppConfig] downstream.
 library;
 
 import 'package:beads_dart/beads_dart.dart' show ProcessBdRunner;
@@ -79,52 +79,32 @@ class GitHubAppConfig {
       'privateKeyVar: $privateKeyVar)';
 }
 
-/// The offline-enumerable projection mounted by one [SubstationSeat].
-///
-/// [scope] is the SDK-resolved seat identity and root. The polling bit records
-/// only whether the authored [SubstationSeat.githubPoll] value is non-null; it
-/// does not arm polling or construct an effect.
-final class MountedSubstationSeat {
-  /// Creates one mounted seat projection.
-  const MountedSubstationSeat({
+/// The offline-enumerable projection mounted by one [SubstationSeed].
+final class MountedSubstationSeed {
+  /// Creates one mounted substation projection.
+  const MountedSubstationSeed({
     required this.scope,
     required this.githubPollingConfigured,
   });
 
-  /// The SDK-resolved scope for this seat.
+  /// The SDK-resolved scope for this substation.
   final sdk.SubstationScope scope;
 
-  /// Whether this seat carries an authored GitHub polling configuration.
+  /// Whether this substation carries authored GitHub polling configuration.
   final bool githubPollingConfigured;
 }
 
-/// THE composed seat — one substation of the composing station, authored as a
-/// value-configured `StatelessSeed` (space-47t; ADR-0008 D2: a seed that
-/// BUILDS a `Substation`, never subclasses it).
+/// Deprecated compatibility spelling for [MountedSubstationSeed].
+@Deprecated('Use MountedSubstationSeed instead.')
+typedef MountedSubstationSeat = MountedSubstationSeed;
+
+/// THE composed substation seed — one substation of the composing station,
+/// authored as a value-configured `StatelessSeed`.
 ///
-/// One class, deliberately without an org/personal split: a type distinction
-/// with no behavioral contrast is the `Resident*` mistake again (tg-at3r). Org
-/// and personal stations differ only in the VALUES their `substations()`
-/// passes. A SUBCLASS (or sibling seat class) enters only when a seat's STACK
-/// genuinely differs — none exists yet, so none ships.
-///
-/// [build] mounts the standard stack —
-/// `Substation[Nest[GitGridAssets → optional reconciler provider → imported
-/// GitHubGridAssets] → SubstationWork]`. A non-null [githubPoll] is the only
-/// polling opt-in: coordinates are never inferred from a remote or station
-/// default. The imported provider constructs a runtime only for a live arm.
-/// A live [app] selects App-authenticated PR delivery; null preserves the
-/// nearest ambient opener unchanged. Dry and offline arms create neither a
-/// seat-scoped opener nor a reconciler runtime.
-class SubstationSeat extends StatelessSeed {
-  /// Creates the seat over its VALUE config. [prefix] defaults to [name]
-  /// downstream (the `sdk.Substation` default); [app] is the seat's delivery
-  /// identity — null ⇒ commit-only by absence.
-  ///
-  /// Carries an intrinsic identity key (`ValueKey('seat:<name>')`) unless
-  /// [key] overrides it, mirroring `sdk.Substation`'s own name-keyed
-  /// reconcile: sibling seats reconcile by NAME, never by position.
-  SubstationSeat({
+/// ADR-0008 D2: a seed that BUILDS a `Substation`, never subclasses it.
+class SubstationSeed extends StatelessSeed {
+  /// Creates the seed over its VALUE config.
+  SubstationSeed({
     required this.name,
     required this.root,
     this.prefix,
@@ -173,11 +153,11 @@ class SubstationSeat extends StatelessSeed {
     final githubPoll = this.githubPoll;
     final landingPolicy = this.landingPolicy;
     final children = <SingleChildSeed>[
-      _MountedSubstationSeatAssets(githubPollingConfigured: githubPoll != null),
+      _MountedSubstationSeedAssets(githubPollingConfigured: githubPoll != null),
       const GitGridAssets(),
       if (githubPoll != null &&
           githubPoll.arm == github.GitHubReconcilerArm.live)
-        _SeatGitHubReconcilerBindingAssets(config: githubPoll),
+        _SubstationGitHubReconcilerBindingAssets(config: githubPoll),
       if (githubPoll != null) github.GitHubReconcilerAssets(config: githubPoll),
       github.GitHubGridAssets(policy: landingPolicy),
       const MountEligibilityAssets(),
@@ -231,8 +211,12 @@ class SubstationSeat extends StatelessSeed {
   }
 }
 
-final class _MountedSubstationSeatAssets extends SingleChildStatelessSeed {
-  const _MountedSubstationSeatAssets({
+/// Deprecated compatibility spelling for [SubstationSeed].
+@Deprecated('Use SubstationSeed instead.')
+typedef SubstationSeat = SubstationSeed;
+
+final class _MountedSubstationSeedAssets extends SingleChildStatelessSeed {
+  const _MountedSubstationSeedAssets({
     required this.githubPollingConfigured,
     // Nest supplies this fold child; direct call sites deliberately omit it.
     // ignore: unused_element_parameter
@@ -243,8 +227,8 @@ final class _MountedSubstationSeatAssets extends SingleChildStatelessSeed {
 
   @override
   Seed buildWithChild(TreeContext context, Seed child) {
-    return Provider<MountedSubstationSeat>.value(
-      MountedSubstationSeat(
+    return Provider<MountedSubstationSeed>.value(
+      MountedSubstationSeed(
         scope: sdk.SubstationScope.of(context),
         githubPollingConfigured: githubPollingConfigured,
       ),
@@ -253,9 +237,9 @@ final class _MountedSubstationSeatAssets extends SingleChildStatelessSeed {
   }
 }
 
-final class _SeatGitHubReconcilerBindingAssets
+final class _SubstationGitHubReconcilerBindingAssets
     extends SingleChildStatelessSeed {
-  const _SeatGitHubReconcilerBindingAssets({
+  const _SubstationGitHubReconcilerBindingAssets({
     required this.config,
     // Nest supplies this fold child; direct call sites deliberately omit it.
     // ignore: unused_element_parameter

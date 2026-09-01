@@ -72,13 +72,19 @@ export 'src/space_delegate.dart'
         SpaceDelegateFactory,
         codedRosterOf,
         codedRosterSnapshotOf;
-// The COMPOSED SEAT (space-47t): the ONE per-substation seat class a
+// The COMPOSED SEED (space-47t): the ONE per-substation seed class a
 // station's substations() authors (value config: name/root/prefix + an
 // optional GitHubAppConfig delivery identity). Exported so a downstream
-// station's substations() override authors the same seats. Raw stack assets
-// are deliberately NOT exported: stations author seats, not the local git
+// station's substations() override authors the same seeds. Raw stack assets
+// are deliberately NOT exported: stations author seeds, not the local git
 // asset or the imported github_grid_assets extension it composes.
-export 'src/substation_seat.dart' show GitHubAppConfig, SubstationSeat;
+export 'src/substation_seed.dart'
+    show
+        GitHubAppConfig,
+        MountedSubstationSeat,
+        MountedSubstationSeed,
+        SubstationSeat,
+        SubstationSeed;
 // The composition site of the VENDED `assets` Command group — exported so a
 // test (or a Flutter app) can build the seat with its seams injected.
 // kSpaceRunner rides along so a downstream runner can reference the canonical
