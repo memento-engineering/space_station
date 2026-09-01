@@ -59,6 +59,16 @@ import 'src/space_delegate.dart';
 import 'src/status_command.dart';
 import 'src/up_command.dart';
 
+// The ARMING layer: the station's coded named environments and the role ->
+// environment posture, plus the per-seat rung's value type. A downstream
+// station overrides SpaceDelegate.environments/arming with these.
+export 'src/agent_arming.dart'
+    show
+        AgentArming,
+        buildMementoEnvironmentRegistry,
+        kMementoEnvironments,
+        kMementoStationArming,
+        roleArmingRefusal;
 // space_station authored as a Seed (Track G-space): the delegate the resident
 // verbs re-seat over is part of the public library surface. A downstream
 // station SUBCLASSES SpaceDelegate (the substations()/seat()/stationName/
@@ -70,6 +80,7 @@ export 'src/space_delegate.dart'
         NoteAppender,
         SpaceDelegate,
         SpaceDelegateFactory,
+        codedArmingOf,
         codedRosterOf,
         codedRosterSnapshotOf;
 // The COMPOSED SEED (space-47t): the ONE per-substation seed class a
