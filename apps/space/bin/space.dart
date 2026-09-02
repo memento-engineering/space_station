@@ -10,7 +10,7 @@ import 'package:space_station_assets/space_station_assets.dart';
 // it. JIT only — `dart run space:space` from the workspace root (never a
 // compiled binary; see CLAUDE.md).
 Future<void> main(List<String> arguments) async {
-  final runner = buildRunner();
+  final runner = buildRunner(environment: Platform.environment);
   try {
     final code = await runner.run(arguments);
     if (code != null && code != 0) exitCode = code;

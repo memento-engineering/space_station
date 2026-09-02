@@ -15,7 +15,6 @@
 /// side — see its `_latchHalted` comment).
 library;
 
-import 'dart:io' show Platform;
 
 import 'package:args/args.dart' show ArgResults;
 // ignore: implementation_imports
@@ -41,14 +40,19 @@ import 'package:grid_sdk/grid_sdk.dart'
 /// The dry-run force is NOT applied here — `assembleStationWork` applies
 /// `TrajectoryConfig.asDisabled` when `dryRun` is set, which is the one place
 /// the rule lives.
+/// [environment] is INJECTED, never read ambiently: `no_watcher_no_gate_test`
+/// bans every ambient process-environment read under `lib/`, so nothing in the
+/// assembly can grow a hidden out-of-band gate. The environment enters at the
+/// composition root — `bin/space.dart` hands it to [buildRunner] — and an
+/// unfed runner simply arms the default posture.
 TrajectoryConfig trajectoryConfigFrom(
   ArgResults args, {
-  Map<String, String>? environment,
+  Map<String, String> environment = const <String, String>{},
 }) {
   // The dual-read posture is the RUNNER's to feed (TrajectoryConfig.dualRead
   // docs): `GRID_DUAL_READ=<off|observe|primary>`, defaulting to `off` when
   // absent or unrecognized — a station that arms nothing arms `off`.
-  final env = environment ?? Platform.environment;
+  final env = environment;
   final dualRead = switch (env['GRID_DUAL_READ']) {
     'observe' => DualReadMode.observe,
     'primary' => DualReadMode.primary,

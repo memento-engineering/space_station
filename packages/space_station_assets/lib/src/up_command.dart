@@ -152,8 +152,11 @@ class UpCommand extends Command<int> {
   /// [codedRosterSnapshotOf] — the same enumeration `search` uses) for the
   /// help text, the refusal set, and the store guard — the tree stays the
   /// single source.
-  UpCommand({SpaceDelegateFactory delegateFactory = SpaceDelegate.new})
-    : _delegateFactory = delegateFactory {
+  UpCommand({
+    SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+    Map<String, String> environment = const <String, String>{},
+  }) : _delegateFactory = delegateFactory,
+       _environment = environment {
     addSpaceStationFlags(
       argParser,
       // One owned enumeration (constructed, mounted, DISPOSED — a delegate
@@ -211,6 +214,11 @@ class UpCommand extends Command<int> {
   }
 
   final SpaceDelegateFactory _delegateFactory;
+
+  /// The process environment, INJECTED at the composition root (`bin/` hands
+  /// it to `buildRunner`). Nothing under `lib/` reads it ambiently — see
+  /// `test/no_watcher_no_gate_test.dart`, which bans exactly that.
+  final Map<String, String> _environment;
 
   @override
   final String name = 'up';
@@ -346,7 +354,10 @@ class UpCommand extends Command<int> {
     // (`config: dryRun ? trajectoryConfig.asDisabled : trajectoryConfig`), so
     // every runner that reaches the assembly gets the same physics and the
     // runner never has a second, drifting copy of the rule.
-    final trajectoryConfig = trajectoryConfigFrom(results);
+    final trajectoryConfig = trajectoryConfigFrom(
+      results,
+      environment: _environment,
+    );
 
     // --- stores at roots (the discoverWorkspaces replacement). The grid state
     // store lives under `<grid-home>/.grid/`; a cwd-relative home re-imports

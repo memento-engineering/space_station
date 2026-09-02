@@ -1,4 +1,5 @@
 import 'package:args/args.dart';
+import 'package:grid_engine/grid_engine.dart' show DualReadMode;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         TrajectoryConfig,
@@ -96,6 +97,56 @@ void main() {
         expect(config.commitCadence, defaults.commitCadence);
         expect(config.queueBound, defaults.queueBound);
         expect(config.shutdownDrainTimeout, defaults.shutdownDrainTimeout);
+      }
+    });
+  });
+
+  group('the dual-read posture is FED, never sniffed', () {
+    test('an unfed runner arms off — the default posture needs no environment',
+        () {
+      expect(trajectoryConfigFrom(parse(const [])).dualRead, DualReadMode.off);
+    });
+
+    test('GRID_DUAL_READ names the posture when the entrypoint feeds it', () {
+      for (final (value, expected) in const [
+        ('observe', DualReadMode.observe),
+        ('primary', DualReadMode.primary),
+        ('off', DualReadMode.off),
+      ]) {
+        expect(
+          trajectoryConfigFrom(
+            parse(const []),
+            environment: {'GRID_DUAL_READ': value},
+          ).dualRead,
+          expected,
+          reason: 'GRID_DUAL_READ=$value',
+        );
+      }
+    });
+
+    test('an unrecognized value is off, never a boot failure', () {
+      expect(
+        trajectoryConfigFrom(
+          parse(const []),
+          environment: const {'GRID_DUAL_READ': 'shadow'},
+        ).dualRead,
+        DualReadMode.off,
+      );
+    });
+
+    test('the posture rides every --trajectory branch', () {
+      for (final args in const [
+        <String>[],
+        ['--trajectory'],
+        ['--no-trajectory'],
+      ]) {
+        expect(
+          trajectoryConfigFrom(
+            parse(args),
+            environment: const {'GRID_DUAL_READ': 'observe'},
+          ).dualRead,
+          DualReadMode.observe,
+        );
       }
     });
   });
