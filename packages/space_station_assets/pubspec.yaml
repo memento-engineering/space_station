@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.2.0
+version: 0.3.0-rc.1
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -22,17 +22,17 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  beads_dart: ^0.2.0-rc.2
+  beads_dart: ^0.2.0-rc.5
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  dart_grid_assets: ^0.1.0
+  dart_grid_assets: ^0.1.1
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  federated_grid_assets: ^0.3.0-rc.1
+  federated_grid_assets: ^0.3.0-rc.2
   genesis_tree: ^0.3.0
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
@@ -40,7 +40,7 @@ dependencies:
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # rc.6 is the floor: GitHubReconcilerBindingAssets provides each live seat's
   # durable cursor store and deferred-intake sink to GitHubReconcilerAssets.
-  github_grid_assets: ^0.1.0-rc.6
+  github_grid_assets: ^0.1.0-rc.7
   # rc.7 is the floor: the TYPED environment lookup (ModelPreference,
   # AvailableEnvironments, resolveEnvironment, the four <Seat>AgentEnvironment
   # types, CriticEnvironmentSeed, AvailabilityAssets, ProcessEnvironmentProbe —
@@ -51,7 +51,7 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_cli: ^0.5.0-rc.4
+  grid_cli: ^0.5.0-rc.10
   # The engine's SDK-facing value types the composed seat stack provides into
   # the tree (`ServiceBundle` — space-47t's watch-based seat assets author it
   # directly now that the seat stack lives here).
@@ -59,7 +59,7 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint.
   # rc.5 is the floor: ServiceBundle.mountEligibility (the mount-gate
   # predicate this package now composes) does not exist in rc.3/rc.4.
-  grid_engine: ^0.3.0-rc.5
+  grid_engine: ^0.3.0-rc.10
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.
@@ -67,12 +67,12 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_exploration: ^0.3.0-rc.1
+  grid_exploration: ^0.3.0-rc.4
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_runtime: ^0.2.0-rc.2
+  grid_runtime: ^0.2.0-rc.8
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
   # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
@@ -80,7 +80,7 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_sdk: ^0.3.0-rc.3
+  grid_sdk: ^0.3.0-rc.8
   path: ^1.9.0
 
 dev_dependencies:
