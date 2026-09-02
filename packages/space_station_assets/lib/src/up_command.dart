@@ -72,8 +72,10 @@ import 'package:grid_sdk/grid_sdk.dart'
 import 'package:path/path.dart' as p;
 
 import 'agent_arming.dart';
+import 'assets_command.dart' show kSpaceRunner;
 import 'dev_mode.dart';
 import 'space_delegate.dart';
+import 'station_banner.dart';
 import 'trajectory_surface.dart';
 
 /// Runs the `gh` login probe used to construct station-global GitHub trust.
@@ -152,9 +154,18 @@ class UpCommand extends Command<int> {
   /// [codedRosterSnapshotOf] — the same enumeration `search` uses) for the
   /// help text, the refusal set, and the store guard — the tree stays the
   /// single source.
+  ///
+  /// [runnerName] is the RUNNER word an operator types (`buildRunner`'s
+  /// `name`) and [runnerInvocation] its full JIT invocation — both INJECTED
+  /// at the composition root, the `AssetsCommand.runnerInvocation` precedent,
+  /// so a downstream station's banner names ITS runner and its own `reload`
+  /// verb (space-grl). The STATION word is the delegate's `stationName`, read
+  /// off the instance `run` already owns.
   UpCommand({
     SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
     Map<String, String> environment = const <String, String>{},
+    this.runnerName = 'space',
+    this.runnerInvocation = kSpaceRunner,
   }) : _delegateFactory = delegateFactory,
        _environment = environment {
     addSpaceStationFlags(
@@ -219,6 +230,16 @@ class UpCommand extends Command<int> {
   /// it to `buildRunner`). Nothing under `lib/` reads it ambiently — see
   /// `test/no_watcher_no_gate_test.dart`, which bans exactly that.
   final Map<String, String> _environment;
+
+  /// The runner word an operator types — `buildRunner`'s `name`, INJECTED at
+  /// the composition root. `space` for space; `lunar` for a downstream lunar
+  /// runner. Never the literal word in a rendered line.
+  final String runnerName;
+
+  /// This runner's full JIT invocation ([kSpaceRunner] by default), INJECTED
+  /// at the composition root — the arming hint the OFF branch prints is built
+  /// from it, so it stays runnable for a downstream runner.
+  final String runnerInvocation;
 
   @override
   final String name = 'up';
@@ -541,7 +562,7 @@ class UpCommand extends Command<int> {
     // The RUN MODE is the WHOLE dev-mode gate: a JIT station launched with
     // `--enable-vm-service` reports a VM service; an AOT binary reports none.
     // No hostname allowlist, no env var, no flag, no config — and no filesystem
-    // watcher: `space reload` is the EXPLICIT trigger.
+    // watcher: the station's `reload` verb is the EXPLICIT trigger.
     final vmServiceUri = await stationVmServiceUri();
 
     // Authored through a FACTORY so a hot-RESTART can re-run it on a fresh
@@ -607,10 +628,11 @@ class UpCommand extends Command<int> {
 
     // --- the DEV-MODE host, JIT only: the exploration host — the SOLE registrar
     // — carrying the OPTIONAL ReassembleTool, so `ext.exploration.grid.reload`
-    // exists and `space reload` re-composes THIS running station (no second
-    // process). The lock then advertises the VM-service URI so the client can
-    // find it; the lock is 0600 because that URI carries the service auth code.
-    // No VM service ⇒ no host, no tool, no advertisement, and `space reload`
+    // exists and the station's `reload` verb re-composes THIS running station
+    // (no second process). The lock then advertises the VM-service URI so the
+    // client can find it; the lock is 0600 because that URI carries the
+    // service auth code.
+    // No VM service ⇒ no host, no tool, no advertisement, and `reload`
     // refuses LOUD.
     final DevModeHost? devMode;
     try {
@@ -634,7 +656,12 @@ class UpCommand extends Command<int> {
       await stationLock.updateVmService(devMode.vmServiceUri);
     }
 
-    out('space up — space_station as a Seed (runGrid)');
+    out(
+      stationBootLine(
+        runner: runnerName,
+        station: workPolicyDelegate.stationName,
+      ),
+    );
     out(
       'mode: ${config.dryRun ? 'DRY-RUN (observe-only)' : 'LIVE'}  ·  '
       'substations: {${armed.map((s) => s.name).join(', ')}}  '
@@ -702,11 +729,11 @@ class UpCommand extends Command<int> {
     if (requiredWarning != null) err(requiredWarning);
     out('control: ${control.url}  ·  token: (see ${stationLock.path}, 0600)');
     out(
-      devMode == null
-          ? 'dev mode: OFF (no VM service) — `space reload` is unavailable; arm '
-                'it JIT: `dart run --enable-vm-service space:space up …`'
-          : 'dev mode: JIT — VM service ${devMode.vmServiceUri}  ·  '
-                '`space reload` ARMED (ext.exploration.grid.reload registered)',
+      devModeBannerLine(
+        vmServiceUri: devMode?.vmServiceUri,
+        runner: runnerName,
+        runnerInvocation: runnerInvocation,
+      ),
     );
 
     // Dispose the control surface BEFORE releasing the lock (RS-4 scope fence —
