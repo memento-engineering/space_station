@@ -28,6 +28,7 @@ import 'package:grid_cli/src/station_attach.dart'
 import 'package:grid_runtime/grid_runtime.dart' show BeadOwnershipPredicate;
 
 import 'attach_support.dart';
+import 'trajectory_surface.dart';
 
 /// `space status`: renders the resident station's status, live when it's up.
 class StatusCommand extends Command<int> {
@@ -130,6 +131,21 @@ class StatusCommand extends Command<int> {
         'live sessions: ${work['liveSessions']}  ·  last sync: '
         '${work['lastSyncAt']}',
       );
+    // The Stage-1 trajectory posture (stage1-wiring §3). `up`'s banner fires
+    // ONCE, at boot; every posture that can arise afterwards — fenced out by a
+    // successor, halted on belt corruption, degraded on a dead socket — is
+    // latched later and flared exactly once, on the harness's stated
+    // assumption that THIS surface carries the repetition.
+    //
+    // ALWAYS exactly one line, and always on stdout with the rest of the
+    // block: a degradation must not be something an operator can lose by
+    // redirecting a stream. Loudness is the `!!` prefix and the BROKEN
+    // indentation — the row stops lining up with the tidy block above it, so
+    // an operator scanning for "is the shadow window counting?" cannot read
+    // past it.
+    final trajectory = trajectoryStatusLine(payload);
+    if (trajectory == null) return;
+    stdout.writeln(trajectory.loud ? trajectory.line : '  ${trajectory.line}');
   }
 
   Future<void> _renderDownFallback(

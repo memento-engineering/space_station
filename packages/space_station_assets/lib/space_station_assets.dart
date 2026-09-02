@@ -141,11 +141,17 @@ export 'src/link_commands.dart'
 /// seat stacks live on the class as override points), threaded into the
 /// resident verbs (`up`) and the station-context compositions
 /// (`search`/`assets`). Absent, the base [SpaceDelegate] — space's posture.
+/// [environment] is the PROCESS environment, handed in by the entrypoint
+/// (`bin/space.dart` reads it from `dart:io` and passes it here). The assembly
+/// never reads it ambiently — `no_watcher_no_gate_test` bans that under
+/// `lib/`, gate or not — so an unfed runner arms the default posture and a
+/// test feeds a literal map.
 CommandRunner<int> buildRunner({
   String name = 'space',
   String description = "memento's grid station",
   String runnerInvocation = kSpaceRunner,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+  Map<String, String> environment = const <String, String>{},
 }) {
   final linkCommands = buildSpaceLinkCommands(delegateFactory: delegateFactory);
   // Unlike `link`, whose endpoint list must exist at PARSE time, the
@@ -158,7 +164,9 @@ CommandRunner<int> buildRunner({
     ..addCommand(WatchCommand())
     // memento's OWN resident verbs (RS-5b): the composed resident station
     // (up) + the thin StationAttach renders over it (down/status).
-    ..addCommand(UpCommand(delegateFactory: delegateFactory))
+    ..addCommand(
+      UpCommand(delegateFactory: delegateFactory, environment: environment),
+    )
     ..addCommand(DownCommand())
     ..addCommand(StatusCommand())
     // The operator's EXPLICIT hot-reload trigger. `reload` talks to the

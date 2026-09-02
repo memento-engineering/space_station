@@ -74,6 +74,7 @@ import 'package:path/path.dart' as p;
 import 'agent_arming.dart';
 import 'dev_mode.dart';
 import 'space_delegate.dart';
+import 'trajectory_surface.dart';
 
 /// Runs the `gh` login probe used to construct station-global GitHub trust.
 typedef GitHubLoginProcess =
@@ -151,8 +152,11 @@ class UpCommand extends Command<int> {
   /// [codedRosterSnapshotOf] — the same enumeration `search` uses) for the
   /// help text, the refusal set, and the store guard — the tree stays the
   /// single source.
-  UpCommand({SpaceDelegateFactory delegateFactory = SpaceDelegate.new})
-    : _delegateFactory = delegateFactory {
+  UpCommand({
+    SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+    Map<String, String> environment = const <String, String>{},
+  }) : _delegateFactory = delegateFactory,
+       _environment = environment {
     addSpaceStationFlags(
       argParser,
       // One owned enumeration (constructed, mounted, DISPOSED — a delegate
@@ -188,10 +192,33 @@ class UpCommand extends Command<int> {
         help:
             'The station-wide concurrency ceiling (tg-42f): the most work '
             'beads mounted (agents live) at once across every substation.',
+      )
+      // TRI-STATE on purpose (`defaultsTo: null` — see
+      // [trajectoryConfigFrom]): absent is `auto`, not `--no-trajectory`.
+      ..addFlag(
+        'trajectory',
+        defaultsTo: null,
+        help:
+            'The Stage-1 trajectory shadow window (stage1-wiring §1.3). '
+            'ABSENT (the default) is AUTO: the harness arms iff the home is '
+            'provisioned (`.grid/trajectory/trajectory.secret`), and an '
+            'unprovisioned home boots legacy-only with a one-line notice. '
+            '--trajectory is REQUIRED: a failed connect/claim still never '
+            'blocks the boot — the trajectory can degrade, work cannot — but '
+            'the degradation is LOUD (a stderr WARNING at boot) and REPEATED '
+            '(`space status` renders the posture loud on every read). '
+            '--no-trajectory is DISABLED: no connection, no epoch claim, a '
+            'silent counting no-op. --dry-run forces DISABLED whatever this '
+            'says: a dry arm claims no epoch and writes nothing.',
       );
   }
 
   final SpaceDelegateFactory _delegateFactory;
+
+  /// The process environment, INJECTED at the composition root (`bin/` hands
+  /// it to `buildRunner`). Nothing under `lib/` reads it ambiently — see
+  /// `test/no_watcher_no_gate_test.dart`, which bans exactly that.
+  final Map<String, String> _environment;
 
   @override
   final String name = 'up';
@@ -322,6 +349,15 @@ class UpCommand extends Command<int> {
       err('space up: --max-agents must be an integer.');
       return 64;
     }
+    // The Stage-1 trajectory posture (stage1-wiring §1.3). The DRY-RUN force
+    // is deliberately NOT applied here: `assembleStationWork` owns it
+    // (`config: dryRun ? trajectoryConfig.asDisabled : trajectoryConfig`), so
+    // every runner that reaches the assembly gets the same physics and the
+    // runner never has a second, drifting copy of the rule.
+    final trajectoryConfig = trajectoryConfigFrom(
+      results,
+      environment: _environment,
+    );
 
     // --- stores at roots (the discoverWorkspaces replacement). The grid state
     // store lives under `<grid-home>/.grid/`; a cwd-relative home re-imports
@@ -462,6 +498,7 @@ class UpCommand extends Command<int> {
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
         transport: diagnostics,
+        trajectoryConfig: trajectoryConfig,
       );
     } on Object catch (e) {
       diagnostics.dispose();
@@ -637,6 +674,32 @@ class UpCommand extends Command<int> {
       'stores: read-path {${workRuntime.readPathName}}  ·  state partition: '
       '${workRuntime.stateSubstation}',
     );
+    // The trajectory posture, read off the STARTED harness — never off the
+    // requested config: the assembly's dry-run force and every boot-time
+    // degradation (unprovisioned home, refused connect, refused claim, a
+    // halted belt verify) have already resolved by here, so the banner
+    // reports what the station IS, not what the operator asked for.
+    final trajectoryStatus = workRuntime.trajectory.status;
+    out(
+      trajectoryBannerLine(
+        trajectoryStatus,
+        dryRun: config.dryRun,
+        // The one fact the harness status cannot carry: WHICH posture the
+        // operator asked for. A `disabled` harness is either their own
+        // `--no-trajectory` or the assembly's dry-run force.
+        requested: trajectoryConfig.mode,
+      ),
+    );
+    // §1.3's loudness clause for `required`: the degradation never blocks the
+    // boot, but it is "a loud, repeated warning". LOUD is this stderr line —
+    // out of the banner's stdout stream, so it survives a `>log` that keeps
+    // only one; REPEATED is `space status`, which renders every non-armed
+    // posture loud on every read (see [trajectoryRequiredWarning]).
+    final requiredWarning = trajectoryRequiredWarning(
+      trajectoryStatus,
+      requested: trajectoryConfig.mode,
+    );
+    if (requiredWarning != null) err(requiredWarning);
     out('control: ${control.url}  ·  token: (see ${stationLock.path}, 0600)');
     out(
       devMode == null
@@ -709,7 +772,8 @@ class UpCommand extends Command<int> {
         .where((s) => !s.isTerminal)
         .length;
     final capturedAt = latest.graph.capturedAt;
-    return StationStatus(
+    return SpaceStationStatus(
+      trajectory: workRuntime.trajectory.status,
       substation: armed.map((s) => s.name).join(','),
       stateStore: config.gridHome,
       workRoot: armed.map((s) => '${s.name}=${s.root}').join(', '),
@@ -750,3 +814,9 @@ class UpCommand extends Command<int> {
   void _out(String message) => stdout.writeln(message);
   void _err(String message) => stderr.writeln(message);
 }
+
+// The Stage-1 trajectory runner surface (stage1-wiring §1.1 chunk WS) — the
+// flag → config mapping, the banner line, the `required`-mode warning, and
+// the `/status` block + its render — lives in `trajectory_surface.dart`,
+// beside this file: `status` consumes it too (§3's "loud on every status
+// read"), and a command must not import a command.
