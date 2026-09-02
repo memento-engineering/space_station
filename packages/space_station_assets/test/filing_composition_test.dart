@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:args/command_runner.dart';
 import 'package:beads_dart/beads_dart.dart' show BdResult, BdRunner;
+import 'package:genesis_tree/genesis_tree.dart' show Seed, TreeContext;
 import 'package:grid_assets/grid_assets.dart'
     show
         ApproveService,
@@ -9,6 +10,7 @@ import 'package:grid_assets/grid_assets.dart'
         ExactSubstationBeadSource,
         FilingService;
 import 'package:grid_runtime/grid_runtime.dart' show GitRunResult, GitRunner;
+import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
@@ -59,15 +61,42 @@ final class _FakeGitRunner implements GitRunner {
   }
 }
 
+/// A downstream roster whose seats include a HYPHENATED prefix AND the strict
+/// prefix it extends (space-fvg): `swift-infer-…` must resolve to
+/// `swift-infer`, and `swift-…` to `swift`. The coded memento seats are
+/// COMPOSED, never replaced, so the `pow-…` cases keep their meaning.
+class _HyphenatedRosterDelegate extends SpaceDelegate {
+  _HyphenatedRosterDelegate({
+    required super.gridRoot,
+    super.agentConfig,
+    super.appended,
+    super.harnesses,
+    super.wiring,
+    super.provisioner,
+    super.githubSelfTrust,
+    super.live,
+  });
+
+  @override
+  List<Seed> substations(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [
+    ...super.substations(context, configuration),
+    SubstationSeed(name: 'swift', root: '../swift'),
+    SubstationSeed(name: 'swift-infer', root: '../swift-infer'),
+  ];
+}
+
 const String _umbrella = '/home/memento';
 const String _gridHome = '$_umbrella/space_station';
 const String _sha = '9f1c2d3e4b5a69788899aabbccddeeff00112233';
 
-String _beadReply(String description) => jsonEncode({
+String _beadReply(String description, {String id = 'pow-child'}) => jsonEncode({
   'schema_version': 1,
   'data': [
     {
-      'id': 'pow-child',
+      'id': id,
       'title': 'child',
       'issue_type': 'task',
       'description': description,
@@ -77,13 +106,14 @@ String _beadReply(String description) => jsonEncode({
   ],
 });
 
-String _depReply(List<String> blockers) => jsonEncode({
-  'schema_version': 1,
-  'data': [
-    for (final blocker in blockers)
-      {'issue_id': 'pow-child', 'depends_on_id': blocker, 'type': 'blocks'},
-  ],
-});
+String _depReply(List<String> blockers, {String id = 'pow-child'}) =>
+    jsonEncode({
+      'schema_version': 1,
+      'data': [
+        for (final blocker in blockers)
+          {'issue_id': id, 'depends_on_id': blocker, 'type': 'blocks'},
+      ],
+    });
 
 Map<String, String> _metadataOf(List<String> argv) {
   final metadata = <String, String>{};
@@ -103,7 +133,11 @@ Map<String, String> _metadataOf(List<String> argv) {
   List<String> storeRoots,
   _FakeGitRunner git,
 })
-_harness(_ScriptedBdRunner bd, {String home = _gridHome}) {
+_harness(
+  _ScriptedBdRunner bd, {
+  String home = _gridHome,
+  SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+}) {
   final out = StringBuffer();
   final err = StringBuffer();
   final storeRoots = <String>[];
@@ -117,6 +151,7 @@ _harness(_ScriptedBdRunner bd, {String home = _gridHome}) {
 
   final commands = buildSpaceFilingCommands(
     gridHomeDefault: () => home,
+    delegateFactory: delegateFactory,
     filing: FilingService(
       source: ExactSubstationBeadSource(runnerFor: runnerFor),
       links: CrossLinkBlockerSource(runnerFor: runnerFor),
@@ -283,5 +318,84 @@ void main() {
     expect(approve.err.toString(), contains('must be an ABSOLUTE path'));
     expect(bd.updates, isEmpty);
     expect(approve.storeRoots, isEmpty);
+  });
+
+  test('a HYPHENATED seat prefix is reachable end to end: `filing --json '
+      'swift-infer-zfor` reads the swift-infer seat, never the `swift` seat '
+      'and never a refusal (space-fvg)', () async {
+    final h = _harness(
+      _ScriptedBdRunner({
+        'query': _beadReply('No local ordering.', id: 'swift-infer-zfor'),
+        'dep': _depReply(const [], id: 'swift-infer-zfor'),
+      }),
+      delegateFactory: _HyphenatedRosterDelegate.new,
+    );
+
+    expect(
+      await h.runner.run(['filing', '--json', 'swift-infer-zfor']),
+      0,
+      reason: '${h.out}${h.err}',
+    );
+    expect(h.storeRoots, isNotEmpty);
+    expect(h.storeRoots, everyElement('$_umbrella/swift-infer'));
+    final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
+    expect(report['id'], 'swift-infer-zfor');
+    expect(report['passed'], isTrue);
+  });
+
+  test('`approve` STAMPS a bead minted by a HYPHENATED seat against THAT '
+      "seat's store — the longest coded prefix wins (space-fvg)", () async {
+    final bd = _ScriptedBdRunner({
+      'query': _beadReply('No local ordering.', id: 'swift-infer-zfor'),
+      'dep': _depReply(const [], id: 'swift-infer-zfor'),
+    });
+    final h = _harness(bd, delegateFactory: _HyphenatedRosterDelegate.new);
+
+    expect(
+      await h.runner.run([
+        'approve',
+        '--json',
+        '--actor',
+        'governor',
+        'swift-infer-zfor',
+      ]),
+      0,
+      reason: '${h.out}${h.err}',
+    );
+    expect(h.git.workingDirectories, ['$_umbrella/swift-infer']);
+    expect(bd.updates, hasLength(1));
+    expect(bd.updates.single.take(2), ['update', 'swift-infer-zfor']);
+    expect(h.storeRoots, contains('$_umbrella/swift-infer'));
+    expect(h.storeRoots, isNot(contains('$_umbrella/swift')));
+  });
+
+  test('storeRootForBead matches the LONGEST coded prefix at a complete '
+      '`<prefix>-` boundary, and refuses every id no seat mints', () {
+    String rootFor(String beadId) => storeRootForBead(
+      verb: 'filing',
+      beadId: beadId,
+      gridHome: _gridHome,
+      delegateFactory: _HyphenatedRosterDelegate.new,
+    );
+
+    expect(rootFor('swift-infer-zfor'), '$_umbrella/swift-infer');
+    expect(rootFor('swift-9k'), '$_umbrella/swift');
+    expect(rootFor('pow-child'), '$_umbrella/power_station');
+    for (final unminted in const ['zzz-1', 'pow-', 'space']) {
+      expect(
+        () => rootFor(unminted),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            allOf(
+              contains('no seat in the CODED roster mints'),
+              contains('power_station@pow'),
+            ),
+          ),
+        ),
+        reason: '"$unminted" is minted by no coded seat',
+      );
+    }
   });
 }
