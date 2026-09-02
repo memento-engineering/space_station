@@ -53,6 +53,7 @@ import 'package:grid_cli/src/watch_command.dart' show WatchCommand;
 
 import 'src/assets_command.dart';
 import 'src/down_command.dart';
+import 'src/filing_commands.dart';
 import 'src/link_commands.dart';
 import 'src/search_command.dart';
 import 'src/space_delegate.dart';
@@ -104,6 +105,12 @@ export 'src/assets_command.dart' show buildSpaceAssetsCommand, kSpaceRunner;
 // The composition site of the VENDED `search` Command — exported so a test
 // (or a Flutter app) can build the seat with its seams injected.
 export 'src/search_command.dart' show buildSpaceSearchCommand;
+// The composition site of the VENDED front-door pair (`filing`/`approve`) —
+// exported so a test (or a Flutter app) can build the seat with its seams
+// injected. storeRootForBead rides along: resolving a bead id to its owning
+// seat's work store is the station-context half a downstream station reuses.
+export 'src/filing_commands.dart'
+    show SpaceFilingCommands, buildSpaceFilingCommands, storeRootForBead;
 export 'src/link_commands.dart'
     show SpaceLinkCommands, buildSpaceLinkCommands, kSpaceStateStorePrefix;
 
@@ -129,6 +136,12 @@ CommandRunner<int> buildRunner({
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
 }) {
   final linkCommands = buildSpaceLinkCommands(delegateFactory: delegateFactory);
+  // Unlike `link`, whose endpoint list must exist at PARSE time, the
+  // front-door pair resolves its store from the bead id at RUN time — so this
+  // builder mounts no tree and costs nothing at assembly.
+  final filingCommands = buildSpaceFilingCommands(
+    delegateFactory: delegateFactory,
+  );
   return CommandRunner<int>(name, description)
     ..addCommand(WatchCommand())
     // memento's OWN resident verbs (RS-5b): the composed resident station
@@ -151,6 +164,15 @@ CommandRunner<int> buildRunner({
     // power_station ADR-0001). The logic is the asset's; this is the
     // last-mile composition.
     ..addCommand(buildSpaceSearchCommand(delegateFactory: delegateFactory))
+    // The FILING asset's exported CLI components, COMPOSED with space's
+    // resident-station context — `space filing <id>` (the deterministic
+    // four-row front-door preflight the `discover` skill CALLS) and
+    // `space approve --actor <name> <id>` (the operator's approval VERB: the
+    // same preflight, then ONE stamped receipt on the work bead). Both take a
+    // bead id and are curried with the roster that resolves WHICH seat's store
+    // owns it (power_station ADR-0001, the coupled skill+command pattern).
+    ..addCommand(filingCommands.filing)
+    ..addCommand(filingCommands.approve)
     ..addCommand(linkCommands.link)
     ..addCommand(linkCommands.unlink)
     // The ASSETS domain's exported Command group, COMPOSED with space's

@@ -145,12 +145,17 @@ class AgentArming {
 /// environment and the tier ladder — arming `grade` to a model-pinning
 /// environment would out-rank the station's own grade-tier arming.
 ///
-/// `AgentRole.architect` (power_station `pow-t1w`) is NOT in the resolved
-/// `grid_assets 0.6.0-rc.5` enum (build / grade / gather). The claude half of
-/// the `{build: codex, architect: claude}` posture is therefore expressed today
-/// by leaving the spec author on the ambient claude environment; architect
-/// becomes ONE more entry in this map once a grid_assets release carrying
-/// `pow-t1w` is adopted by bumping the hosted constraint.
+/// `AgentRole.architect` (power_station `pow-t1w`) IS in the resolved
+/// `grid_assets 0.6.0-rc.6` enum (build / architect / grade / gather). The
+/// claude half of the `{build: codex, architect: claude}` posture is still
+/// expressed by leaving the spec author on the ambient claude environment, and
+/// this map deliberately does NOT gain an architect entry: power_station
+/// `docs/adr/ADR-0006-typed-environment-lookup-selects-by-value.md` D5 RETIRES
+/// the `AgentRole` / `roleEnvironments` axis in favour of typed environment
+/// lookups, and names this seat's migration as its own companion bead —
+/// `space-rz6`, which replaces this role map with typed preference providers.
+/// Arming the architect rung is that STATION-POSTURE change, not a side effect
+/// of a constraint bump.
 const AgentArming kMementoStationArming = AgentArming(
   roleEnvironments: {AgentRole.build: 'codex-frontier'},
 );

@@ -26,21 +26,26 @@ Future<Directory> bdInitGridHome(String prefix) async {
   return resolved;
 }
 
-Future<void> _bdInit(String dir, {required List<String> args}) async {
-  final init = await Process.run(
+/// Runs `bd [args]` in [dir] — a hermetic TEMP store this suite just created,
+/// never a foreign store (A37). Fails the test LOUD on a non-zero exit.
+Future<void> runBd(String dir, List<String> args) async {
+  final run = await Process.run(
     'bd',
     args,
     workingDirectory: dir,
     environment: {...Platform.environment, 'BD_JSON_ENVELOPE': '1'},
     includeParentEnvironment: false,
   );
-  if (init.exitCode != 0) {
+  if (run.exitCode != 0) {
     fail(
-      'bd ${args.join(' ')} failed (${init.exitCode}): '
-      '${init.stderr}\n${init.stdout}',
+      'bd ${args.join(' ')} failed (${run.exitCode}): '
+      '${run.stderr}\n${run.stdout}',
     );
   }
 }
+
+Future<void> _bdInit(String dir, {required List<String> args}) =>
+    runBd(dir, args);
 
 /// Spawns `bin/space.dart` over `dart`, with [vmOptions] passed to the VM BEFORE
 /// the script (`--enable-vm-service=0` is what makes the station JIT-observable —
