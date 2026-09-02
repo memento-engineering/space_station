@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0-rc.2
+
+- Breaking: none new in this candidate — it continues the 0.3.0 line; the
+  migration notes under 0.3.0-rc.1 still apply.
+- Fix: `up`'s boot banner and both dev-mode lines are rendered from the station
+  composition instead of hardcoded to space. A downstream station now prints its
+  own name and its real reload command (`lunar reload`, not `space reload`).
+  `buildRunner` threads its `name` and `runnerInvocation` into `UpCommand`; the
+  station name comes from the mounted delegate. Existing embedders keep working
+  unchanged, since both default to space's prior values.
+- Added `station_banner.dart` (the pure banner renderers) to the public surface.
+
 ## 0.3.0-rc.1
 
 - Breaking: the station's agent posture is expressed as TYPED SEAT VALUES, not
