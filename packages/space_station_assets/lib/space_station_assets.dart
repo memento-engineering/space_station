@@ -60,16 +60,27 @@ import 'src/space_delegate.dart';
 import 'src/status_command.dart';
 import 'src/up_command.dart';
 
-// The ARMING layer: the station's coded named environments and the role ->
-// environment posture, plus the per-seat rung's value type. A downstream
-// station overrides SpaceDelegate.environments/arming with these.
+// The ARMING layer: the station's coded environments as COMPLETE const values,
+// the canned preference ladders, the TYPED seat arming and the seed that
+// mounts it. A downstream station overrides SpaceDelegate.environments/arming
+// with these.
 export 'src/agent_arming.dart'
     show
         AgentArming,
+        SeatEnvironments,
+        TypedEnvironmentProvider,
         buildMementoEnvironmentRegistry,
+        kCheapEnvironment,
+        kCheapLadder,
+        kCodexFrontierEnvironment,
+        kCodexLadder,
+        kFrontierEnvironment,
+        kFrontierLadder,
         kMementoEnvironments,
         kMementoStationArming,
-        roleArmingRefusal;
+        kMidEnvironment,
+        kMidLadder,
+        preferenceArmingRefusal;
 // space_station authored as a Seed (Track G-space): the delegate the resident
 // verbs re-seat over is part of the public library surface. A downstream
 // station SUBCLASSES SpaceDelegate (the substations()/seat()/stationName/
@@ -83,7 +94,8 @@ export 'src/space_delegate.dart'
         SpaceDelegateFactory,
         codedArmingOf,
         codedRosterOf,
-        codedRosterSnapshotOf;
+        codedRosterSnapshotOf,
+        codedSeatEnvironmentsOf;
 // The COMPOSED SEED (space-47t): the ONE per-substation seed class a
 // station's substations() authors (value config: name/root/prefix + an
 // optional GitHubAppConfig delivery identity). Exported so a downstream

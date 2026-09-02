@@ -55,11 +55,17 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
-        AgentRole,
+        AvailableEnvironments,
+        BuildAgentEnvironment,
+        CriticAgentEnvironment,
         EnvironmentRegistry,
+        GatherAgentEnvironment,
         HarnessProvider,
         MountEligibilityAssets,
+        ProcessEnvironmentProbe,
+        SpecAgentEnvironment,
         buildCodeRegistry,
+        mountedValueOf,
         mountedValuesOf;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, PrOpener, StationGitService, SystemGitRunner;
@@ -149,6 +155,22 @@ List<sdk.SubstationScope> codedRosterOf(
   }
 }
 
+/// The station [factory]'s CODED typed resolution, read from ONE owned offline
+/// mount (construct → mount → dispose — the [codedArmingOf] precedent) at the
+/// deterministic ABSOLUTE placeholder home `'/'`.
+///
+/// The mount is OFFLINE (`live: false`), so presence is the registry's
+/// boot-validated set rather than a live probe pass: this is the CODED
+/// resolution the banner reports, not a machine reading.
+SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
+  final delegate = factory(gridRoot: '/');
+  try {
+    return mountedValueOf<SeatEnvironments>(delegate);
+  } finally {
+    delegate.dispose();
+  }
+}
+
 /// The delegate seat memento's `space` verbs re-seat over — space_station
 /// authored as a Seed.
 ///
@@ -169,7 +191,7 @@ List<sdk.SubstationScope> codedRosterOf(
 ///  * [stationName] — the station's identity;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
 ///  * [environments] — the station's named inference environments;
-///  * [arming] — the station's coded role-to-environment posture;
+///  * [arming] — the station's coded typed-environment posture;
 ///  * [circuitOverrideFor] — bead-scoped non-code routing; null retains the
 ///    migration-aware code policy;
 ///  * [buildWorkRegistry] — the resident capability composition, built over
@@ -284,18 +306,20 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// D2/D3). No endpoint url appears here.
   EnvironmentRegistry get environments => buildMementoEnvironmentRegistry();
 
-  /// The station's CODED agent arming — the DART rung of the ladder
-  /// (ADR-0002 D2): codex builds under a claude committee. OVERRIDE POINT: a
-  /// downstream station (lunar) authors its own posture in code, never through
-  /// an operator flag (ADR-0002 D4).
+  /// The station's CODED agent arming — the DART rung of the ladder (ADR-0002
+  /// D2; ADR-0006 D1/D2): codex builds under a claude committee, expressed as
+  /// TYPED preference values. OVERRIDE POINT: a downstream station (lunar)
+  /// authors its own posture in code, never through an operator flag (ADR-0002
+  /// D4).
   AgentArming get arming => kMementoStationArming;
 
-  /// The station-default agent scope — the ambient rung of the agent-config
-  /// ladder. The CODED [arming] applies UNDER the boot config, so an explicit
-  /// operator rung is never silently ignored (A20(2)).
-  late final AgentConfig agentConfig = arming.underlay(
-    _bootAgentConfig ?? const AgentConfig(),
-  );
+  /// The station-default agent scope — the GENERIC rung of the agent-config
+  /// ladder (`--env`, space-zfg). The station's posture no longer rides this
+  /// axis at all: it is expressed as the TYPED seats [arming] mounts, which
+  /// out-rank the ambient environment inside `resolveAgentConfig` (ADR-0006
+  /// D2/D5). An operator rung is therefore never silently ignored (A20(2)) —
+  /// it is simply the LAST rung, under every armed seat.
+  late final AgentConfig agentConfig = _bootAgentConfig ?? const AgentConfig();
 
   /// The station's environment registry, mounted as `HarnessProvider.registry`:
   /// the boot's, else the class's coded [environments].
@@ -412,8 +436,20 @@ class SpaceDelegate extends sdk.GridDelegate {
               HarnessProvider(
                 registry: harnesses,
                 config: agentConfig,
+                // The availability seed (ADR-0006 D3) — LIVE arms only, the
+                // same rule the effect providers below follow: an offline
+                // mount (roster enumeration, the suites, a dry run) probes no
+                // machine and presence stays the boot-validated registry
+                // members (power_station ADR-0000 A35(5)).
+                probe: live ? const ProcessEnvironmentProbe().call : null,
                 child: Nest(
                   children: [
+                    // The TYPED seats (ADR-0006 D2), above the fan-out: every
+                    // substation inherits them and a seat shadows per TYPE.
+                    TypedEnvironmentProvider(arming: arming),
+                    // The station's own resolution, projected for the `up`
+                    // banner and the offline suites.
+                    const _StationSeatEnvironmentsAssets(),
                     // The work runtime's worktree machinery, ADOPTED (STYLE
                     // rule 2: another owner's instance rides Provider.value;
                     // the runner disposes it, never the tree). Absent ⇒ no
@@ -491,7 +527,7 @@ class SpaceDelegate extends sdk.GridDelegate {
       prefix: 'tg',
     ),
     // the asset packs — self-host, and the org's EVALUATION seat: its BUILD
-    // role is armed on `frontier` (claude/opus) while every other seat rides
+    // build seat is armed on `frontier` (claude/opus) while every other seat rides
     // the station's coded `codex-frontier`, so the SAME committee grades both
     // and the environments can be compared instead of guessed at (ADR-0002 D5;
     // D5's worked example arms this seat, in the inverse direction). power_station
@@ -501,9 +537,7 @@ class SpaceDelegate extends sdk.GridDelegate {
       name: 'power_station',
       root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
-      arming: const AgentArming(
-        roleEnvironments: {AgentRole.build: 'frontier'},
-      ),
+      arming: const AgentArming(build: BuildAgentEnvironment(kFrontierLadder)),
     ),
     // the runner — self-host; for space this IS the grid home. Its store
     // mints `space-` (NOT `space_station-`), so the prefix MUST be set
@@ -524,6 +558,32 @@ class SpaceDelegate extends sdk.GridDelegate {
       prefix: 'dec',
     ),
   ];
+}
+
+/// Projects the STATION's own typed resolution — the value `up`'s banner
+/// prints and [codedSeatEnvironmentsOf] reads off an offline mount. Mounted
+/// BELOW the station's [TypedEnvironmentProvider] and ABOVE the fan-out, so it
+/// reports the station posture, never a seat's.
+final class _StationSeatEnvironmentsAssets extends SingleChildStatelessSeed {
+  const _StationSeatEnvironmentsAssets({
+    // Nest supplies this fold child; direct call sites deliberately omit it.
+    // ignore: unused_element_parameter
+    super.child,
+  });
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) {
+    // WATCH the values this projection is derived from (the D-H build verb).
+    context.dependOnInheritedSeedOfExactType<BuildAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<SpecAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<CriticAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<GatherAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<AvailableEnvironments>();
+    return InheritedSeed<SeatEnvironments>(
+      value: SeatEnvironments.of(context),
+      child: child,
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

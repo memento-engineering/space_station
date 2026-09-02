@@ -32,10 +32,13 @@ import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentConfig,
-        EnvironmentRegistry,
+        AvailableEnvironments,
+        BuildAgentEnvironment,
+        CriticAgentEnvironment,
+        GatherAgentEnvironment,
         GitSourceControl,
-        HarnessProvider,
-        MountEligibilityAssets;
+        MountEligibilityAssets,
+        SpecAgentEnvironment;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, RootCheckout, StationGitService;
@@ -93,6 +96,7 @@ final class MountedSubstationSeed {
     required this.scope,
     required this.githubPollingConfigured,
     this.agentConfig,
+    this.environments,
   });
 
   /// The SDK-resolved scope for this substation.
@@ -101,12 +105,16 @@ final class MountedSubstationSeed {
   /// Whether this substation carries authored GitHub polling configuration.
   final bool githubPollingConfigured;
 
-  /// The agent config RESOLVED AT THIS SEAT'S POSITION — the seat's own nested
-  /// `HarnessProvider` when it arms one, else the station's ambient value.
-  /// Null only when no `HarnessProvider` is mounted above (a bare standalone
-  /// seed mount). This is what makes the per-substation rung offline-PROVABLE
-  /// through the existing `mountedValuesOf` walk (ADR-0002 D5).
+  /// The agent config RESOLVED AT THIS SEAT'S POSITION — the station's ambient
+  /// value (the `--env` rung). Null only when no `HarnessProvider` is mounted
+  /// above (a bare standalone seed mount).
   final AgentConfig? agentConfig;
+
+  /// The four TYPED lookups resolved AT THIS SEAT'S POSITION — the seat's own
+  /// nested [TypedEnvironmentProvider] where it arms one, else the station's.
+  /// This is what makes the per-substation rung offline-PROVABLE through the
+  /// existing `mountedValuesOf` walk (ADR-0002 D5, ADR-0006 D2).
+  final SeatEnvironments? environments;
 }
 
 /// Deprecated compatibility spelling for [MountedSubstationSeed].
@@ -160,11 +168,12 @@ class SubstationSeed extends StatelessSeed {
   final github.GitHubDeliveryPolicy? landingPolicy;
 
   /// The seat's AGENT ARMING — the PER-SUBSTATION rung of the ladder
-  /// (ADR-0002 D5). Non-null nests a `HarnessProvider` OUTERMOST in this seat's
-  /// stack whose config SHADOWS the station's ambient one for everything under
-  /// this substation; null inherits the ambient config unchanged. A VALUE on
-  /// the seed, exactly like [app] / [githubPoll] / [landingPolicy] — per-seat
-  /// identity is COMPOSITION, never a name-keyed lookup.
+  /// (ADR-0002 D5). Non-null nests a [TypedEnvironmentProvider] OUTERMOST in
+  /// this seat's stack whose armed seats SHADOW the station's for everything
+  /// under this substation; an unarmed seat type keeps resolving through the
+  /// station's. A VALUE on the seed, exactly like [app] / [githubPoll] /
+  /// [landingPolicy] — per-seat identity is COMPOSITION, never a name-keyed
+  /// lookup.
   final AgentArming? arming;
 
   /// Loads this seat's App private key; injectable for deterministic tests.
@@ -189,22 +198,15 @@ class SubstationSeed extends StatelessSeed {
     final githubPoll = this.githubPoll;
     final mountEligibilityRunnerFor = this.mountEligibilityRunnerFor;
     final landingPolicy = this.landingPolicy;
-    // The PER-SUBSTATION rung (ADR-0002 D5). `HarnessProvider` is an
-    // InheritedSeed, so a NESTED one already shadows the station's for this
-    // seat's subtree — the rung ADR-0008 Decision 10 claimed and never
-    // exercised. The ambient values are WATCHED (`dependOn*` is the verb for a
-    // Seed's build), so a station-config change re-derives the seat's.
+    // The PER-SUBSTATION rung (ADR-0002 D5; ADR-0006 D2). A NESTED
+    // TypedEnvironmentProvider already shadows the station's for this seat's
+    // subtree, per TYPE: a seat that arms only `build` leaves spec/critic/
+    // gather resolving through the station's providers.
     final arming = this.arming;
-    final ambientConfig = context
-        .dependOnInheritedSeedOfExactType<AgentConfig>();
-    final ambientRegistry = context
-        .dependOnInheritedSeedOfExactType<EnvironmentRegistry>();
-    final seatConfig = arming?.applyTo(ambientConfig ?? const AgentConfig());
     final children = <SingleChildSeed>[
       // OUTERMOST on purpose: every asset, every work mount and the offline
-      // projection below must read the SEAT's config, not the station's.
-      if (seatConfig != null)
-        HarnessProvider(registry: ambientRegistry, config: seatConfig),
+      // projection below must read the SEAT's seats, not the station's.
+      if (arming != null) TypedEnvironmentProvider(arming: arming),
       _MountedSubstationSeedAssets(githubPollingConfigured: githubPoll != null),
       const GitGridAssets(),
       if (githubPoll != null &&
@@ -282,13 +284,21 @@ final class _MountedSubstationSeedAssets extends SingleChildStatelessSeed {
 
   @override
   Seed buildWithChild(TreeContext context, Seed child) {
+    // WATCH the values this projection is derived from (the D-H build verb —
+    // ADR-0008 D3): a re-armed station or seat re-derives the projection.
+    // SeatEnvironments.of then RESOLVES with the vended effect-boundary
+    // readers, which do not subscribe.
+    context.dependOnInheritedSeedOfExactType<BuildAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<SpecAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<CriticAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<GatherAgentEnvironment>();
+    context.dependOnInheritedSeedOfExactType<AvailableEnvironments>();
     return Provider<MountedSubstationSeed>.value(
       MountedSubstationSeed(
         scope: sdk.SubstationScope.of(context),
         githubPollingConfigured: githubPollingConfigured,
-        // Read HERE, under the seat's own HarnessProvider when it armed one —
-        // the shadow is what the projection reports.
         agentConfig: context.dependOnInheritedSeedOfExactType<AgentConfig>(),
+        environments: SeatEnvironments.of(context),
       ),
       child: child,
     );
