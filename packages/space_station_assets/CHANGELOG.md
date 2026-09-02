@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0-rc.1
+
+- Breaking: the station's agent posture is expressed as TYPED SEAT VALUES, not
+  a role map. `AgentArming` names the build, spec, critic and gather seats over
+  complete const environment values, `SpaceDelegate.arming` is the override
+  point a downstream station authors its posture in, and the role-keyed
+  `AgentRole`/`roleEnvironments` path is gone. Migration: replace a
+  `roleEnvironments` map with an `AgentArming` of the four seat types over the
+  canned ladders (`kCodexLadder`, `kFrontierLadder`, `kMidLadder`,
+  `kCheapLadder`) and override `arming` instead of pre-merging an `AgentConfig`.
+  The generic `--env` scope survives as the last rung, under every armed seat.
+- Breaking: `buildRunner` and `UpCommand` take the process `environment` as an
+  argument. An entrypoint passes it in; nothing under `lib/` reads it ambiently,
+  which the assembly's own guard test enforces. An unfed runner arms the default
+  posture, so existing embedders keep working without change.
+- Added the Stage-1 trajectory runner surface: `up` carries a tri-state
+  trajectory flag (absent arms when the home is provisioned, on makes a
+  degradation loud, off disables the harness), and the banner and status render
+  the harness posture, epoch and counters. The dual-read posture is fed through
+  the injected environment.
+- Added the `filing` and `approve` verbs, and the typed seat projections
+  (`SeatEnvironments`, `TypedEnvironmentProvider`, `codedSeatEnvironmentsOf`,
+  `preferenceArmingRefusal`).
+- Requires the release train this candidate was cut against: `grid_assets`
+  ^0.6.0-rc.7, `grid_sdk` ^0.3.0-rc.8, `grid_engine` ^0.3.0-rc.10, `grid_cli`
+  ^0.5.0-rc.10, `grid_runtime` ^0.2.0-rc.8, `grid_exploration` ^0.3.0-rc.4,
+  `beads_dart` ^0.2.0-rc.5, `github_grid_assets` ^0.1.0-rc.7,
+  `federated_grid_assets` ^0.3.0-rc.2, `dart_grid_assets` ^0.1.1.
+
 ## 0.2.0
 
 API additions since 0.1.0:
