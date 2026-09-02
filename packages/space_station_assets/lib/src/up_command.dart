@@ -41,7 +41,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:grid_assets/grid_assets.dart'
-    show AgentConfig, AgentRole, EnvironmentRegistry, resolveAgentConfig;
+    show AgentConfig, AgentTier, EnvironmentRegistry, resolveAgentConfig;
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
@@ -246,17 +246,16 @@ class UpCommand extends Command<int> {
     // an operator override.
     //
     // Absent, the ambient rung stays the pack default ('claude'); the CODED
-    // per-role arming still underlays it below.
+    // typed-seat arming still outranks it below.
     final env = results.option('env');
     final flagConfig = env == null
         ? const AgentConfig()
         : AgentConfig(harness: env);
-    // The station's posture is CODED on the delegate CLASS, never in an
-    // argparse default: `underlay` fills only the role rungs the operator left
-    // unarmed, and the delegate's own registry supplies the named environments
-    // those rungs resolve against.
+    // The station's posture is CODED on the delegate CLASS as TYPED seats; the
+    // `--env` flag is the GENERIC rung UNDER all of them (ADR-0006 D2/D5), so
+    // the boot config is the flag value alone.
     final codedArming = codedArmingOf(_delegateFactory);
-    final agentConfig = codedArming.arming.underlay(flagConfig);
+    final agentConfig = flagConfig;
     final EnvironmentRegistry harnesses = codedArming.environments;
     // Boot-eager (OQ-c moment 1): the STATION-DEFAULT environment must name an
     // armed, self-consistent environment — a misconfigured MACHINE fails loud
@@ -284,12 +283,15 @@ class UpCommand extends Command<int> {
       );
       return 64;
     }
-    // Boot-eager, over EVERY armed role rung — the coded posture's included, so
-    // a delegate that arms a role at an unarmed environment fails LOUD here
-    // rather than per-spawn.
-    final roleRefusal = roleArmingRefusal(agentConfig, harnesses);
-    if (roleRefusal != null) {
-      err('space up: $roleRefusal (armed: ${harnesses.names.join(', ')}).');
+    // Boot-eager, over EVERY armed TYPED seat — the coded posture's included,
+    // so a delegate that arms a seat at an environment no armed name resolves
+    // to fails LOUD here rather than resolving to nothing per-spawn.
+    final armingRefusal = preferenceArmingRefusal(
+      codedArming.arming,
+      harnesses,
+    );
+    if (armingRefusal != null) {
+      err('space up: $armingRefusal (armed: ${harnesses.names.join(', ')}).');
       return 64;
     }
 
@@ -628,26 +630,34 @@ class UpCommand extends Command<int> {
       '·  work-driving: ARMED (${config.dryRun ? 'inert seams' : 'live'})  '
       '·  delivery: ${live ? 'BOUND (GitHub PR)' : 'none (commit-only)'}',
     );
-    // Report each role's EFFECTIVE model through the SAME resolver the spawners
-    // use, so environment-native pins and the fallback ladder cannot drift.
+    // Report the station's TYPED resolution and each tier's EFFECTIVE model
+    // through the SAME resolver the spawners use, so environment-native pins
+    // and the availability ladder cannot drift.
+    final seats = codedSeatEnvironmentsOf(_delegateFactory);
     final buildModel = resolveAgentConfig(
-      role: AgentRole.build,
+      tier: AgentTier.frontier,
       ambient: agentConfig,
       beadMetadata: const <String, dynamic>{},
       stepParams: const <String, String>{},
       registry: harnesses,
+      typedEnvironment: seats?.build,
     ).params['model']!;
     final gradeModel = resolveAgentConfig(
-      role: AgentRole.grade,
+      tier: AgentTier.mid,
       ambient: agentConfig,
       beadMetadata: const <String, dynamic>{},
       stepParams: const <String, String>{},
       registry: harnesses,
+      typedEnvironment: seats?.critic,
     ).params['model']!;
     out(
       'agent scope: environment ${agentConfig.harness} '
       '(${harnesses.resolve(agentConfig.harness).target})'
       '  ·  build model $buildModel  ·  grader model $gradeModel',
+    );
+    out(
+      'typed seats: '
+      '${seats == null ? '<none armed>' : seats.describe(harnesses)}',
     );
     out(
       'stores: read-path {${workRuntime.readPathName}}  ·  state partition: '

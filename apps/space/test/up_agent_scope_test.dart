@@ -30,12 +30,14 @@ void main() {
         contains('agent scope: environment claude'),
         contains('build model gpt-5.6-sol'),
         contains('grader model sonnet'),
+        contains('typed seats: build codex'),
+        contains('critic mid'),
       ),
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
 
-  test('--env selects the station-default environment BY NAME from the armed '
-      'registry — including a CUSTOM name no allowlist ever held', () async {
+  test('--env selects the GENERIC rung only — the coded typed seats keep their '
+      'environments', () async {
     final home = await _bdInitGridHome('space-scope-env-home-');
     final sub = await _bdInitWorkspace('space-scope-env-sub-');
     addTearDown(() async {
@@ -43,11 +45,10 @@ void main() {
       await sub.delete(recursive: true);
     });
 
-    // `cheap` is a memento CUSTOM environment (claude at haiku). Its grade
-    // model is deliberately the INVERSE of the mid asset default, so a
-    // regression that dropped --env would print `sonnet` and fail here. The
-    // BUILD role stays on the coded codex arming: a seat/station rung
-    // out-ranks the ambient one.
+    // `cheap` is a memento CUSTOM environment (claude at haiku). It selects the
+    // GENERIC rung ONLY: every TYPED seat is coded on the delegate and
+    // out-ranks the ambient environment inside resolveAgentConfig (ADR-0006
+    // D2/D5), so the build seat stays on codex and the critic seat on mid.
     final result = await _runUp(
       home: home,
       sub: sub,
@@ -59,8 +60,10 @@ void main() {
       '${result.stdout}',
       allOf(
         contains('agent scope: environment cheap'),
-        contains('grader model haiku'),
         contains('build model gpt-5.6-sol'),
+        contains('grader model sonnet'),
+        contains('typed seats: build codex'),
+        contains('critic mid'),
       ),
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
