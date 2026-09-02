@@ -35,8 +35,14 @@ void main() {
       expect(registry.resolve('frontier').model, 'opus');
       expect(registry.resolve('mid').model, 'sonnet');
       expect(registry.resolve('cheap').model, 'haiku');
-      expect(registry.resolve('codex-frontier').command, 'codex');
-      expect(registry.resolve('codex-frontier').model, 'gpt-5.6-sol');
+      // grid_assets 0.6.0-rc.6 drives codex through the ACP adapter, so the
+      // builtin this name folds onto spawns the pinned adapter under `npx`
+      // rather than a bare `codex` argv. The native model pin is unchanged.
+      final codex = registry.resolve('codex-frontier');
+      expect(codex.command, 'npx');
+      expect(codex.args, ['-y', '@agentclientprotocol/codex-acp@1.6.2']);
+      expect(codex.sessionAdapter, 'acp');
+      expect(codex.model, 'gpt-5.6-sol');
     });
   });
 

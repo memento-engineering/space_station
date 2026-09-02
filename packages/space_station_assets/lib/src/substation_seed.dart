@@ -26,7 +26,7 @@
 /// [SubstationSeed] and [GitHubAppConfig] downstream.
 library;
 
-import 'package:beads_dart/beads_dart.dart' show ProcessBdRunner;
+import 'package:beads_dart/beads_dart.dart' show BdRunner, ProcessBdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
@@ -129,6 +129,7 @@ class SubstationSeed extends StatelessSeed {
     this.arming,
     this.githubAppCredentialLoader = const github.GitHubAppCredentialLoader(),
     this.githubTransportFactory = github.createGitHubHttpTransport,
+    this.mountEligibilityRunnerFor,
     Key? key,
   }) : super(key: key ?? ValueKey<String>('seat:$name'));
 
@@ -172,9 +173,21 @@ class SubstationSeed extends StatelessSeed {
   /// Creates this seat's GitHub transport; injectable for deterministic tests.
   final github.GitHubHttpTransportFactory githubTransportFactory;
 
+  /// The mount gate's `bd`-runner factory, keyed by work-store root;
+  /// injectable for deterministic tests.
+  ///
+  /// Null keeps `MountEligibilityAssets`' own `ProcessBdRunner` default — the
+  /// production posture. A gate REFUSAL is confirmed against a FRESH store
+  /// read (`grid_assets 0.6.0-rc.6`), so an offline suite that exercises a
+  /// refusal must inject this seam or the seed spawns a real `bd` at a root
+  /// that does not exist. Same shape, same reason, as
+  /// [githubAppCredentialLoader] and [githubTransportFactory].
+  final BdRunner Function(String storeRoot)? mountEligibilityRunnerFor;
+
   @override
   Seed build(TreeContext context) {
     final githubPoll = this.githubPoll;
+    final mountEligibilityRunnerFor = this.mountEligibilityRunnerFor;
     final landingPolicy = this.landingPolicy;
     // The PER-SUBSTATION rung (ADR-0002 D5). `HarnessProvider` is an
     // InheritedSeed, so a NESTED one already shadows the station's for this
@@ -199,7 +212,10 @@ class SubstationSeed extends StatelessSeed {
         _SubstationGitHubReconcilerBindingAssets(config: githubPoll),
       if (githubPoll != null) github.GitHubReconcilerAssets(config: githubPoll),
       github.GitHubGridAssets(policy: landingPolicy),
-      const MountEligibilityAssets(),
+      if (mountEligibilityRunnerFor == null)
+        const MountEligibilityAssets()
+      else
+        MountEligibilityAssets(runnerFor: mountEligibilityRunnerFor),
     ];
     final substation = sdk.Substation(
       name,
