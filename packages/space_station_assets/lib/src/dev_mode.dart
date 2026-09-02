@@ -1,4 +1,4 @@
-/// space's DEV-MODE seat — the host half of the EXPLICIT hot-reload trigger.
+/// space's DEV-MODE host — the host half of the EXPLICIT hot-reload trigger.
 ///
 /// The station's RUN MODE is the whole gate: a JIT station started with
 /// `--enable-vm-service` reports a VM service, so `up` composes
@@ -39,10 +39,11 @@ class JoinedWorkReader implements SnapshotReader {
   Future<GraphSnapshot> read() async => latest();
 }
 
-/// The composed dev-mode seat: the exploration host, the read-only controller it
-/// answers observation tools from, and the VM-service URI the station advertises.
-class DevModeSeat {
-  DevModeSeat._(this.host, this.runtime, this.vmServiceUri);
+/// The composed dev-mode host: the exploration host, the read-only controller
+/// it answers observation tools from, and the VM-service URI advertised by the
+/// station.
+class DevModeHost {
+  DevModeHost._(this.host, this.runtime, this.vmServiceUri);
 
   /// The sole registrar, carrying the dev-mode contributor.
   final GridExplorationHost host;
@@ -50,23 +51,20 @@ class DevModeSeat {
   /// The controller the host's five read-only tools observe through.
   final GridControllerRuntime runtime;
 
-  /// The URI `space reload` connects to — advertised in the 0600 station lock
-  /// (it carries the service auth code).
+  /// The URI `space reload` connects to.
   final String vmServiceUri;
 
-  /// Registers the extensions on the VM service. `up` calls this ONCE; a test
-  /// never does (a second `registerExtension` of the same method on one isolate
-  /// throws), which is why [armDevMode] does not call it.
+  /// Registers the extensions on the VM service.
   void register() => host.register();
 
-  /// Tears the seat down: the host's event subscription first, then the runtime.
+  /// Tears the host down: its event subscription first, then the runtime.
   Future<void> dispose() async {
     await host.dispose();
     await runtime.dispose();
   }
 }
 
-/// Arms the dev-mode seat when — and ONLY when — the station runs JIT.
+/// Arms the dev-mode host when — and ONLY when — the station runs JIT.
 ///
 /// [vmServiceUri] is this process's own `stationVmServiceUri()`: non-null under
 /// `--enable-vm-service`, null on an AOT binary. Null in ⇒ null out: no host, no
@@ -74,7 +72,7 @@ class DevModeSeat {
 /// joined graph and [readPath] its controllers' read-path provenance (banner
 /// material the observation plugin surfaces); [grid] is the LIVE tree the two
 /// reassemble verbs re-compose.
-Future<DevModeSeat?> armDevMode({
+Future<DevModeHost?> armDevMode({
   required String? vmServiceUri,
   required GridHandle grid,
   required GraphSnapshot Function() latest,
@@ -94,5 +92,5 @@ Future<DevModeSeat?> armDevMode({
       hotRestart: () async => (await grid.hotRestart()).toJson(),
     ),
   );
-  return DevModeSeat._(host, runtime, vmServiceUri);
+  return DevModeHost._(host, runtime, vmServiceUri);
 }

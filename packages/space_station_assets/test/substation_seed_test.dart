@@ -1,25 +1,39 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:beads_dart/beads_dart.dart' show Bead, BeadStatus, IssueType;
+import 'package:beads_dart/beads_dart.dart'
+    show Bead, BdResult, BdRunner, BeadStatus, IssueType;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
-import 'package:grid_assets/grid_assets.dart' show GitSourceControl;
+import 'package:grid_assets/grid_assets.dart'
+    show
+        GitSourceControl,
+        kApprovedAtKey,
+        kApprovedByKey,
+        kApprovedLabel,
+        kApprovedRevKey;
 import 'package:grid_engine/grid_engine.dart'
-    show MountEligible, MountRefused, ServiceBundle, TrustFloor, TrustLevel;
+    show
+        MountEligibilityDecision,
+        MountEligible,
+        MountRefused,
+        ServiceBundle,
+        TrustFloor,
+        TrustLevel;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, PullRequestRef, PullRequestResult, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderScope;
-import 'package:space_station_assets/src/substation_seat.dart';
+import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
-/// space-47t: the ONE composed seat ([SubstationSeat]) and its `const`,
+/// space-47t: the ONE composed seed ([SubstationSeed]) and its `const`,
 /// watch-based stack assets ([GitGridAssets] / imported GitHub assets). Pure +
 /// offline — every tree mounts in a bare genesis [TreeOwner] under a
 /// [ProviderScope] (the availability registry `runGrid` mounts at the
 /// production root).
 void main() {
-  group('SubstationSeat — the composed seat', () {
+  group('SubstationSeed — the composed seed', () {
     test(
       'explicit landing policies are observable on the effective gated seat',
       () {
@@ -39,7 +53,7 @@ void main() {
                     create: (_) => GitOps(SystemGitRunner()),
                     child: Provider<PrOpener>.value(
                       _FakePrOpener(),
-                      child: SubstationSeat(
+                      child: SubstationSeed(
                         name: 'mine',
                         root: '../mine',
                         landingPolicy: policy,
@@ -80,7 +94,7 @@ void main() {
                   create: (_) => GitOps(SystemGitRunner()),
                   child: Provider<PrOpener>.value(
                     _FakePrOpener(),
-                    child: SubstationSeat(name: 'mine', root: '../mine'),
+                    child: SubstationSeed(name: 'mine', root: '../mine'),
                   ),
                 ),
               ],
@@ -103,7 +117,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(name: 'mine', root: '../mine', prefix: 'mn'),
+              SubstationSeed(name: 'mine', root: '../mine', prefix: 'mn'),
             ],
           ),
         ),
@@ -115,16 +129,28 @@ void main() {
     });
 
     test('THE MOUNT GATE IS COMPOSED: the seat\'s ServiceBundle carries a '
-        'mountEligibility predicate that ADMITS an approved, plan-stamped, '
-        'driveable bead and REFUSES one missing any of the three', () {
-      final walk = _mount(
+        'mountEligibility predicate that ADMITS an approved, STAMPED, '
+        'plan-stamped, driveable bead and REFUSES one missing any of the '
+        'four — every refusal CONFIRMED against a fresh store read', () async {
+      final store = _FakeMountGateRunner();
+      final owned = _mountOwned(
         ProviderScope(
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
-            assets: [SubstationSeat(name: 'mine', root: '../mine')],
+            assets: [
+              SubstationSeed(
+                name: 'mine',
+                root: '../mine',
+                mountEligibilityRunnerFor: (storeRoot) {
+                  store.roots.add(storeRoot);
+                  return store;
+                },
+              ),
+            ],
           ),
         ),
       );
+      final walk = owned.walk;
 
       // pow-50l shipped MountEligibilityAssets and NOTHING mounted it, so the
       // gate was inert on every station: a bead with no `grid.approved` label
@@ -150,18 +176,51 @@ void main() {
             'station admits whatever reaches the ready frontier',
       );
 
+      // An ELIGIBLE snapshot answers SYNCHRONOUSLY — the whole point of the
+      // rc.6 two-phase gate: only a REFUSAL costs a store read.
       expect(predicate!(_bead()), isA<MountEligible>());
       expect(
-        predicate(_bead(labels: const [])),
+        store.reads,
+        isEmpty,
+        reason: 'admitting a stamped bead spends no store read',
+      );
+      expect(
+        store.roots,
+        everyElement('/home/me/mine'),
+        reason: "the gate's bd seam is bound to the SEAT's own work store",
+      );
+
+      /// Drives one refusal through BOTH phases and returns the CONFIRMED
+      /// decision: rc.6 answers a refused snapshot with a pending projection
+      /// and re-reads the seat's own work store, so the clause an operator
+      /// ever sees is the second one.
+      Future<MountEligibilityDecision> confirmedRefusal(Bead bead) async {
+        store.fresh = bead;
+        expect(
+          predicate(bead),
+          isA<MountRefused>().having(
+            (r) => r.clause,
+            'clause',
+            'fresh mount-eligibility read pending: mine-1',
+          ),
+          reason: 'phase 1 — the snapshot refusal projects the pending read',
+        );
+        await pumpEventQueue();
+        owned.owner.flush();
+        return predicate(bead);
+      }
+
+      expect(
+        await confirmedRefusal(_bead(labels: const [])),
         isA<MountRefused>().having(
           (r) => r.clause,
           'clause',
-          contains('grid.approved'),
+          contains(kApprovedLabel),
         ),
         reason: 'no grid.approved label — the human approval gate',
       );
       expect(
-        predicate(_bead(metadata: const {})),
+        await confirmedRefusal(_bead(metadata: const {})),
         isA<MountRefused>().having(
           (r) => r.clause,
           'clause',
@@ -172,9 +231,31 @@ void main() {
             '`false` and grade F by design',
       );
       expect(
-        predicate(_bead(type: IssueType.epic)),
+        await confirmedRefusal(_bead(type: IssueType.epic)),
         isA<MountRefused>().having((r) => r.clause, 'clause', contains('type')),
         reason: 'an epic is organisational, never driveable',
+      );
+      // The FOURTH leg, new in rc.6 (power_station `pow-kps`): the label
+      // WITHOUT the approve verb's receipt is not approval. Four `pow-n6n`
+      // children mounted ahead of their blockers on 2026-09-02 on a
+      // hand-added label alone.
+      expect(
+        await confirmedRefusal(
+          _bead(metadata: const {'validation_plan': 'dart test'}),
+        ),
+        isA<MountRefused>().having(
+          (r) => r.clause,
+          'clause',
+          'approval: unstamped label - approve with the approve verb',
+        ),
+        reason:
+            'a hand-added grid.approved carries no grid.approved_at — only '
+            'the `space approve` verb writes the receipt',
+      );
+      expect(
+        store.reads,
+        hasLength(4),
+        reason: 'exactly one confirming read per refusal, none per admit',
       );
     });
 
@@ -195,7 +276,7 @@ void main() {
               child: sdk.RawAssetGrid(
                 root: '/home/me/station',
                 assets: [
-                  SubstationSeat(name: 'mine', root: '../mine', app: identity),
+                  SubstationSeed(name: 'mine', root: '../mine', app: identity),
                 ],
               ),
             ),
@@ -215,7 +296,7 @@ void main() {
                 ambient,
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
-                  assets: [SubstationSeat(name: 'mine', root: '../mine')],
+                  assets: [SubstationSeed(name: 'mine', root: '../mine')],
                 ),
               ),
             ),
@@ -234,7 +315,7 @@ void main() {
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
                   assets: [
-                    SubstationSeat(
+                    SubstationSeed(
                       name: 'mine',
                       root: '../mine',
                       app: const GitHubAppConfig(
@@ -279,7 +360,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(
+              SubstationSeed(
                 name: 'org',
                 root: '../org',
                 app: const GitHubAppConfig(
@@ -315,7 +396,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(
+              SubstationSeed(
                 name: 'org',
                 root: '../org',
                 app: const GitHubAppConfig(
@@ -355,7 +436,7 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
-                  assets: [SubstationSeat(name: 'ambient', root: '../ambient')],
+                  assets: [SubstationSeed(name: 'ambient', root: '../ambient')],
                 ),
               ),
             ),
@@ -376,7 +457,7 @@ void main() {
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
             assets: [
-              SubstationSeat(
+              SubstationSeed(
                 name: 'org',
                 root: '../org',
                 app: const GitHubAppConfig(
@@ -387,7 +468,7 @@ void main() {
                 githubAppCredentialLoader: _FakeGitHubAppCredentials.loader(),
                 githubTransportFactory: _FakeGitHubAppCredentials.transport,
               ),
-              SubstationSeat(
+              SubstationSeed(
                 name: 'personal',
                 root: '../personal',
                 app: const GitHubAppConfig(
@@ -439,7 +520,7 @@ void main() {
               child: sdk.RawAssetGrid(
                 root: '/home/me/station',
                 assets: [
-                  SubstationSeat(
+                  SubstationSeed(
                     name: 'armed',
                     root: '../private',
                     githubPoll: const github.GitHubReconcilerConfig(
@@ -450,7 +531,7 @@ void main() {
                       interval: Duration(days: 1),
                     ),
                   ),
-                  SubstationSeat(name: 'absent', root: '../other'),
+                  SubstationSeed(name: 'absent', root: '../other'),
                 ],
               ),
             ),
@@ -543,7 +624,7 @@ void main() {
         Seed seat = sdk.RawAssetGrid(
           root: '/home/me/station',
           assets: [
-            SubstationSeat(
+            SubstationSeed(
               name: 'inert',
               root: '../private',
               app: app,
@@ -612,7 +693,7 @@ void main() {
               child: sdk.RawAssetGrid(
                 root: '/station',
                 assets: [
-                  SubstationSeat(
+                  SubstationSeed(
                     name: 'one',
                     root: '/work/one',
                     githubPoll: const github.GitHubReconcilerConfig(
@@ -623,7 +704,7 @@ void main() {
                       interval: Duration(days: 1),
                     ),
                   ),
-                  SubstationSeat(
+                  SubstationSeed(
                     name: 'two',
                     root: '/work/two',
                     githubPoll: const github.GitHubReconcilerConfig(
@@ -672,7 +753,7 @@ void main() {
             assets: [
               Provider<GitOps>(
                 create: (_) => GitOps(SystemGitRunner()),
-                child: SubstationSeat(name: 'mine', root: '../mine'),
+                child: SubstationSeed(name: 'mine', root: '../mine'),
               ),
             ],
           ),
@@ -695,7 +776,7 @@ void main() {
             assets: [
               Provider<PrOpener>.value(
                 _FakePrOpener(),
-                child: SubstationSeat(name: 'mine', root: '../mine'),
+                child: SubstationSeed(name: 'mine', root: '../mine'),
               ),
             ],
           ),
@@ -717,7 +798,7 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: Provider<PrOpener>.value(
                   _FakePrOpener(),
-                  child: SubstationSeat(name: 'mine', root: '../mine'),
+                  child: SubstationSeed(name: 'mine', root: '../mine'),
                 ),
               ),
             ],
@@ -751,7 +832,7 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: _Host(
                   onCreate: (s) => host = s,
-                  describe: () => _seatStack(),
+                  describe: () => _seedStack(),
                 ),
               ),
             ],
@@ -773,7 +854,7 @@ void main() {
       host.swap(
         () => _Slots([
           Provider<PrOpener>.value(_FakePrOpener(), child: const _Leaf()),
-          _seatStack(),
+          _seedStack(),
         ]),
       );
       owner.flush();
@@ -790,7 +871,7 @@ void main() {
       // value gains an app identity, or the station's live arm authors the
       // ambient opener): the re-described subtree observes it and BINDS.
       host.swap(
-        () => Provider<PrOpener>.value(_FakePrOpener(), child: _seatStack()),
+        () => Provider<PrOpener>.value(_FakePrOpener(), child: _seedStack()),
       );
       owner.flush();
       await _pump();
@@ -912,7 +993,7 @@ void main() {
     });
   });
 
-  group('a non-git seat (STYLE rule 4: no provider is universal)', () {
+  group('a non-git seed (STYLE rule 4: no provider is universal)', () {
     test('a composed seat whose stack carries NO git assets mounts clean '
         'with neither StationGitService nor GitOps anywhere in the tree, '
         'and the roster enumeration still sees it', () {
@@ -920,7 +1001,7 @@ void main() {
         ProviderScope(
           child: sdk.RawAssetGrid(
             root: '/home/me/station',
-            assets: [const _NonGitSeat(name: 'notes', root: '../notes')],
+            assets: [const _NonGitSeed(name: 'notes', root: '../notes')],
           ),
         ),
       );
@@ -935,11 +1016,11 @@ void main() {
   });
 }
 
-/// A composed seat with a DIFFERENT stack — the test-only proof that a
+/// A composed seed with a DIFFERENT stack — the test-only proof that a
 /// non-git substation composes without `StationGitService`/`GitOps` (no
-/// production seat needs this yet, so none ships in lib).
-class _NonGitSeat extends StatelessSeed {
-  const _NonGitSeat({required this.name, required this.root});
+/// production seed needs this yet, so none ships in lib).
+class _NonGitSeed extends StatelessSeed {
+  const _NonGitSeed({required this.name, required this.root});
 
   final String name;
   final String root;
@@ -949,16 +1030,54 @@ class _NonGitSeat extends StatelessSeed {
       sdk.Substation(name, root, assets: const [sdk.SubstationWork()]);
 }
 
-/// The standard seat stack under test (no app identity — the opener, when
+/// The standard seed stack under test (no app identity — the opener, when
 /// present, is ambient).
-Seed _seatStack() => SubstationSeat(name: 'mine', root: '../mine');
+Seed _seedStack() => SubstationSeed(name: 'mine', root: '../mine');
 
-/// Mounts [root] in a bare tree, flushes once, and returns the branch walker.
-_Walk _mount(Seed root) {
+_Walk _mount(Seed root) => _mountOwned(root).walk;
+
+/// [_mount], keeping the [TreeOwner] — the mount gate's CONFIRMING re-read
+/// lands asynchronously, so its test must `flush()` the owner between the
+/// pending answer and the confirmed one.
+({TreeOwner owner, _Walk walk}) _mountOwned(Seed root) {
   final owner = TreeOwner();
   final branch = owner.mountRoot(root);
   owner.flush();
-  return _Walk(branch);
+  return (owner: owner, walk: _Walk(branch));
+}
+
+/// The mount gate's `bd` seam as a FAKE (house rule: Fakes, not mocks).
+///
+/// Every `bd query` answers with [fresh], enveloped in the same
+/// `{schema_version, data}` shape `test/filing_composition_test.dart`'s
+/// `_ScriptedBdRunner` uses — so a refused snapshot's confirming re-read
+/// resolves offline, with no process and no store on disk.
+final class _FakeMountGateRunner implements BdRunner {
+  /// The bead the store reports on the confirming re-read.
+  Bead fresh = _bead();
+
+  /// Every work-store root the gate asked for a runner against.
+  final List<String> roots = <String>[];
+
+  /// Every `bd` argv the gate actually spent on a confirming read.
+  final List<List<String>> reads = <List<String>>[];
+
+  @override
+  Future<BdResult> run(
+    List<String> args, {
+    Duration? timeout,
+    String? stdin,
+  }) async {
+    reads.add(args);
+    return BdResult(
+      exitCode: 0,
+      stdout: jsonEncode({
+        'schema_version': 1,
+        'data': [fresh.toJson()],
+      }),
+      stderr: '',
+    );
+  }
 }
 
 /// Collects every `InheritedBranch<T>` value in tree order.
@@ -1116,15 +1235,23 @@ github.GitHubAppClient _fakeClient(_FakeTransport transport) =>
       transport: transport,
     );
 
+/// The APPROVED metadata a mount-eligible bead carries: the plan the
+/// committee's gating lane runs, plus the three-key RECEIPT the `approve` verb
+/// writes (`grid_assets 0.6.0-rc.6` — the label alone is no longer approval).
+const Map<String, String> _approvedMetadata = {
+  'validation_plan': 'dart analyze && dart test',
+  kApprovedByKey: 'governor',
+  kApprovedAtKey: '2026-09-02T14:30:00.000Z',
+  kApprovedRevKey: '9f1c2d3e4b5a69788899aabbccddeeff00112233',
+};
+
 /// A work bead shaped for the mount gate: driveable type + `validation_plan` +
-/// the `grid.approved` label. Each argument is overridden individually so a
-/// test can knock out exactly one leg of the three.
+/// the `grid.approved` label + the approve verb's stamp. Each argument is
+/// overridden individually so a test can knock out exactly one leg of the four.
 Bead _bead({
   IssueType type = IssueType.task,
-  List<String> labels = const ['grid.approved'],
-  Map<String, String> metadata = const {
-    'validation_plan': 'dart analyze && dart test',
-  },
+  List<String> labels = const [kApprovedLabel],
+  Map<String, String> metadata = _approvedMetadata,
 }) => Bead(
   id: 'mine-1',
   title: 'a work bead',

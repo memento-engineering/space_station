@@ -30,8 +30,8 @@ class _DownstreamDelegate extends SpaceDelegate {
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
-    SubstationSeat(name: 'alpha', root: 'alpha'),
-    SubstationSeat(name: 'beta', root: 'beta'),
+    SubstationSeed(name: 'alpha', root: 'alpha'),
+    SubstationSeed(name: 'beta', root: 'beta'),
   ];
 }
 

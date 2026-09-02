@@ -4,7 +4,7 @@ import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart' show AgentConfig;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:space_station_assets/src/space_delegate.dart';
-import 'package:space_station_assets/src/substation_seat.dart';
+import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
@@ -132,7 +132,7 @@ void main() {
       ]);
       // The org resolves at the OVERRIDDEN umbrella (relative to the
       // downstream grid home), the downstream seat at its own root — both
-      // through the SAME SubstationSeat class (one seat class, different
+      // through the SAME SubstationSeed class (one seed class, different
       // VALUES — space-47t).
       expect(seats.first.root, '/home/me/memento/genesis');
       expect(seats.last.root, '/home/me/mine');
@@ -333,7 +333,7 @@ class _DownstreamDelegate extends SpaceDelegate {
     sdk.GridConfiguration configuration,
   ) => [
     ...super.substations(context, configuration),
-    SubstationSeat(
+    SubstationSeed(
       name: 'mine',
       root: '../mine',
       prefix: 'mn',

@@ -41,11 +41,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:grid_assets/grid_assets.dart'
-    show
-        AgentConfig,
-        AgentRole,
-        buildBuiltinEnvironmentRegistry,
-        resolveAgentConfig;
+    show AgentConfig, AgentRole, EnvironmentRegistry, resolveAgentConfig;
 // RS-2/RS-4 SURVIVORS (station_lock.dart / station_control.dart) — NOT the
 // station-runner kill-list. `up` orchestrates them itself now that the
 // `driveStation` boot path is gone (DoD#6).
@@ -75,6 +71,7 @@ import 'package:grid_sdk/grid_sdk.dart'
         runGrid;
 import 'package:path/path.dart' as p;
 
+import 'agent_arming.dart';
 import 'dev_mode.dart';
 import 'space_delegate.dart';
 import 'trajectory_surface.dart';
@@ -165,43 +162,26 @@ class UpCommand extends Command<int> {
       // help. The real mounts (guard + tree) happen in [run].
       codedNames: [for (final s in codedRosterOf(delegateFactory)) s.name],
     );
+    // The allowed set of --env is the ARMED REGISTRY, read from the delegate
+    // CLASS (the codedRosterOf precedent above: construct -> read -> dispose)
+    // — never an argparse literal. A hardcoded allowlist is the exact bug
+    // ADR-0002 D4 deletes: it blocked `codex` at the operator surface while
+    // the registry had it armed. It renders into the HELP here; the LOUD
+    // legality check runs in [run] against the boot registry.
+    final armedEnvironments = codedArmingOf(
+      delegateFactory,
+    ).environments.names.join(', ');
     argParser
       ..addOption(
-        'harness',
-        defaultsTo: 'claude',
-        allowed: ['claude', 'copilot', 'pi', 'opencode', 'codex'],
+        'env',
         help:
-            'The AMBIENT agentic harness (the station default for every role; a '
-            'bead may override via its grid.agent envelope, a step via '
-            'params). --build-harness overrides just the BUILD role.',
-      )
-      ..addOption(
-        'build-harness',
-        defaultsTo: 'codex',
-        allowed: ['claude', 'copilot', 'pi', 'opencode', 'codex'],
-        help:
-            'The harness for the BUILD role ONLY (role → env, ADR-0002 the '
-            'ladder): builders run on this environment while grade/gather '
-            'stay on the ambient --harness. Defaults to codex — the coded '
-            'station posture is codex builds under a claude committee; pass '
-            '--build-harness claude to collapse build onto the ambient '
-            'harness.',
-      )
-      ..addOption(
-        'model',
-        help:
-            'The model coding agents BUILD on — the station\'s BUILD-role rung '
-            '(rides AgentConfig.params, not the target). Absent: the build '
-            'role\'s asset default (opus).',
-      )
-      ..addOption(
-        'grader-model',
-        help:
-            'The model the committee\'s critics GRADE on — the station\'s '
-            'GRADE-role rung. Absent: the grade role\'s asset default '
-            '(sonnet). Separate from --model because the params model key is '
-            'also the harness TRANSPORT key, so one map cannot carry two '
-            'roles\' models at once.',
+            'The station-default NAMED environment — the AMBIENT rung of the '
+            'agent-config ladder (ADR-0002 D1): a bead overrides it via its '
+            'grid.agent envelope, a step via params, and the per-role posture '
+            'is CODED on the delegate (SpaceDelegate.arming), never a flag '
+            '(D4). Selected from the ARMED registry, resolved at run time — '
+            'armed here: $armedEnvironments. Absent: the station default '
+            '(claude).',
       )
       ..addOption(
         'max-agents',
@@ -257,41 +237,27 @@ class UpCommand extends Command<int> {
     // --- the station-default agent scope (D-C rung 1) + boot-eager
     // validation (OQ-c moment 1: a misconfigured MACHINE fails loud before
     // any tree mounts; a misconfigured BEAD fails per-work at resolution).
-    // WHERE inference runs is no longer an operator flag: it is a property of
-    // the named environment (ADR-0002 D1/D3), and an endpoint machine-fact is
-    // the site binding's (bead pow-ebf.6/pow-2eg), never argv (D4 deleted
-    // --openai-base/--swift-base). The station default arms a providerManaged
-    // harness (claude), which needs no endpoint.
-    // The station's two model RUNGS, split by role. Neither takes a `??`
-    // fallback here: an ABSENT flag means the station names NO model for that
-    // role, and the ladder (bead > station > asset) falls through to the role's
-    // ASSET default — opus to build, sonnet to grade (`defaultModelFor`). That
-    // is where the explicit pin now lives, so the incident that motivated it
-    // stays fixed: an unpinned `claude` resolved to opus and then SILENTLY fell
-    // back to fable once the weekly limit blew (the grid spawns ~10 agents/bead;
-    // it obliterates a limit fast). Every spawn still resolves an EXPLICIT model
-    // — by construction now, not by a guard.
     //
-    // A `?? 'sonnet'` here would OUT-RANK both asset defaults and pin BOTH roles
-    // to sonnet: the all-sonnet station this change exists to end.
+    // ONE knob (ADR-0002 D4). WHERE inference runs is the named environment's
+    // own `target` (D1) and its endpoint is the machine-local site binding's
+    // (D3) — never argv, so this line is byte-identical on every box. WHICH
+    // model each role rides is the environment's too (D2: arming in committed
+    // Dart), and the per-role posture is the delegate's coded `arming`, never
+    // an operator override.
     //
-    // The rungs are asymmetric on purpose: `params['model']` is simultaneously
-    // the harness TRANSPORT key every harness reads, so one map cannot carry two
-    // roles' models — the build rung stays there and the grade rung rides its
-    // own field.
-    final model = results.option('model');
-    final graderModel = results.option('grader-model');
-    // --build-harness arms JUST the BUILD role on its own environment (role →
-    // env, ADR-0002 the ladder); grade/gather keep the ambient --harness.
-    final buildHarness = results.option('build-harness');
-    final agentConfig = AgentConfig(
-      harness: results.option('harness') ?? 'claude',
-      params: {if (model != null) 'model': model},
-      graderModel: graderModel,
-      roleEnvironments: {
-        if (buildHarness != null) AgentRole.build: buildHarness,
-      },
-    );
+    // Absent, the ambient rung stays the pack default ('claude'); the CODED
+    // per-role arming still underlays it below.
+    final env = results.option('env');
+    final flagConfig = env == null
+        ? const AgentConfig()
+        : AgentConfig(harness: env);
+    // The station's posture is CODED on the delegate CLASS, never in an
+    // argparse default: `underlay` fills only the role rungs the operator left
+    // unarmed, and the delegate's own registry supplies the named environments
+    // those rungs resolve against.
+    final codedArming = codedArmingOf(_delegateFactory);
+    final agentConfig = codedArming.arming.underlay(flagConfig);
+    final EnvironmentRegistry harnesses = codedArming.environments;
     // Boot-eager (OQ-c moment 1): the STATION-DEFAULT environment must name an
     // armed, self-consistent environment — a misconfigured MACHINE fails loud
     // before any tree mounts (a misconfigured BEAD fails per-work at
@@ -301,10 +267,11 @@ class UpCommand extends Command<int> {
     // not wired yet (bead pow-ebf.6/pow-2eg) — a whole-registry validate would
     // refuse every `up` on pi's unbound endpoint. The default (claude) is
     // providerManaged and needs no endpoint.
-    final harnesses = buildBuiltinEnvironmentRegistry();
     if (!harnesses.names.contains(agentConfig.harness)) {
+      // Naming --env is exact: the only other source of this value is the
+      // pack default 'claude', which is a builtin and so always armed.
       err(
-        'space up: harness "${agentConfig.harness}" names no armed environment '
+        'space up: --env "${agentConfig.harness}" names no armed environment '
         '(armed: ${harnesses.names.join(', ')}).',
       );
       return 64;
@@ -317,23 +284,13 @@ class UpCommand extends Command<int> {
       );
       return 64;
     }
-    // Same boot-eager check for the BUILD-role override, when armed.
-    if (buildHarness != null) {
-      if (!harnesses.names.contains(buildHarness)) {
-        err(
-          'space up: --build-harness "$buildHarness" names no armed environment '
-          '(armed: ${harnesses.names.join(', ')}).',
-        );
-        return 64;
-      }
-      final buildSelfCheck = harnesses.resolve(buildHarness).validate();
-      if (buildSelfCheck != null) {
-        err(
-          'space up: build environment "$buildHarness" is misconfigured: '
-          '$buildSelfCheck',
-        );
-        return 64;
-      }
+    // Boot-eager, over EVERY armed role rung — the coded posture's included, so
+    // a delegate that arms a role at an unarmed environment fails LOUD here
+    // rather than per-spawn.
+    final roleRefusal = roleArmingRefusal(agentConfig, harnesses);
+    if (roleRefusal != null) {
+      err('space up: $roleRefusal (armed: ${harnesses.names.join(', ')}).');
+      return 64;
     }
 
     // --- space's OWN resident-station config (v3 stores-at-roots). The coded
@@ -635,14 +592,14 @@ class UpCommand extends Command<int> {
     }
     await stationLock.updateControl(controlUrl: control.url, token: token);
 
-    // --- the DEV-MODE seat, JIT only: the exploration host — the SOLE registrar
+    // --- the DEV-MODE host, JIT only: the exploration host — the SOLE registrar
     // — carrying the OPTIONAL ReassembleTool, so `ext.exploration.grid.reload`
     // exists and `space reload` re-composes THIS running station (no second
     // process). The lock then advertises the VM-service URI so the client can
     // find it; the lock is 0600 because that URI carries the service auth code.
-    // No VM service ⇒ no seat, no tool, no advertisement, and `space reload`
+    // No VM service ⇒ no host, no tool, no advertisement, and `space reload`
     // refuses LOUD.
-    final DevModeSeat? devMode;
+    final DevModeHost? devMode;
     try {
       devMode = await armDevMode(
         vmServiceUri: vmServiceUri,

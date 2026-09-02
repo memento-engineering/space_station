@@ -41,9 +41,10 @@ dependencies:
   # rc.6 is the floor: GitHubReconcilerBindingAssets provides each live seat's
   # durable cursor store and deferred-intake sink to GitHubReconcilerAssets.
   github_grid_assets: ^0.1.0-rc.6
-  # rc.2 is the floor: MountEligibilityAssets is absent from the rc.1
-  # archive even though it exists in rc.1 source (pow-w83).
-  grid_assets: ^0.6.0-rc.2
+  # rc.6 is the floor: FilingCommand + ApproveCommand (the front-door filing
+  # preflight and the approval verb, pow-kps) are absent from rc.5. rc.2's
+  # MountEligibilityAssets floor (pow-w83) is subsumed.
+  grid_assets: ^0.6.0-rc.6
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;

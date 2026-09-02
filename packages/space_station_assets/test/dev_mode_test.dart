@@ -6,7 +6,7 @@ import 'package:grid_sdk/grid_sdk.dart'
 import 'package:space_station_assets/src/dev_mode.dart';
 import 'package:test/test.dart';
 
-/// Offline coverage for space's DEV-MODE seat — the host half of the EXPLICIT
+/// Offline coverage for space's DEV-MODE host — the host half of the EXPLICIT
 /// hot-reload trigger. No VM service is needed to prove the composition: the
 /// host's `dispatchTool` is the SAME entry point `register()` binds to the wire,
 /// so the re-composition is provable in-process (the live two-process arc is
@@ -24,7 +24,7 @@ void main() {
   );
 
   test(
-    'JIT (a VM service) arms the seat: the reload tool is composed, the '
+    'JIT (a VM service) arms the host: the reload tool is composed, the '
     'handshake ADVERTISES it, and dispatching it re-composes the tree',
     () async {
       final builds = <int>[];
@@ -35,30 +35,30 @@ void main() {
       addTearDown(grid.teardown);
       expect(builds, hasLength(1), reason: 'the launch build');
 
-      final seat = await armDevMode(
+      final DevModeHost? host = await armDevMode(
         vmServiceUri: 'http://127.0.0.1:8181/aBc=/',
         grid: grid,
         latest: joined,
         readPath: () => 'sql',
       );
-      addTearDown(() async => seat!.dispose());
+      addTearDown(() async => host!.dispose());
 
-      expect(seat, isNotNull);
-      expect(seat!.vmServiceUri, 'http://127.0.0.1:8181/aBc=/');
+      expect(host, isNotNull);
+      expect(host!.vmServiceUri, 'http://127.0.0.1:8181/aBc=/');
       // A registered tool is a discoverable tool: the handshake carries it.
-      expect(seat.host.toolNames, contains('reload'));
-      final extensions = seat.host.handshakeJson()[kExtensionsKey]! as List;
+      expect(host.host.toolNames, contains('reload'));
+      final extensions = host.host.handshakeJson()[kExtensionsKey]! as List;
       expect((extensions.single! as Map)['tools'], contains('reload'));
 
       // The wire dispatch RE-RUNS the master build — GridHandle.hotReload().
-      final reload = await seat.host.dispatchTool('reload', {'mode': 'reload'});
+      final reload = await host.host.dispatchTool('reload', {'mode': 'reload'});
       expect(reload['ok'], isTrue);
       expect((reload['value']! as Map)['mode'], 'reload');
       expect((reload['value']! as Map)['generation'], 1);
       expect(builds, hasLength(2), reason: 'the master build re-ran');
 
       // `--restart` re-runs the delegate FACTORY (armed by up on the same gate).
-      final restart = await seat.host.dispatchTool('reload', {
+      final restart = await host.host.dispatchTool('reload', {
         'mode': 'restart',
       });
       expect((restart['value']! as Map)['mode'], 'restart');
@@ -71,29 +71,29 @@ void main() {
     final grid = await runGrid(_ProbeDelegate(<int>[]));
     addTearDown(grid.teardown);
 
-    final seat = await armDevMode(
+    final DevModeHost? host = await armDevMode(
       vmServiceUri: null,
       grid: grid,
       latest: joined,
       readPath: () => 'sql',
     );
 
-    expect(seat, isNull);
+    expect(host, isNull);
   });
 
-  test('the seat observes the station\'s JOINED graph — no second controller '
+  test('the host observes the station\'s JOINED graph — no second controller '
       'over the stores, no dirty source of its own', () async {
     final grid = await runGrid(_ProbeDelegate(<int>[]));
     addTearDown(grid.teardown);
-    final seat = await armDevMode(
+    final DevModeHost? host = await armDevMode(
       vmServiceUri: 'http://127.0.0.1:8181/aBc=/',
       grid: grid,
       latest: joined,
       readPath: () => 'sql',
     );
-    addTearDown(() async => seat!.dispose());
+    addTearDown(() async => host!.dispose());
 
-    final snapshot = await seat!.host.dispatchTool('snapshot', const {});
+    final snapshot = await host!.host.dispatchTool('snapshot', const {});
     expect(snapshot['ok'], isTrue);
     expect('$snapshot', contains('space-1'), reason: 'the joined graph, read');
   });

@@ -1,12 +1,12 @@
-/// The COMPOSED SEAT (space-47t) — the tg-1fa2 composition model adopted for
+/// The COMPOSED SEED (space-47t) — the tg-1fa2 composition model adopted for
 /// space's substations.
 ///
 /// The old `SpaceDelegate.seat(...)` helper was the helper-method-returns-widget
 /// anti-pattern: no identity in reconcile, no scope for providers, an override
 /// point by convention rather than by type. It is replaced by EXACTLY ONE
-/// composed seat class — [SubstationSeat], a `StatelessSeed` carrying VALUE
+/// composed seed class — [SubstationSeed], a `StatelessSeed` carrying VALUE
 /// config — plus the local [GitGridAssets] and imported
-/// `github.GitHubGridAssets` seat-stack assets. They OBSERVE collaborators via
+/// `github.GitHubGridAssets` seed-stack assets. They OBSERVE collaborators via
 /// the tree (`the_grid/docs/STYLE.md` rules 3–4).
 ///
 /// **Per-seat identity is COMPOSITION, never lookup**: there is no
@@ -23,19 +23,26 @@
 ///
 /// The GitHub binding and reconciler lifecycle belong to `github_grid_assets`.
 /// This library composes those imported extensions but exports only
-/// [SubstationSeat] and [GitHubAppConfig] downstream.
+/// [SubstationSeed] and [GitHubAppConfig] downstream.
 library;
 
-import 'package:beads_dart/beads_dart.dart' show ProcessBdRunner;
+import 'package:beads_dart/beads_dart.dart' show BdRunner, ProcessBdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
-    show GitSourceControl, MountEligibilityAssets;
+    show
+        AgentConfig,
+        EnvironmentRegistry,
+        GitSourceControl,
+        HarnessProvider,
+        MountEligibilityAssets;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, RootCheckout, StationGitService;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderTreeContext;
+
+import 'agent_arming.dart';
 
 /// A GitHub App DELIVERY IDENTITY — config identity ONLY, a plain value type.
 ///
@@ -79,60 +86,50 @@ class GitHubAppConfig {
       'privateKeyVar: $privateKeyVar)';
 }
 
-/// The offline-enumerable projection mounted by one [SubstationSeat].
-///
-/// [scope] is the SDK-resolved seat identity and root. The polling bit records
-/// only whether the authored [SubstationSeat.githubPoll] value is non-null; it
-/// does not arm polling or construct an effect.
-final class MountedSubstationSeat {
-  /// Creates one mounted seat projection.
-  const MountedSubstationSeat({
+/// The offline-enumerable projection mounted by one [SubstationSeed].
+final class MountedSubstationSeed {
+  /// Creates one mounted substation projection.
+  const MountedSubstationSeed({
     required this.scope,
     required this.githubPollingConfigured,
+    this.agentConfig,
   });
 
-  /// The SDK-resolved scope for this seat.
+  /// The SDK-resolved scope for this substation.
   final sdk.SubstationScope scope;
 
-  /// Whether this seat carries an authored GitHub polling configuration.
+  /// Whether this substation carries authored GitHub polling configuration.
   final bool githubPollingConfigured;
+
+  /// The agent config RESOLVED AT THIS SEAT'S POSITION — the seat's own nested
+  /// `HarnessProvider` when it arms one, else the station's ambient value.
+  /// Null only when no `HarnessProvider` is mounted above (a bare standalone
+  /// seed mount). This is what makes the per-substation rung offline-PROVABLE
+  /// through the existing `mountedValuesOf` walk (ADR-0002 D5).
+  final AgentConfig? agentConfig;
 }
 
-/// THE composed seat — one substation of the composing station, authored as a
-/// value-configured `StatelessSeed` (space-47t; ADR-0008 D2: a seed that
-/// BUILDS a `Substation`, never subclasses it).
+/// Deprecated compatibility spelling for [MountedSubstationSeed].
+@Deprecated('Use MountedSubstationSeed instead.')
+typedef MountedSubstationSeat = MountedSubstationSeed;
+
+/// THE composed substation seed — one substation of the composing station,
+/// authored as a value-configured `StatelessSeed`.
 ///
-/// One class, deliberately without an org/personal split: a type distinction
-/// with no behavioral contrast is the `Resident*` mistake again (tg-at3r). Org
-/// and personal stations differ only in the VALUES their `substations()`
-/// passes. A SUBCLASS (or sibling seat class) enters only when a seat's STACK
-/// genuinely differs — none exists yet, so none ships.
-///
-/// [build] mounts the standard stack —
-/// `Substation[Nest[GitGridAssets → optional reconciler provider → imported
-/// GitHubGridAssets] → SubstationWork]`. A non-null [githubPoll] is the only
-/// polling opt-in: coordinates are never inferred from a remote or station
-/// default. The imported provider constructs a runtime only for a live arm.
-/// A live [app] selects App-authenticated PR delivery; null preserves the
-/// nearest ambient opener unchanged. Dry and offline arms create neither a
-/// seat-scoped opener nor a reconciler runtime.
-class SubstationSeat extends StatelessSeed {
-  /// Creates the seat over its VALUE config. [prefix] defaults to [name]
-  /// downstream (the `sdk.Substation` default); [app] is the seat's delivery
-  /// identity — null ⇒ commit-only by absence.
-  ///
-  /// Carries an intrinsic identity key (`ValueKey('seat:<name>')`) unless
-  /// [key] overrides it, mirroring `sdk.Substation`'s own name-keyed
-  /// reconcile: sibling seats reconcile by NAME, never by position.
-  SubstationSeat({
+/// ADR-0008 D2: a seed that BUILDS a `Substation`, never subclasses it.
+class SubstationSeed extends StatelessSeed {
+  /// Creates the seed over its VALUE config.
+  SubstationSeed({
     required this.name,
     required this.root,
     this.prefix,
     this.app,
     this.githubPoll,
     this.landingPolicy,
+    this.arming,
     this.githubAppCredentialLoader = const github.GitHubAppCredentialLoader(),
     this.githubTransportFactory = github.createGitHubHttpTransport,
+    this.mountEligibilityRunnerFor,
     Key? key,
   }) : super(key: key ?? ValueKey<String>('seat:$name'));
 
@@ -162,25 +159,63 @@ class SubstationSeat extends StatelessSeed {
   /// `github.PrNoMergePolicy`: open or reuse a PR and leave it unmerged.
   final github.GitHubDeliveryPolicy? landingPolicy;
 
+  /// The seat's AGENT ARMING — the PER-SUBSTATION rung of the ladder
+  /// (ADR-0002 D5). Non-null nests a `HarnessProvider` OUTERMOST in this seat's
+  /// stack whose config SHADOWS the station's ambient one for everything under
+  /// this substation; null inherits the ambient config unchanged. A VALUE on
+  /// the seed, exactly like [app] / [githubPoll] / [landingPolicy] — per-seat
+  /// identity is COMPOSITION, never a name-keyed lookup.
+  final AgentArming? arming;
+
   /// Loads this seat's App private key; injectable for deterministic tests.
   final github.GitHubAppCredentialLoader githubAppCredentialLoader;
 
   /// Creates this seat's GitHub transport; injectable for deterministic tests.
   final github.GitHubHttpTransportFactory githubTransportFactory;
 
+  /// The mount gate's `bd`-runner factory, keyed by work-store root;
+  /// injectable for deterministic tests.
+  ///
+  /// Null keeps `MountEligibilityAssets`' own `ProcessBdRunner` default — the
+  /// production posture. A gate REFUSAL is confirmed against a FRESH store
+  /// read (`grid_assets 0.6.0-rc.6`), so an offline suite that exercises a
+  /// refusal must inject this seam or the seed spawns a real `bd` at a root
+  /// that does not exist. Same shape, same reason, as
+  /// [githubAppCredentialLoader] and [githubTransportFactory].
+  final BdRunner Function(String storeRoot)? mountEligibilityRunnerFor;
+
   @override
   Seed build(TreeContext context) {
     final githubPoll = this.githubPoll;
+    final mountEligibilityRunnerFor = this.mountEligibilityRunnerFor;
     final landingPolicy = this.landingPolicy;
+    // The PER-SUBSTATION rung (ADR-0002 D5). `HarnessProvider` is an
+    // InheritedSeed, so a NESTED one already shadows the station's for this
+    // seat's subtree — the rung ADR-0008 Decision 10 claimed and never
+    // exercised. The ambient values are WATCHED (`dependOn*` is the verb for a
+    // Seed's build), so a station-config change re-derives the seat's.
+    final arming = this.arming;
+    final ambientConfig = context
+        .dependOnInheritedSeedOfExactType<AgentConfig>();
+    final ambientRegistry = context
+        .dependOnInheritedSeedOfExactType<EnvironmentRegistry>();
+    final seatConfig = arming?.applyTo(ambientConfig ?? const AgentConfig());
     final children = <SingleChildSeed>[
-      _MountedSubstationSeatAssets(githubPollingConfigured: githubPoll != null),
+      // OUTERMOST on purpose: every asset, every work mount and the offline
+      // projection below must read the SEAT's config, not the station's.
+      if (seatConfig != null)
+        HarnessProvider(registry: ambientRegistry, config: seatConfig),
+      _MountedSubstationSeedAssets(githubPollingConfigured: githubPoll != null),
       const GitGridAssets(),
       if (githubPoll != null &&
           githubPoll.arm == github.GitHubReconcilerArm.live)
-        _SeatGitHubReconcilerBindingAssets(config: githubPoll),
+        _SubstationGitHubReconcilerBindingAssets(config: githubPoll),
       if (githubPoll != null) github.GitHubReconcilerAssets(config: githubPoll),
       github.GitHubGridAssets(policy: landingPolicy),
-      const MountEligibilityAssets(),
+      if (mountEligibilityRunnerFor == null)
+        const MountEligibilityAssets()
+      else
+        MountEligibilityAssets(runnerFor: mountEligibilityRunnerFor),
     ];
     final substation = sdk.Substation(
       name,
@@ -231,8 +266,12 @@ class SubstationSeat extends StatelessSeed {
   }
 }
 
-final class _MountedSubstationSeatAssets extends SingleChildStatelessSeed {
-  const _MountedSubstationSeatAssets({
+/// Deprecated compatibility spelling for [SubstationSeed].
+@Deprecated('Use SubstationSeed instead.')
+typedef SubstationSeat = SubstationSeed;
+
+final class _MountedSubstationSeedAssets extends SingleChildStatelessSeed {
+  const _MountedSubstationSeedAssets({
     required this.githubPollingConfigured,
     // Nest supplies this fold child; direct call sites deliberately omit it.
     // ignore: unused_element_parameter
@@ -243,19 +282,22 @@ final class _MountedSubstationSeatAssets extends SingleChildStatelessSeed {
 
   @override
   Seed buildWithChild(TreeContext context, Seed child) {
-    return Provider<MountedSubstationSeat>.value(
-      MountedSubstationSeat(
+    return Provider<MountedSubstationSeed>.value(
+      MountedSubstationSeed(
         scope: sdk.SubstationScope.of(context),
         githubPollingConfigured: githubPollingConfigured,
+        // Read HERE, under the seat's own HarnessProvider when it armed one —
+        // the shadow is what the projection reports.
+        agentConfig: context.dependOnInheritedSeedOfExactType<AgentConfig>(),
       ),
       child: child,
     );
   }
 }
 
-final class _SeatGitHubReconcilerBindingAssets
+final class _SubstationGitHubReconcilerBindingAssets
     extends SingleChildStatelessSeed {
-  const _SeatGitHubReconcilerBindingAssets({
+  const _SubstationGitHubReconcilerBindingAssets({
     required this.config,
     // Nest supplies this fold child; direct call sites deliberately omit it.
     // ignore: unused_element_parameter

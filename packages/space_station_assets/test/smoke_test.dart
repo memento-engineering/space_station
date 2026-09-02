@@ -1,4 +1,5 @@
-import 'package:grid_assets/grid_assets.dart' show SearchCommand;
+import 'package:grid_assets/grid_assets.dart'
+    show ApproveCommand, FilingCommand, SearchCommand;
 import 'package:grid_cli/grid_cli.dart' show LinkCommand, UnlinkCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
@@ -19,6 +20,8 @@ void main() {
         'status',
         'reload',
         'search',
+        'filing',
+        'approve',
         'link',
         'unlink',
         'dart',
@@ -39,6 +42,13 @@ void main() {
   test('`search` is the VENDED grid_assets Command, composed — not a '
       'space-local reimplementation (the asset owns the logic)', () {
     expect(buildRunner().commands['search'], isA<SearchCommand>());
+  });
+
+  test('`filing` and `approve` are the VENDED grid_assets Commands, composed '
+      '— not space-local reimplementations (the asset owns the logic)', () {
+    final runner = buildRunner();
+    expect(runner.commands['filing'], isA<FilingCommand>());
+    expect(runner.commands['approve'], isA<ApproveCommand>());
   });
 
   test('`reload` is the VENDED grid_cli Command, composed — the operator\'s '

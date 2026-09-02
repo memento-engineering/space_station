@@ -9,6 +9,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "105.0.0"
+  acp_dart:
+    dependency: transitive
+    description:
+      name: acp_dart
+      sha256: d80abaf8430739d8b4f098ca53aad51f9dcbeeecd5aa17f79c2f85720d98ecaf
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.0"
   analyzer:
     dependency: transitive
     description:
@@ -269,10 +277,10 @@ packages:
     dependency: transitive
     description:
       name: grid_assets
-      sha256: "4ce7475601a9ce523e797174c51db94810a9ec0fe7a1f6f199299763ff38b8f7"
+      sha256: "1b8f440bb6225cd01f9953393e8375fbf5b57e840f35b45cee4892ab5d90d82b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0-rc.5"
+    version: "0.6.0-rc.6"
   grid_cli:
     dependency: transitive
     description:
@@ -293,10 +301,10 @@ packages:
     dependency: transitive
     description:
       name: grid_engine
-      sha256: "2ca0055b8a9d41e2457492540047eb1a98aeaf3fe9d3e024a286395c0c86dfe8"
+      sha256: acacc8d63af0835f02c097eabaaeb8012fe3813e3ae460be2ebfaf52dad2725c
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.8"
+    version: "0.3.0-rc.9"
   grid_exploration:
     dependency: transitive
     description:
@@ -309,18 +317,26 @@ packages:
     dependency: transitive
     description:
       name: grid_runtime
-      sha256: f9e381d139e93e8afe4607cd7c475200717600c0bedb5f6d87f6c1d99b0fc98c
+      sha256: "37cd9bebefeae1dd1786d4c3dff3afe8cd95c40a4ffc47f0e131bedcb054e109"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-rc.6"
+    version: "0.2.0-rc.7"
   grid_sdk:
     dependency: transitive
     description:
       name: grid_sdk
-      sha256: "5f0a541c4ffdf3635b95d6a4fa353ac19fa96c512f15a2eb2a82bb310e6cbd53"
+      sha256: "1d265c589f4bda0b3681b92eb60308d54c7753f0a8d225d2c80c7269ba348628"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.6"
+    version: "0.3.0-rc.7"
+  grid_trajectory:
+    dependency: transitive
+    description:
+      name: grid_trajectory
+      sha256: "0969d62aa760720b853bf83cf0052913f388c460a871b870351a5cbffc60200b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   http:
     dependency: transitive
     description:
