@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@9a453dd — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@unknown — do not edit; run `dart run space:space assets install`
 name: release
 description: >
   Cut a disciplined pub.dev release of a Dart package (or a workspace of them) —
@@ -30,8 +30,14 @@ internal refs, or read pub.dev's HTML — the Command is the substrate.
 
 Each op emits ONE JSON object under `--json`. Read the fields; never scrape.
 
-- **Version + tag** — `dart run space:space dart release plan --package <name> --current <ver> --change <docs|additive|fix|breaking> --json`
+- **Version + tag** — `dart run space:space dart release plan --package <name> --current <ver> --change <docs|additive|fix|breaking|rc> --json`
   -> `{current, next, change, requiresBreakingChangelog, package, tag}`.
+- **Private release tag** — `dart run space:space dart release tag --repo-dir <repo-dir> --tag <tag> --json`
+  -> `{tag, created, exitCode}`.
+- **Consumer validation** — `dart run space:space dart release validate-consumers --rc-tag <rc-tag> --manifest <consumers.json> --json`
+  -> `{rcTag, allPassed, results:[...]}`.
+- **Stable promotion** — `dart run space:space dart release promote --repo-dir <repo-dir> --stable-tag <stable-tag> --validation <validation.json> --json`
+  -> `{tag, created, exitCode}`.
 - **Scrub gate** — `dart run space:space dart release scrub --dir <package-dir> --json`
   -> `{root, clean, filesScanned, hits:[{file, line, text, match}]}`.
 - **Publish order** — `dart run space:space dart release order --manifest <deps.json> --json`
@@ -59,16 +65,60 @@ Decide the `--change` class, then let `plan` do the math:
 
 - **Additive API, fixes, docs -> `--change` docs/additive/fix** — a PATCH
   (`0.1.x`).
-- **Breaking -> `--change breaking`** — a MINOR pre-1.0 (`0.1.x` -> `0.2.0`),
-  MAJOR from 1.0. `plan` returns `requiresBreakingChangelog: true`: the CHANGELOG
-  MUST lead with `Breaking:` and carry a one-line migration. pub reads `^0.1.0`
-  as `>=0.1.0 <0.2.0`, so a breaking change hidden in a patch silently reaches
-  every resolver — that is why breaking moves the MINOR.
+- **Breaking -> `--change rc`** — plan a MINOR pre-1.0 candidate (`0.1.x`
+  -> `0.2.0-rc.1`), or a MAJOR candidate from 1.0. A BREAKING change MUST go
+  rc-first; do not use `--change breaking` to cut a stable version directly.
+  `plan` returns `requiresBreakingChangelog: true`: the CHANGELOG MUST lead with
+  `Breaking:` and carry a one-line migration. pub reads `^0.1.0` as
+  `>=0.1.0 <0.2.0`, so a breaking change hidden in a patch silently reaches
+  every resolver — that is why breaking moves to the next breaking base as an
+  rc before stable promotion.
 - **Adding a member to an exported abstract interface is breaking** for external
   implementers, even when every in-repo handle just delegates — call it breaking.
 - **Cross-package coherence:** when a sibling consumes API introduced in version
   X, tighten the sibling's constraint to `^X` in the SAME change and release in
   dependency order, so a resolved pair is always coherent.
+
+## Pre-release (rc) publishing
+
+Cut an rc instead of a stable release when a breaking change must be adopted by
+siblings before stable is safe, when the candidate needs consumer validation in
+CI, or whenever “we should not have to do a public stable release to get
+development to work” describes the bind. A BREAKING change MUST go rc-first.
+
+1. Plan the candidate with `dart run space:space dart release plan --package <name>
+   --current <ver> --change rc --json`; use the returned `next` and `tag`.
+2. Apply the planned version and CHANGELOG entry, pass the ordered gates below,
+   commit them, then cut the candidate tag with `dart run space:space dart release tag
+   --repo-dir <repo-dir> --tag <rc-tag> --json`.
+3. In each consumer, opt in by changing its hosted constraint to
+   `^X.Y.Z-rc.N`. Pub excludes prereleases from ordinary stable caret ranges:
+   a consumer on `^0.1.x` does NOT resolve `0.2.0-rc.1`, while a consumer
+   pinned to `^0.2.0-rc.1` accepts later `0.2.0` rcs and stable `0.2.0`.
+   That exclusion is what lets the pub.dev candidate publish without disturbing
+   stable consumers.
+4. **Sibling-coherence rule:** an rc on a package forces an rc on EVERY in-repo
+   sibling that depends on it. Move each dependent's constraint to the rc and
+   version every package in the same release wave, even when a dependent has no
+   API change of its own; otherwise the package set will not resolve. Moreover,
+   `dart pub publish` REFUSES a stable package that depends on a prerelease, so
+   every dependent in that closure must remain rc until the wave is promoted.
+   Compute dependency order with `release order` and process the complete
+   closure.
+5. Publish each candidate in dependency order by PUSHING ITS TAG (one tag per
+   push — see Publishing below; the publish workflow uploads via trusted
+   publishing). After each tag, loop `dart run space:space dart release poll --package
+   <name> --version <rc-version> --json` until `isPublished: true` before
+   pushing a dependent's tag. `release poll` reads pub.dev's complete versions
+   list and is the authority for prereleases (`melos publish` compares against
+   latest stable and is retired for uploads).
+6. Validate the candidate with `dart run space:space dart release validate-consumers
+   --rc-tag <rc-tag> --manifest <consumers.json> --json`, save that ONE JSON
+   object as `<validation.json>`, and require `allPassed: true`.
+7. Only after every consumer passes, promote with `dart run space:space dart release
+   promote --repo-dir <repo-dir> --stable-tag <stable-tag> --validation
+   <validation.json> --json`. A failed validation report MUST stop promotion;
+   only the promoted wave may remove the prerelease suffix and publish stable.
 
 ## The gates — all mandatory, IN ORDER
 
@@ -86,27 +136,51 @@ Run them in sequence; a failure STOPS the release.
    `plan.next`, write the CHANGELOG entry (the `Breaking:` + migration line when
    `requiresBreakingChangelog`), and commit.
 5. **Dry-run** — `dart run space:space dart release dry-run --dir <package-dir> --package
-   <name> --json`. Read `clean`; treat ANY warning as a stop.
+   <name> --json`. Read `clean`; treat ANY warning as a stop. In particular,
+   “N checked-in files are modified in git” means gate 4 is incomplete: COMMIT
+   the version bump and CHANGELOG first, then rerun dry-run. Staging is not
+   enough; this gate validates checked-in state, so gate order matters.
 
-## Publishing — in dependency order
+## Publishing — push the tag; CI publishes (trusted publishing)
 
-- For a MULTI-package release, resolve the order first: build a
-  `{package:[deps]}` manifest and call `dart run space:space dart release order --manifest
-  <file> --json`. Publish in the returned `order`. (For the actual upload,
-  `melos publish --no-dry-run --yes` resolves the same order automatically.)
-- `dart pub publish` from the package dir.
-- **After each upload, POLL before publishing a dependent:** loop `dart run space:space
-  dart release poll --package <name> --version <ver> --json` until
-  `isPublished: true` (the new version lands as `latest` within a minute or two).
-  Only then publish the next package.
+**Local `dart pub publish` is RETIRED.** Each repo's
+`.github/workflows/publish.yml` publishes on a per-package tag push via
+pub.dev's GitHub-Actions trusted publishing (OIDC — no long-lived credential).
+Every historical publish-run failure on the_grid/power_station was `Version X
+already exists`: a hand-publish had beaten the tag. The tag IS the publish.
+CI checkouts also carry no `pubspec_overrides.yaml`, so the move-the-overrides
+dance disappears with the hand-publish.
+
+1. Land the release commit through the repo's normal PR path (queue where one
+   exists). Tags point at the MERGED main commit.
+2. Resolve dependency order (`dart run space:space dart release order --manifest <file>
+   --json` for a multi-package wave).
+3. For each package in that order:
+   - `git tag <plan.tag> <release-commit> && git push origin <plan.tag>` —
+     **ONE TAG PER PUSH.** GitHub fires NO workflows for a push containing more
+     than three tags (observed live 2026-08-23: four tags in one push, zero
+     runs), and per-tag pushes are what give you ordering anyway.
+   - Watch the run (`gh run list --workflow=publish.yml`) and loop `dart run space:space
+     dart release poll --package <name> --version <ver> --json` until
+     `isPublished: true`. Only then push the DEPENDENT's tag.
+4. **First release of a package:** automated publishing must be enabled ONCE on
+   the package's pub.dev admin page (Automated publishing → GitHub Actions →
+   repository `memento-engineering/<repo>`, tag pattern: `<package>-v`
+   immediately followed by pub.dev's version placeholder — the word `version`
+   in double curly braces, as the admin form suggests). Only an uploader can
+   click it — a publish run
+   failing with an authorization/OIDC message means exactly this toggle; hand
+   the human the admin URL, nothing else.
+   (`melos publish` remains retired for uploads; melos still owns the
+   workspace-green gates.)
 
 ## Post-publish
 
-1. **Tag the release commit** with `plan.tag` (`<pub-name>-v<version>`, e.g.
-   `genesis_tree-v0.1.5`) and push tags.
-2. Push `main`.
-3. Verify: `dart run space:space dart release poll --package <name> --version <ver> --json`
-   returns `isPublished: true`, and spot-check the rendered README.
+1. Verify: `dart run space:space dart release poll --package <name> --version <ver>
+   --json` returns `isPublished: true` for every wave member, and spot-check
+   the rendered README.
+2. Pull `main` in the primary checkout so the local tree matches the tagged
+   release.
 
 ## Reconciling drift (the lenny case)
 
