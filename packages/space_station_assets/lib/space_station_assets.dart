@@ -95,7 +95,8 @@ export 'src/space_delegate.dart'
         codedArmingOf,
         codedRosterOf,
         codedRosterSnapshotOf,
-        codedSeatEnvironmentsOf;
+        codedSeatEnvironmentsOf,
+        kMementoOrgApp;
 // The COMPOSED SEED (space-47t): the ONE per-substation seed class a
 // station's substations() authors (value config: name/root/prefix + an
 // optional GitHubAppConfig delivery identity). Exported so a downstream
