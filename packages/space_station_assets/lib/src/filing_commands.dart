@@ -44,7 +44,11 @@ import 'package:args/command_runner.dart' show Command;
 import 'package:grid_assets/grid_assets.dart'
     show ApproveCommand, ApproveService, FilingCommand, FilingService;
 import 'package:grid_sdk/grid_sdk.dart'
-    show GridStateStore, SubstationScopeStores, requireAbsoluteRoot;
+    show
+        GridStateStore,
+        SubstationScope,
+        SubstationScopeStores,
+        requireAbsoluteRoot;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
@@ -55,11 +59,16 @@ typedef SpaceFilingCommands = ({FilingCommand filing, ApproveCommand approve});
 /// Resolves the WORK-STORE root that owns [beadId] from the roster
 /// [delegateFactory] authors, rooted at [gridHome].
 ///
-/// The owning seat is the one whose `prefix` matches the id's leading segment
-/// (`pow-x6k` → `pow` → the `power_station` seat). [verb] names the composing
-/// command in every refusal. Throws [ArgumentError] when [gridHome] is not
-/// absolute and [StateError] when no coded seat mints the prefix — both LOUD,
-/// never a silent fall back to the CWD's store.
+/// The owning seat is the one whose `prefix` matches [beadId] at a COMPLETE
+/// `<prefix>-` boundary with a non-empty suffix (`pow-x6k` → `pow` → the
+/// `power_station` seat); when several seats match, the LONGEST prefix wins
+/// (`swift-infer-zfor` → `swift-infer`, never the `swift` seat it extends).
+/// A prefix may itself contain hyphens — a store's issue prefix follows its
+/// REPO NAME, and repo names may — so the id is never split at its first
+/// hyphen. [verb] names the composing command in every refusal. Throws
+/// [ArgumentError] when [gridHome] is not absolute and [StateError] when no
+/// coded seat mints the id — both LOUD, never a silent fall back to the CWD's
+/// store.
 String storeRootForBead({
   required String verb,
   required String beadId,
@@ -67,15 +76,21 @@ String storeRootForBead({
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
 }) {
   final home = _resolvedHome(verb, gridHome);
-  final dash = beadId.indexOf('-');
-  final prefix = dash <= 0 ? beadId : beadId.substring(0, dash);
   final roster = codedRosterOf(delegateFactory, gridRoot: home);
+  SubstationScope? owner;
   for (final scope in roster) {
-    if (scope.prefix == prefix) return scope.workStore.storeRoot;
+    final boundary = '${scope.prefix}-';
+    if (!beadId.startsWith(boundary) || beadId.length == boundary.length) {
+      continue;
+    }
+    if (owner == null || scope.prefix.length > owner.prefix.length) {
+      owner = scope;
+    }
   }
+  if (owner != null) return owner.workStore.storeRoot;
   throw StateError(
-    'space $verb: no seat in the CODED roster mints "$prefix-…" ids (bead '
-    '"$beadId"). The coded seats are '
+    'space $verb: no seat in the CODED roster mints "$beadId". The coded '
+    'seats are '
     '${[for (final scope in roster) '${scope.name}@${scope.prefix}'].join(', ')}'
     ' — the roster is CODE (SpaceDelegate.substations), never a flag.',
   );
