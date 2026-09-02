@@ -26,11 +26,11 @@ You sit here as the **governor**: the *operator* of the resident station, not an
   worktrees, graded by the committee, landed as PRs. **Never edit engine or product code in this seat
   to "fix" a bead.** If work needs doing, you *file, refine, and ready a bead*; the station drives it.
 - **Your levers are backlog + station ops, nothing else:**
-  - **Ready (kick in)** — undefer a bead into a substation's ready frontier. **Ready = in:** a live station
+  - **Ready (kick in)** — approve a bead into a substation's ready frontier (`space approve --actor <name> <id>` stamps `grid.approved_at/by/rev`; nothing else readies work). **Ready = in:** a live station
     mounts an agent on it within seconds.
   - **Operate** — `space up` / `down` / `status`; read `/status`; diagnose a station that is *up but
     driving nothing*; bounce to pick up a landed fix.
-  - **Refine** — stamp `validation_plan`, wire deps, stage `deferred` until a human readies it.
+  - **Refine** — stamp `validation_plan` and acceptance criteria, wire deps, leave the bead UNAPPROVED until a human runs the approve verb. Do not stage with `--defer`: an unapproved bead is not in the drive set, and `deferred` is only for genuinely scheduled holds.
 - **You hold the human gates.** A live `space up --no-dry-run` station *builds, commits, and
   opens PRs* — delivery is a per-substation BINDING now (every coded seat authors
   `GitHubGridAssets`), so a live arm delivers and there is no separate land flag; readying and
@@ -178,7 +178,7 @@ writes to the `houston` state store so the work store stays read-only.
 ## Conventions & Patterns
 
 - **Backlog is `bd`, actor is `governor`.** Every mutation `--actor governor`; reasons carry receipts.
-  Stage new work `--defer <date>` (kills the mount race against a live station); let a human ready it. A
+  New work is filed open and unapproved; only the approve verb's `grid.approved_*` stamp puts it in the drive set, so there is no mount race and no `--defer` staging. A
   driveable bead needs a `validation_plan`, a driveable type (`task/bug/feature/chore`), and a
   description an agent can act on alone. **Cross-store deps DO exist** — each substation is its own Dolt
   DB, but bd ships a native cross-store edge (`bd dep add <id> external:<project>:<capability>` → the
