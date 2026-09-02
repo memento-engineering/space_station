@@ -1,189 +1,361 @@
-/// The station's AGENT ARMING — which NAMED inference environment each rung of
-/// the agent-config ladder runs on, authored as committed Dart (power_station
+/// The station's AGENT ARMING — which inference environment each TYPED SEAT
+/// runs on, authored as committed Dart (power_station
 /// `docs/adr/ADR-0002-agent-environment-layer.md` D2 DART-FIRST, D5 the
-/// per-substation rung).
+/// per-substation rung; `docs/adr/ADR-0006-typed-environment-lookup-selects-by-value.md`
+/// D1/D2 the VALUE-keyed typed rung).
 ///
 /// The ladder is: station default -> substation seat -> bead (`grid.agent`) ->
 /// step (`StepArgs.params`). This library owns the top TWO rungs as pure
-/// VALUES ("config = VALUES in the tree; impls are DI"): [AgentArming.underlay]
-/// applies the STATION rung UNDER a boot config, [AgentArming.applyTo] applies
-/// a SEAT rung OVER the ambient one. There is no operator-flag rung (ADR-0002
-/// D4) and NO endpoint url anywhere in this file: WHERE an environment runs is
-/// its own `InferenceTarget`, bound on the box by the machine-local site
-/// binding (ADR-0002 D3).
+/// VALUES ("config = VALUES in the tree; impls are DI"): [kMementoStationArming]
+/// is the station's, and a [SubstationSeed]'s own [AgentArming] nests UNDER it.
+/// Selection is by TYPE and VALUE — there is no role map, no name key and no
+/// operator-flag rung (ADR-0002 D4). NO endpoint url appears in this file:
+/// WHERE an environment runs is its own `InferenceTarget`, bound on the box by
+/// the machine-local site binding (ADR-0002 D3).
+///
+/// ## Why every environment here is a COMPLETE, standalone `const`
+///
+/// ADR-0006 D1 requires the canned preference sets to be "const Dart declared
+/// beside the environments". `AvailableEnvironments.contains` and
+/// `EnvironmentRegistry.nameOf` compare in the `AgentEnvironment.flattened`
+/// normal form, which reconciles `base` but does NOT fill in fields a layer
+/// never declared — so a layer that INHERITS its transport from a builtin is
+/// not equal to the registry's resolution of itself, and a const preference
+/// over such a layer resolves to nothing. Each environment is therefore
+/// declared ONCE, complete, with `base: EnvBaseStandalone()`, and that same
+/// value is both the registry's `custom` entry and the preference entry.
+/// Transport drift against `kBuiltinEnvironments` is fenced by the parity test
+/// in `test/agent_arming_test.dart` (it goes RED on a deliberate grid_assets
+/// bump) and by [preferenceArmingRefusal] at boot. Recorded at
+/// `docs/decisions/2026-09-02-memento-s-named-environments-are-complete-const-values.md`.
 library;
 
+import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
-        AgentConfig,
         AgentEnvironment,
-        AgentRole,
-        BaseScope,
-        EnvBaseRef,
+        AvailableEnvironments,
+        BuildAgentEnvironment,
+        CriticAgentEnvironment,
+        CriticEnvironmentSeed,
+        EnvBaseStandalone,
         EnvironmentRegistry,
-        EnvironmentRegistryError,
-        kBuiltinEnvironments;
+        GatherAgentEnvironment,
+        InferenceTarget,
+        ModelPreference,
+        PromptMode,
+        SpecAgentEnvironment,
+        kBuiltinEnvironments,
+        resolveEnvironment;
 
-/// memento's NAMED environments — the station's own SEMANTIC names layered
-/// over the first-party builtins via `base` (`builtin:claude` / `builtin:codex`).
-///
-/// A name is a PORTABLE promise ("build strong", "grade mid"): a bead or a seat
-/// names `frontier`, and the STATION decides what that means on this box. Every
-/// entry here resolves to a `providerManaged` target, so none needs a site
-/// binding and every one validates at boot with no machine facts. An
-/// openAiCompatible or swiftInfer name (`local-cheap`) joins only once the site
-/// binding is mounted at the composition root — its endpoint is a machine fact
-/// and never enters this file (ADR-0002 D3).
+/// Build strong: claude at the frontier tier. COMPLETE and standalone (see the
+/// library doc): the transport fields mirror `kBuiltinEnvironments['claude']`.
+const AgentEnvironment kFrontierEnvironment = AgentEnvironment(
+  base: EnvBaseStandalone(),
+  command: 'claude',
+  args: ['--dangerously-skip-permissions'],
+  promptMode: PromptMode.flag,
+  promptFlag: '-p',
+  target: InferenceTarget.providerManaged,
+  usageJsonArgs: ['--output-format', 'json'],
+  resumeFlag: '--resume',
+  model: 'opus',
+);
+
+/// Grade: claude at the mid tier.
+const AgentEnvironment kMidEnvironment = AgentEnvironment(
+  base: EnvBaseStandalone(),
+  command: 'claude',
+  args: ['--dangerously-skip-permissions'],
+  promptMode: PromptMode.flag,
+  promptFlag: '-p',
+  target: InferenceTarget.providerManaged,
+  usageJsonArgs: ['--output-format', 'json'],
+  resumeFlag: '--resume',
+  model: 'sonnet',
+);
+
+/// Gather: claude at the cheap tier.
+const AgentEnvironment kCheapEnvironment = AgentEnvironment(
+  base: EnvBaseStandalone(),
+  command: 'claude',
+  args: ['--dangerously-skip-permissions'],
+  promptMode: PromptMode.flag,
+  promptFlag: '-p',
+  target: InferenceTarget.providerManaged,
+  usageJsonArgs: ['--output-format', 'json'],
+  resumeFlag: '--resume',
+  model: 'haiku',
+);
+
+/// The org's BUILD environment: codex on its own native pin (a claude tier name
+/// 400s on codex), driven through the ACP adapter.
+const AgentEnvironment kCodexFrontierEnvironment = AgentEnvironment(
+  base: EnvBaseStandalone(),
+  command: 'npx',
+  args: ['-y', '@agentclientprotocol/codex-acp@1.6.2'],
+  env: {'INITIAL_AGENT_MODE': 'agent-full-access'},
+  promptMode: PromptMode.none,
+  target: InferenceTarget.providerManaged,
+  model: 'gpt-5.6-sol',
+  sessionAdapter: 'acp',
+);
+
+/// memento's NAMED environments — the station's own SEMANTIC names. A name is
+/// a PORTABLE promise ("build strong", "grade mid") a bead or a step may still
+/// use; the typed rung above it needs no name at all.
 const Map<String, AgentEnvironment> kMementoEnvironments = {
-  /// Build strong: claude at the frontier tier.
-  'frontier': AgentEnvironment(
-    base: EnvBaseRef('claude', scope: BaseScope.builtin),
-    model: 'opus',
-  ),
-
-  /// Grade: claude at the mid tier.
-  'mid': AgentEnvironment(
-    base: EnvBaseRef('claude', scope: BaseScope.builtin),
-    model: 'sonnet',
-  ),
-
-  /// Gather: claude at the cheap tier.
-  'cheap': AgentEnvironment(
-    base: EnvBaseRef('claude', scope: BaseScope.builtin),
-    model: 'haiku',
-  ),
-
-  /// The org's BUILD environment: codex on its own native pin (inherited from
-  /// the builtin, which pins `gpt-5.6-sol` — a claude tier name 400s on codex).
-  'codex-frontier': AgentEnvironment(
-    base: EnvBaseRef('codex', scope: BaseScope.builtin),
-  ),
+  'frontier': kFrontierEnvironment,
+  'mid': kMidEnvironment,
+  'cheap': kCheapEnvironment,
+  'codex-frontier': kCodexFrontierEnvironment,
 };
 
 /// The station's environment REGISTRY: [kMementoEnvironments] as `custom`, the
-/// five first-party environments as `builtins` (so `claude`/`codex`/`pi`/
-/// `copilot`/`opencode` stay addressable by tool name too).
+/// five first-party environments as `builtins`.
 EnvironmentRegistry buildMementoEnvironmentRegistry() =>
     const EnvironmentRegistry(
       custom: kMementoEnvironments,
       builtins: kBuiltinEnvironments,
     );
 
-/// One ARMING of the agent-config ladder — a station's or a seat's say in which
-/// NAMED environment runs. A pure VALUE; it carries no behavior and reaches no
-/// service.
+/// Build strong, fall back to mid — the canned FRONTIER ladder (ADR-0006 D1:
+/// an ordered preference over complete environment VALUES, most-preferred
+/// first).
+const List<AgentEnvironment> kFrontierLadder = [
+  kFrontierEnvironment,
+  kMidEnvironment,
+];
+
+/// Grade mid, fall back to cheap.
+const List<AgentEnvironment> kMidLadder = [kMidEnvironment, kCheapEnvironment];
+
+/// Gather cheap, fall back to mid.
+const List<AgentEnvironment> kCheapLadder = [
+  kCheapEnvironment,
+  kMidEnvironment,
+];
+
+/// Build on codex, fall back to claude at the frontier tier when codex is not
+/// present on this box.
+const List<AgentEnvironment> kCodexLadder = [
+  kCodexFrontierEnvironment,
+  kFrontierEnvironment,
+];
+
+/// One ARMING of the TYPED environment seats — a station's or a seat's say in
+/// which environment each capability runs on. A pure VALUE; it carries no
+/// behavior and reaches no service. A null field leaves that seat to the
+/// nearest ancestor's arming (ADR-0006 D2: the TYPE is the scope).
 class AgentArming {
-  /// Creates an arming over an optional ambient [environment] name and a
-  /// (possibly empty) role -> environment-name map.
-  const AgentArming({this.environment, this.roleEnvironments = const {}});
+  /// Creates an arming over the seats it names; every field is optional.
+  const AgentArming({this.build, this.spec, this.critic, this.gather});
 
-  /// The ambient environment NAME for every role this arming does not name
-  /// explicitly; null leaves the ambient rung alone.
-  final String? environment;
+  /// The BUILD seat (the coding agent).
+  final BuildAgentEnvironment? build;
 
-  /// role -> environment NAME (the ladder's role rung, `AgentConfig.roleEnvironments`).
-  final Map<AgentRole, String> roleEnvironments;
+  /// The SPEC seat (the architect / specify stage).
+  final SpecAgentEnvironment? spec;
+
+  /// The CRITIC seat (every committee lane), with optional per-lane overrides.
+  final CriticAgentEnvironment? critic;
+
+  /// The GATHER seat (the read-only discovery explorers).
+  final GatherAgentEnvironment? gather;
 
   /// Whether this arming says nothing at all.
-  bool get isEmpty => environment == null && roleEnvironments.isEmpty;
+  bool get isEmpty =>
+      build == null && spec == null && critic == null && gather == null;
 
-  /// Applies this arming ON TOP of [base] — the SEAT rung (ADR-0002 D5). A
-  /// seat's arming is committed Dart and deliberately SHADOWS the ambient one,
-  /// on both axes.
-  AgentConfig applyTo(AgentConfig base) => base.merge(
-    harness: environment,
-    roleEnvironments: roleEnvironments.isEmpty ? null : roleEnvironments,
-  );
-
-  /// Applies this arming UNDER [base] — the STATION rung: it fills ONLY the
-  /// role rungs [base] leaves unarmed and never touches [AgentConfig.harness].
-  ///
-  /// UNDER, not over, on purpose: the boot config carries whatever the operator
-  /// typed, and an explicit operator rung must never be SILENTLY ignored
-  /// (ADR-0000 A20(2)'s no-wedge rule). The ambient axis is left alone because
-  /// `AgentConfig.harness` has a non-null default ('claude') and so cannot be
-  /// told apart from an operator-set value — the station speaks the ROLE axis.
-  AgentConfig underlay(AgentConfig base) {
-    final fill = <AgentRole, String>{
-      for (final entry in roleEnvironments.entries)
-        if (!base.roleEnvironments.containsKey(entry.key))
-          entry.key: entry.value,
-    };
-    return fill.isEmpty ? base : base.merge(roleEnvironments: fill);
-  }
+  /// The armed seats, BUILD first — the order [preferenceArmingRefusal] walks.
+  Iterable<ModelPreference> get seats => [
+    if (build != null) build!,
+    if (spec != null) spec!,
+    if (critic != null) critic!,
+    if (gather != null) gather!,
+  ];
 
   @override
   bool operator ==(Object other) =>
       other is AgentArming &&
-      other.environment == environment &&
-      _sameRoles(other.roleEnvironments, roleEnvironments);
+      other.build == build &&
+      other.spec == spec &&
+      other.critic == critic &&
+      other.gather == gather;
 
   @override
-  int get hashCode => Object.hash(
-    environment,
-    Object.hashAllUnordered(
-      roleEnvironments.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
-  );
+  int get hashCode => Object.hash(build, spec, critic, gather);
 
   @override
   String toString() =>
-      'AgentArming(${environment ?? '<ambient>'}, roles: $roleEnvironments)';
+      'AgentArming(build: $build, spec: $spec, critic: $critic, '
+      'gather: $gather)';
+}
 
-  static bool _sameRoles(Map<AgentRole, String> a, Map<AgentRole, String> b) {
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      if (b[entry.key] != entry.value) return false;
+/// Provides an [arming]'s TYPED seats over its subtree — the ONE seed both the
+/// station rung and the per-substation rung mount (ADR-0002 D5, ADR-0006 D2).
+///
+/// A NESTED instance shadows only the types it arms: an unarmed seat keeps
+/// resolving through the enclosing provider, because `resolveEnvironment`
+/// reads by EXACT type and finds the nearest ancestor of that type.
+final class TypedEnvironmentProvider extends SingleChildStatelessSeed {
+  /// Provides [arming]'s seats over [child].
+  const TypedEnvironmentProvider({
+    required this.arming,
+    super.child,
+    super.key,
+  });
+
+  /// The seats this provider mounts.
+  final AgentArming arming;
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) {
+    var below = child;
+    final gather = arming.gather;
+    if (gather != null) {
+      below = InheritedSeed<GatherAgentEnvironment>(
+        value: gather,
+        child: below,
+      );
     }
-    return true;
+    final critic = arming.critic;
+    if (critic != null) {
+      // CriticEnvironmentSeed, not a plain InheritedSeed: a BUILD-time
+      // dependent may scope its invalidation to ONE CriticLane. Spawn edges
+      // read the same value with the effect verb and pay nothing for it.
+      below = CriticEnvironmentSeed(value: critic, child: below);
+    }
+    final spec = arming.spec;
+    if (spec != null) {
+      below = InheritedSeed<SpecAgentEnvironment>(value: spec, child: below);
+    }
+    final build = arming.build;
+    if (build != null) {
+      below = InheritedSeed<BuildAgentEnvironment>(value: build, child: below);
+    }
+    return below;
   }
+}
+
+/// The four typed lookups RESOLVED at one point in the tree — the offline
+/// projection the `up` banner prints and the suites assert. A pure VALUE.
+final class SeatEnvironments {
+  /// Creates the projection over its four resolved environments.
+  const SeatEnvironments({this.build, this.spec, this.critic, this.gather});
+
+  /// Resolves all four seats at [context] through the VENDED resolvers (one
+  /// availability walk each). These are effect-boundary reads
+  /// (`getInheritedSeedOfExactType`), so a caller that runs this inside a
+  /// `build` subscribes to the same values FIRST with `dependOn*` — the D-H
+  /// doctrine (ADR-0008 D3; power_station ADR-0000 A8(3)/A35(6)).
+  factory SeatEnvironments.of(TreeContext context) => SeatEnvironments(
+    build: resolveEnvironment<BuildAgentEnvironment>(context),
+    spec: resolveEnvironment<SpecAgentEnvironment>(context),
+    critic: CriticAgentEnvironment.of(context),
+    gather: resolveEnvironment<GatherAgentEnvironment>(context),
+  );
+
+  /// The BUILD seat's resolved environment; null when nothing is armed or
+  /// nothing preferred is present (the caller falls to the ambient rung).
+  final AgentEnvironment? build;
+
+  /// The SPEC seat's resolved environment.
+  final AgentEnvironment? spec;
+
+  /// The CRITIC seat's resolved environment (the shared, laneless preference).
+  final AgentEnvironment? critic;
+
+  /// The GATHER seat's resolved environment.
+  final AgentEnvironment? gather;
+
+  /// This projection rendered with [registry]'s NAMES — the banner line. The
+  /// name is restored at the boundary exactly as `resolveAgentConfig` does it
+  /// (`EnvironmentRegistry.nameOf`; power_station ADR-0000 A35(2)).
+  String describe(EnvironmentRegistry registry) {
+    String named(AgentEnvironment? environment) =>
+        environment == null ? '<ambient>' : registry.nameOf(environment);
+    return 'build ${named(build)}  ·  spec ${named(spec)}  ·  '
+        'critic ${named(critic)}  ·  gather ${named(gather)}';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SeatEnvironments &&
+      other.build == build &&
+      other.spec == spec &&
+      other.critic == critic &&
+      other.gather == gather;
+
+  @override
+  int get hashCode => Object.hash(build, spec, critic, gather);
+
+  @override
+  String toString() =>
+      'SeatEnvironments(build: $build, spec: $spec, critic: $critic, '
+      'gather: $gather)';
 }
 
 /// memento's CODED station posture: codex BUILDS under a claude committee.
 ///
-/// The grade and gather rungs are deliberately UNARMED so they ride the ambient
-/// environment and the tier ladder — arming `grade` to a model-pinning
-/// environment would out-rank the station's own grade-tier arming.
-///
-/// `AgentRole.architect` (power_station `pow-t1w`) IS in the resolved
-/// `grid_assets 0.6.0-rc.6` enum (build / architect / grade / gather). The
-/// claude half of the `{build: codex, architect: claude}` posture is still
-/// expressed by leaving the spec author on the ambient claude environment, and
-/// this map deliberately does NOT gain an architect entry: power_station
-/// `docs/adr/ADR-0006-typed-environment-lookup-selects-by-value.md` D5 RETIRES
-/// the `AgentRole` / `roleEnvironments` axis in favour of typed environment
-/// lookups, and names this seat's migration as its own companion bead —
-/// `space-rz6`, which replaces this role map with typed preference providers.
-/// Arming the architect rung is that STATION-POSTURE change, not a side effect
-/// of a constraint bump.
+/// Every seat is armed, so every invocation is assignable and none silently
+/// rides the ambient rung. A seat overrides ONE type by nesting its own
+/// [AgentArming]; `--env` selects only the GENERIC default below all four.
 const AgentArming kMementoStationArming = AgentArming(
-  roleEnvironments: {AgentRole.build: 'codex-frontier'},
+  build: BuildAgentEnvironment(kCodexLadder),
+  spec: SpecAgentEnvironment(kFrontierLadder),
+  critic: CriticAgentEnvironment(kMidLadder),
+  gather: GatherAgentEnvironment(kCheapLadder),
 );
 
-/// The FIRST boot-eager refusal across [config]'s armed ROLE rungs, or null when
-/// every one names an armed, self-consistent environment in [registry].
+/// The FIRST boot-eager refusal across [arming]'s TYPED seats, or null when
+/// every armed seat prefers only environments PRESENT in [registry]'s
+/// boot-validated set.
 ///
-/// The targeted half of `EnvironmentRegistry.validate`'s moment 1: the station
-/// deliberately does NOT validate the whole armed set, because a builtin with an
-/// openAiCompatible target (`pi`) carries an endpoint that is a site-binding
-/// machine fact, and a whole-registry validate would refuse every boot on it.
-/// The message names the role, the environment and the fix (ADR-0000 A8, guards
-/// LOUD or GONE).
-String? roleArmingRefusal(AgentConfig config, EnvironmentRegistry registry) {
-  for (final entry in config.roleEnvironments.entries) {
-    final name = entry.value;
-    final AgentEnvironment environment;
-    try {
-      environment = registry.resolve(name);
-    } on EnvironmentRegistryError catch (e) {
-      return 'role "${entry.key.name}" names environment "$name": ${e.message}';
+/// The successor to the deleted role-map guard, and the runtime half of the
+/// normal-form fence: a preference entry that is not its own normal form —
+/// a layer that inherits its transport from a builtin — is not in the presence
+/// set and would silently resolve to NOTHING. It refuses LOUD instead, naming
+/// the SEAT TYPE, the value and the fix (ADR-0000 A8, guards LOUD or GONE). An
+/// EMPTY armed preference is refused for the same reason.
+///
+/// It deliberately does NOT run `EnvironmentRegistry.validate` over the whole
+/// armed set: a builtin with an openAiCompatible target (`pi`) carries an
+/// endpoint that is a site-binding machine fact, and a whole-registry validate
+/// would refuse every boot on it.
+String? preferenceArmingRefusal(
+  AgentArming arming,
+  EnvironmentRegistry registry,
+) {
+  final present = AvailableEnvironments.fromRegistry(registry);
+  for (final seat in arming.seats) {
+    final entries = _armedEntries(seat).toList();
+    if (entries.isEmpty) {
+      return '${seat.runtimeType} arms an EMPTY preference — it would resolve '
+          'to nothing and silently fall to the ambient environment; give it at '
+          'least one of the station\'s const environment values';
     }
-    final selfCheck = environment.validate();
-    if (selfCheck != null) {
-      return 'role "${entry.key.name}" names environment "$name" but it is '
-          'misconfigured: $selfCheck — fix "$name" or point the role at an '
-          'armed environment';
+    for (final entry in entries) {
+      if (!present.contains(entry)) {
+        return '${seat.runtimeType} prefers an environment no armed name '
+            'resolves to ($entry) — arm it in the environment registry, or '
+            'build the preference from the station\'s COMPLETE const '
+            'environment values (a layer that inherits its transport from a '
+            'builtin is not its own normal form and never matches)';
+      }
     }
   }
   return null;
+}
+
+/// Every environment [preference] can select: its own entries plus, for the
+/// critic seat, each lane override (`ModelPreference` is not a sealed union,
+/// so this is an `is` test, not a switch).
+Iterable<AgentEnvironment> _armedEntries(ModelPreference preference) sync* {
+  yield* preference.entries;
+  if (preference is CriticAgentEnvironment) {
+    for (final lane in preference.lanes.values) {
+      yield* lane;
+    }
+  }
 }
