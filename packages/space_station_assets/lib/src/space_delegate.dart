@@ -100,6 +100,32 @@ typedef SpaceDelegateFactory =
 /// station-owned write chokepoint.
 typedef NoteAppender = Future<void> Function(String beadId, String line);
 
+/// The memento org's ONE GitHub App delivery identity — the `grid-assets` App
+/// installed on `memento-engineering` (`repository_selection: all`), carried as
+/// a VALUE by each of the six org seats [SpaceDelegate.substations] authors.
+///
+/// PER SUBSTATION, never per station (pow-1rn): this is a shared value, not a
+/// station-level identity and not a name-keyed map. Nothing mounts it above the
+/// substation fan-out; a seat delivering under a DIFFERENT App simply passes a
+/// different [GitHubAppConfig], which is how a downstream station's private
+/// seats keep their own App while inheriting these six through `super`.
+///
+/// ONE STATION OWNS DELIVERY FOR THESE REPOS. Whichever station runs resident
+/// carries this identity; two resident stations over the same umbrella would
+/// deliver twice, which the one-grid-per-machine rule already fences.
+///
+/// [GitHubAppConfig] holds non-secret identifiers only.
+/// [GitHubAppConfig.privateKeyVar] is the NAME of an environment variable whose
+/// VALUE is a path to the PEM key; this library never reads the environment —
+/// the injected `github.GitHubAppClientAssets` resolves it at effect time. With
+/// `GRID_GITHUB_APP_KEY_MEMENTO` unset the seat composes INERT and the ambient
+/// opener stands: a missing key is a posture, never a boot error.
+const kMementoOrgApp = GitHubAppConfig(
+  appId: '4529262',
+  installationId: '152260260',
+  privateKeyVar: 'GRID_GITHUB_APP_KEY_MEMENTO',
+);
+
 /// Enumerates the CODED roster plus its GitHub-polling seat names from one
 /// shared offline mount of the station [factory] authors.
 ///
