@@ -544,13 +544,18 @@ class SpaceDelegate extends sdk.GridDelegate {
   ) => [
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
-    SubstationSeed(name: 'genesis', root: p.join(umbrella, 'genesis')),
+    SubstationSeed(
+      name: 'genesis',
+      root: p.join(umbrella, 'genesis'),
+      app: kMementoOrgApp,
+    ),
     // the framework — self-host; `tg` is the shared Dolt server (gc
     // coexists: read tg's frontier, write sessions to houston — A37)
     SubstationSeed(
       name: 'the_grid',
       root: p.join(umbrella, 'the_grid'),
       prefix: 'tg',
+      app: kMementoOrgApp,
     ),
     // the asset packs — self-host, and the org's EVALUATION seat: its BUILD
     // build seat is armed on `frontier` (claude/opus) while every other seat rides
@@ -563,6 +568,7 @@ class SpaceDelegate extends sdk.GridDelegate {
       name: 'power_station',
       root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
+      app: kMementoOrgApp,
       arming: const AgentArming(build: BuildAgentEnvironment(kFrontierLadder)),
     ),
     // the runner — self-host; for space this IS the grid home. Its store
@@ -573,15 +579,21 @@ class SpaceDelegate extends sdk.GridDelegate {
       name: 'space_station',
       root: p.join(umbrella, 'space_station'),
       prefix: 'space',
+      app: kMementoOrgApp,
     ),
     // the debug harness (memento-engineering/lenny)
-    SubstationSeed(name: 'lenny', root: p.join(umbrella, 'lenny')),
+    SubstationSeed(
+      name: 'lenny',
+      root: p.join(umbrella, 'lenny'),
+      app: kMementoOrgApp,
+    ),
     // the decision record (memento-engineering/decisions); its store mints
     // `dec-`, so the prefix differs from the repository name.
     SubstationSeed(
       name: 'decisions',
       root: p.join(umbrella, 'decisions'),
       prefix: 'dec',
+      app: kMementoOrgApp,
     ),
   ];
 }
