@@ -136,6 +136,10 @@ export 'src/link_commands.dart'
 /// [runnerInvocation] is the JIT invocation its installed manual teaches
 /// (`dart run lunar:lunar`) — threaded into the composed `assets` seat so the
 /// vended `{{runner}}` holes render to the DOWNSTREAM runner, not space's;
+/// it is ALSO threaded into `up`, whose boot banner and dev-mode line name
+/// the runner, its `reload` verb, and the JIT invocation that arms it
+/// (space-grl); [name] rides along as the runner word, and the STATION word
+/// comes from the delegate's `stationName`.
 /// [delegateFactory] is the station-authorship seam — the constructor
 /// tear-off of the station's [SpaceDelegate] SUBCLASS (identity, roster and
 /// seat stacks live on the class as override points), threaded into the
@@ -165,7 +169,12 @@ CommandRunner<int> buildRunner({
     // memento's OWN resident verbs (RS-5b): the composed resident station
     // (up) + the thin StationAttach renders over it (down/status).
     ..addCommand(
-      UpCommand(delegateFactory: delegateFactory, environment: environment),
+      UpCommand(
+        delegateFactory: delegateFactory,
+        environment: environment,
+        runnerName: name,
+        runnerInvocation: runnerInvocation,
+      ),
     )
     ..addCommand(DownCommand())
     ..addCommand(StatusCommand())
