@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0-rc.3
+
+- Breaking: none new in this candidate — it continues the 0.3.0 line; the
+  migration notes under 0.3.0-rc.1 still apply.
+- Added: the memento org GitHub App identity (`kMementoOrgApp`) is authored and
+  exported, and every coded org seat carries it as its `app:` delivery identity
+  (space-u8q).
+- Added: every coded org seat carries a `githubPoll` reconciler value under the
+  org App installation, so the resident station polls the six org repositories
+  for issue intake. The defaults stand (1-minute interval, 5-second spacing,
+  live arm); one station owns intake for these repos (space-3ds).
+- Fix: `filing` and `approve` resolve a bead's seat by the longest coded prefix
+  at a complete identifier boundary, so roster prefixes may contain hyphens and
+  overlapping prefixes route to the right store (space-fvg).
+- Changed: requires `grid_assets` 0.6.0-rc.8. Approval is the `grid.approved_*`
+  stamp alone: the label clause is gone from the mount gate and `approve` adds
+  no label.
+
 ## 0.3.0-rc.2
 
 - Breaking: none new in this candidate — it continues the 0.3.0 line; the

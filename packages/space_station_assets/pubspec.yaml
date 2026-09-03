@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.3.0-rc.2
+version: 0.3.0-rc.3
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -46,7 +46,7 @@ dependencies:
   # types, CriticEnvironmentSeed, AvailabilityAssets, ProcessEnvironmentProbe —
   # power_station ADR-0006, beads pow-n6n.1/.2/.3) is absent from rc.6. It pins
   # genesis_tree ^0.3.0 for InheritedModelSeed, bumped above.
-  grid_assets: ^0.6.0-rc.7
+  grid_assets: ^0.6.0-rc.8
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
