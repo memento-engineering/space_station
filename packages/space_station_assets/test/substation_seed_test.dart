@@ -10,7 +10,6 @@ import 'package:grid_assets/grid_assets.dart'
         GitSourceControl,
         kApprovedAtKey,
         kApprovedByKey,
-        kApprovedLabel,
         kApprovedRevKey;
 import 'package:grid_engine/grid_engine.dart'
     show
@@ -153,7 +152,7 @@ void main() {
       final walk = owned.walk;
 
       // pow-50l shipped MountEligibilityAssets and NOTHING mounted it, so the
-      // gate was inert on every station: a bead with no `grid.approved` label
+      // gate was inert on every station: a bead with no `grid.approved_*` stamp
       // and an OPEN blocker was mounted by the live lunar arm within minutes
       // of being filed. Absence of this predicate is the whole defect.
       final gated = _gated(walk);
@@ -211,15 +210,6 @@ void main() {
       }
 
       expect(
-        await confirmedRefusal(_bead(labels: const [])),
-        isA<MountRefused>().having(
-          (r) => r.clause,
-          'clause',
-          contains(kApprovedLabel),
-        ),
-        reason: 'no grid.approved label — the human approval gate',
-      );
-      expect(
         await confirmedRefusal(_bead(metadata: const {})),
         isA<MountRefused>().having(
           (r) => r.clause,
@@ -235,10 +225,10 @@ void main() {
         isA<MountRefused>().having((r) => r.clause, 'clause', contains('type')),
         reason: 'an epic is organisational, never driveable',
       );
-      // The FOURTH leg, new in rc.6 (power_station `pow-kps`): the label
-      // WITHOUT the approve verb's receipt is not approval. Four `pow-n6n`
-      // children mounted ahead of their blockers on 2026-09-02 on a
-      // hand-added label alone.
+      // The approval leg (grid_assets rc.8, power_station `pow-vwny`): approval
+      // IS the approve verb's `grid.approved_*` stamp; the retired
+      // `grid.approved` label is never read. Four `pow-n6n` children mounted
+      // ahead of their blockers on 2026-09-02 on a hand-added label alone.
       expect(
         await confirmedRefusal(
           _bead(metadata: const {'validation_plan': 'dart test'}),
@@ -246,15 +236,15 @@ void main() {
         isA<MountRefused>().having(
           (r) => r.clause,
           'clause',
-          'approval: unstamped label - approve with the approve verb',
+          'approval: not approved - run the approve verb',
         ),
         reason:
-            'a hand-added grid.approved carries no grid.approved_at — only '
-            'the `space approve` verb writes the receipt',
+            'no grid.approved_at — only the `space approve` verb writes the '
+            'receipt, and nothing else readies work',
       );
       expect(
         store.reads,
-        hasLength(4),
+        hasLength(3),
         reason: 'exactly one confirming read per refusal, none per admit',
       );
     });
@@ -1237,7 +1227,7 @@ github.GitHubAppClient _fakeClient(_FakeTransport transport) =>
 
 /// The APPROVED metadata a mount-eligible bead carries: the plan the
 /// committee's gating lane runs, plus the three-key RECEIPT the `approve` verb
-/// writes (`grid_assets 0.6.0-rc.6` — the label alone is no longer approval).
+/// writes (`grid_assets 0.6.0-rc.8` — the stamp IS approval; no label).
 const Map<String, String> _approvedMetadata = {
   'validation_plan': 'dart analyze && dart test',
   kApprovedByKey: 'governor',
@@ -1246,11 +1236,11 @@ const Map<String, String> _approvedMetadata = {
 };
 
 /// A work bead shaped for the mount gate: driveable type + `validation_plan` +
-/// the `grid.approved` label + the approve verb's stamp. Each argument is
-/// overridden individually so a test can knock out exactly one leg of the four.
+/// the approve verb's `grid.approved_*` stamp. Each argument is overridden
+/// individually so a test can knock out exactly one leg of the three.
 Bead _bead({
   IssueType type = IssueType.task,
-  List<String> labels = const [kApprovedLabel],
+  List<String> labels = const [],
   Map<String, String> metadata = _approvedMetadata,
 }) => Bead(
   id: 'mine-1',
