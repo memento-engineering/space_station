@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0-rc.4
+
+- Breaking: none new in this candidate — it continues the 0.3.0 line; the
+  migration notes under 0.3.0-rc.1 still apply.
+- Changed: the typed-seat arming MECHANISM is the framework's. `AgentArming`,
+  `TypedEnvironmentProvider` and `SeatEnvironments` are no longer declared here
+  — they are consumed from `grid_assets` 0.6.0-rc.9 (power_station bead
+  `pow-lb0`) and RE-EXPORTED under the same names, so a downstream station's
+  `show AgentArming` import is unchanged. memento's POSTURE stays in this
+  package: the four named environments, the four canned ladders,
+  `buildMementoEnvironmentRegistry`, `kMementoStationArming` and
+  `preferenceArmingRefusal` (space-9c9).
+- Changed: requires `grid_assets` ^0.6.0-rc.9 and `github_grid_assets`
+  ^0.1.0-rc.9. That train carries `grid_cli` 0.5.0-rc.11, `grid_engine`
+  0.3.0-rc.11, `grid_runtime` 0.2.0-rc.9, `grid_sdk` 0.3.0-rc.9 and
+  `beads_dart` 0.2.0-rc.7 with it; rc.11's deleted `StationKernel` has no
+  caller in this repo.
+- Unchanged: `SubstationSeed`, `GitHubAppConfig` and `MountedSubstationSeed`
+  stay this package's own. github_grid_assets 0.1.0-rc.9 also vends a composed
+  `SubstationSeed`, but its `SubstationAppIdentity` carries an `int`
+  `installationId` where this package's `GitHubAppConfig` carries a `String`,
+  so adopting it is a migration of every seat authoring site rather than a
+  re-export — that is bead `space-ovd`'s scope.
+
 ## 0.3.0-rc.3
 
 - Breaking: none new in this candidate — it continues the 0.3.0 line; the

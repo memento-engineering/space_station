@@ -15,7 +15,6 @@
 /// side — see its `_latchHalted` comment).
 library;
 
-
 import 'package:args/args.dart' show ArgResults;
 // ignore: implementation_imports
 import 'package:grid_cli/src/station_control.dart' show StationStatus;

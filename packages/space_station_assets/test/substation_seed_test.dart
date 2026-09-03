@@ -6,11 +6,7 @@ import 'package:beads_dart/beads_dart.dart'
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
-    show
-        GitSourceControl,
-        kApprovedAtKey,
-        kApprovedByKey,
-        kApprovedRevKey;
+    show GitSourceControl, kApprovedAtKey, kApprovedByKey, kApprovedRevKey;
 import 'package:grid_engine/grid_engine.dart'
     show
         MountEligibilityDecision,
