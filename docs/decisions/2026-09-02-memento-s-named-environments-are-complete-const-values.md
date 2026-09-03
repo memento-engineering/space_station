@@ -12,7 +12,7 @@ register:
   obsoletes: []
   updates: []
   obsoleted-by: null
-  updated-by: []
+  updated-by: ["the-typed-seat-arming-mechanism-is-consumed-from-grid-assets"]
   bead: space-rz6
   legacy-id: null
 ---

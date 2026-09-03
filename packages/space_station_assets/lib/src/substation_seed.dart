@@ -31,6 +31,7 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
     show
+        AgentArming,
         AgentConfig,
         AvailableEnvironments,
         BuildAgentEnvironment,
@@ -38,14 +39,14 @@ import 'package:grid_assets/grid_assets.dart'
         GatherAgentEnvironment,
         GitSourceControl,
         MountEligibilityAssets,
-        SpecAgentEnvironment;
+        SeatEnvironments,
+        SpecAgentEnvironment,
+        TypedEnvironmentProvider;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, RootCheckout, StationGitService;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderTreeContext;
-
-import 'agent_arming.dart';
 
 /// A GitHub App DELIVERY IDENTITY — config identity ONLY, a plain value type.
 ///

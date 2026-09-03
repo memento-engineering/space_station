@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.3.0-rc.3
+version: 0.3.0-rc.4
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -38,15 +38,17 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  # rc.6 is the floor: GitHubReconcilerBindingAssets provides each live seat's
-  # durable cursor store and deferred-intake sink to GitHubReconcilerAssets.
-  github_grid_assets: ^0.1.0-rc.7
-  # rc.7 is the floor: the TYPED environment lookup (ModelPreference,
-  # AvailableEnvironments, resolveEnvironment, the four <Seat>AgentEnvironment
-  # types, CriticEnvironmentSeed, AvailabilityAssets, ProcessEnvironmentProbe —
-  # power_station ADR-0006, beads pow-n6n.1/.2/.3) is absent from rc.6. It pins
-  # genesis_tree ^0.3.0 for InheritedModelSeed, bumped above.
-  grid_assets: ^0.6.0-rc.8
+  # rc.9 is the floor: it is the release that FLOORS grid_assets ^0.6.0-rc.9,
+  # so the arming mechanism this package now consumes and the GitHub assets it
+  # composes agree on one grid_assets. Its own composed SubstationSeed is
+  # deliberately NOT adopted here — see space-ovd.
+  github_grid_assets: ^0.1.0-rc.9
+  # rc.9 is the floor: the typed-seat arming MECHANISM (AgentArming,
+  # TypedEnvironmentProvider, SeatEnvironments — power_station bead pow-lb0) is
+  # VENDED there, from lib/src/agent/seat_environments.dart, and this package
+  # deleted its own copies to consume it. rc.8 has the typed seat VOCABULARY
+  # but not the mechanism. It pins genesis_tree ^0.3.0 for InheritedModelSeed.
+  grid_assets: ^0.6.0-rc.9
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;

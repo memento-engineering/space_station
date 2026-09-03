@@ -54,6 +54,7 @@ import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
+        AgentArming,
         AgentConfig,
         AvailableEnvironments,
         BuildAgentEnvironment,
@@ -63,7 +64,9 @@ import 'package:grid_assets/grid_assets.dart'
         HarnessProvider,
         MountEligibilityAssets,
         ProcessEnvironmentProbe,
+        SeatEnvironments,
         SpecAgentEnvironment,
+        TypedEnvironmentProvider,
         buildCodeRegistry,
         mountedValueOf,
         mountedValuesOf;

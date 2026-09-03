@@ -4,10 +4,20 @@
 /// per-substation rung; `docs/adr/ADR-0006-typed-environment-lookup-selects-by-value.md`
 /// D1/D2 the VALUE-keyed typed rung).
 ///
+/// MECHANISM IS VENDED, POSTURE IS NOT. [AgentArming], `TypedEnvironmentProvider`
+/// and `SeatEnvironments` are the FRAMEWORK's — grid_assets 0.6.0-rc.9,
+/// `lib/src/agent/seat_environments.dart` (power_station bead `pow-lb0`) — and
+/// are consumed from there, then re-exported unchanged by
+/// `lib/space_station_assets.dart` so a downstream station's `show AgentArming`
+/// keeps resolving. What this library owns is memento's POSTURE alone: the four
+/// named environments, the four canned ladders, the registry over them, the
+/// coded station arming and the boot-eager guard. Recorded at
+/// `docs/decisions/2026-09-03-the-typed-seat-arming-mechanism-is-consumed-from-grid-assets.md`.
+///
 /// The ladder is: station default -> substation seat -> bead (`grid.agent`) ->
 /// step (`StepArgs.params`). This library owns the top TWO rungs as pure
 /// VALUES ("config = VALUES in the tree; impls are DI"): [kMementoStationArming]
-/// is the station's, and a [SubstationSeed]'s own [AgentArming] nests UNDER it.
+/// is the station's, and a `SubstationSeed`'s own [AgentArming] nests UNDER it.
 /// Selection is by TYPE and VALUE — there is no role map, no name key and no
 /// operator-flag rung (ADR-0002 D4). NO endpoint url appears in this file:
 /// WHERE an environment runs is its own `InferenceTarget`, bound on the box by
@@ -30,14 +40,13 @@
 /// `docs/decisions/2026-09-02-memento-s-named-environments-are-complete-const-values.md`.
 library;
 
-import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
+        AgentArming,
         AgentEnvironment,
         AvailableEnvironments,
         BuildAgentEnvironment,
         CriticAgentEnvironment,
-        CriticEnvironmentSeed,
         EnvBaseStandalone,
         EnvironmentRegistry,
         GatherAgentEnvironment,
@@ -45,8 +54,7 @@ import 'package:grid_assets/grid_assets.dart'
         ModelPreference,
         PromptMode,
         SpecAgentEnvironment,
-        kBuiltinEnvironments,
-        resolveEnvironment;
+        kBuiltinEnvironments;
 
 /// Build strong: claude at the frontier tier. COMPLETE and standalone (see the
 /// library doc): the transport fields mirror `kBuiltinEnvironments['claude']`.
@@ -142,159 +150,6 @@ const List<AgentEnvironment> kCodexLadder = [
   kCodexFrontierEnvironment,
   kFrontierEnvironment,
 ];
-
-/// One ARMING of the TYPED environment seats — a station's or a seat's say in
-/// which environment each capability runs on. A pure VALUE; it carries no
-/// behavior and reaches no service. A null field leaves that seat to the
-/// nearest ancestor's arming (ADR-0006 D2: the TYPE is the scope).
-class AgentArming {
-  /// Creates an arming over the seats it names; every field is optional.
-  const AgentArming({this.build, this.spec, this.critic, this.gather});
-
-  /// The BUILD seat (the coding agent).
-  final BuildAgentEnvironment? build;
-
-  /// The SPEC seat (the architect / specify stage).
-  final SpecAgentEnvironment? spec;
-
-  /// The CRITIC seat (every committee lane), with optional per-lane overrides.
-  final CriticAgentEnvironment? critic;
-
-  /// The GATHER seat (the read-only discovery explorers).
-  final GatherAgentEnvironment? gather;
-
-  /// Whether this arming says nothing at all.
-  bool get isEmpty =>
-      build == null && spec == null && critic == null && gather == null;
-
-  /// The armed seats, BUILD first — the order [preferenceArmingRefusal] walks.
-  Iterable<ModelPreference> get seats => [
-    if (build != null) build!,
-    if (spec != null) spec!,
-    if (critic != null) critic!,
-    if (gather != null) gather!,
-  ];
-
-  @override
-  bool operator ==(Object other) =>
-      other is AgentArming &&
-      other.build == build &&
-      other.spec == spec &&
-      other.critic == critic &&
-      other.gather == gather;
-
-  @override
-  int get hashCode => Object.hash(build, spec, critic, gather);
-
-  @override
-  String toString() =>
-      'AgentArming(build: $build, spec: $spec, critic: $critic, '
-      'gather: $gather)';
-}
-
-/// Provides an [arming]'s TYPED seats over its subtree — the ONE seed both the
-/// station rung and the per-substation rung mount (ADR-0002 D5, ADR-0006 D2).
-///
-/// A NESTED instance shadows only the types it arms: an unarmed seat keeps
-/// resolving through the enclosing provider, because `resolveEnvironment`
-/// reads by EXACT type and finds the nearest ancestor of that type.
-final class TypedEnvironmentProvider extends SingleChildStatelessSeed {
-  /// Provides [arming]'s seats over [child].
-  const TypedEnvironmentProvider({
-    required this.arming,
-    super.child,
-    super.key,
-  });
-
-  /// The seats this provider mounts.
-  final AgentArming arming;
-
-  @override
-  Seed buildWithChild(TreeContext context, Seed child) {
-    var below = child;
-    final gather = arming.gather;
-    if (gather != null) {
-      below = InheritedSeed<GatherAgentEnvironment>(
-        value: gather,
-        child: below,
-      );
-    }
-    final critic = arming.critic;
-    if (critic != null) {
-      // CriticEnvironmentSeed, not a plain InheritedSeed: a BUILD-time
-      // dependent may scope its invalidation to ONE CriticLane. Spawn edges
-      // read the same value with the effect verb and pay nothing for it.
-      below = CriticEnvironmentSeed(value: critic, child: below);
-    }
-    final spec = arming.spec;
-    if (spec != null) {
-      below = InheritedSeed<SpecAgentEnvironment>(value: spec, child: below);
-    }
-    final build = arming.build;
-    if (build != null) {
-      below = InheritedSeed<BuildAgentEnvironment>(value: build, child: below);
-    }
-    return below;
-  }
-}
-
-/// The four typed lookups RESOLVED at one point in the tree — the offline
-/// projection the `up` banner prints and the suites assert. A pure VALUE.
-final class SeatEnvironments {
-  /// Creates the projection over its four resolved environments.
-  const SeatEnvironments({this.build, this.spec, this.critic, this.gather});
-
-  /// Resolves all four seats at [context] through the VENDED resolvers (one
-  /// availability walk each). These are effect-boundary reads
-  /// (`getInheritedSeedOfExactType`), so a caller that runs this inside a
-  /// `build` subscribes to the same values FIRST with `dependOn*` — the D-H
-  /// doctrine (ADR-0008 D3; power_station ADR-0000 A8(3)/A35(6)).
-  factory SeatEnvironments.of(TreeContext context) => SeatEnvironments(
-    build: resolveEnvironment<BuildAgentEnvironment>(context),
-    spec: resolveEnvironment<SpecAgentEnvironment>(context),
-    critic: CriticAgentEnvironment.of(context),
-    gather: resolveEnvironment<GatherAgentEnvironment>(context),
-  );
-
-  /// The BUILD seat's resolved environment; null when nothing is armed or
-  /// nothing preferred is present (the caller falls to the ambient rung).
-  final AgentEnvironment? build;
-
-  /// The SPEC seat's resolved environment.
-  final AgentEnvironment? spec;
-
-  /// The CRITIC seat's resolved environment (the shared, laneless preference).
-  final AgentEnvironment? critic;
-
-  /// The GATHER seat's resolved environment.
-  final AgentEnvironment? gather;
-
-  /// This projection rendered with [registry]'s NAMES — the banner line. The
-  /// name is restored at the boundary exactly as `resolveAgentConfig` does it
-  /// (`EnvironmentRegistry.nameOf`; power_station ADR-0000 A35(2)).
-  String describe(EnvironmentRegistry registry) {
-    String named(AgentEnvironment? environment) =>
-        environment == null ? '<ambient>' : registry.nameOf(environment);
-    return 'build ${named(build)}  ·  spec ${named(spec)}  ·  '
-        'critic ${named(critic)}  ·  gather ${named(gather)}';
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is SeatEnvironments &&
-      other.build == build &&
-      other.spec == spec &&
-      other.critic == critic &&
-      other.gather == gather;
-
-  @override
-  int get hashCode => Object.hash(build, spec, critic, gather);
-
-  @override
-  String toString() =>
-      'SeatEnvironments(build: $build, spec: $spec, critic: $critic, '
-      'gather: $gather)';
-}
 
 /// memento's CODED station posture: codex BUILDS under a claude committee.
 ///
