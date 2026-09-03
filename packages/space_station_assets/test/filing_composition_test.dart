@@ -265,7 +265,8 @@ void main() {
       final argv = bd.updates.single;
       expect(argv.take(2), ['update', 'pow-child']);
       expect(argv, containsAllInOrder(['--actor', 'governor']));
-      expect(argv, containsAllInOrder(['--add-label', 'grid.approved']));
+      // grid_assets rc.8: the stamp IS approval — the verb adds no label.
+      expect(argv, isNot(contains('--add-label')));
       expect(_metadataOf(argv), {
         'grid.approved_by': 'governor',
         'grid.approved_at': '2026-09-02T14:30:00.000Z',
