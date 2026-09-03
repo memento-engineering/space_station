@@ -116,7 +116,7 @@ void main() {
   group('the org DELIVERY IDENTITY — the memento App, per substation '
       '(space-u8q)', () {
     test('every org seat carries the memento App identity as its OWN value, '
-        'and no seat gains polling or a landing policy', () {
+        'and no seat gains a landing policy', () {
       final seats = _capturedSeats(delegate());
       expect(seats.map((seat) => seat.name), [
         'genesis',
@@ -130,9 +130,9 @@ void main() {
       expect(kMementoOrgApp.appId, '4529262');
       expect(kMementoOrgApp.installationId, '152260260');
       expect(kMementoOrgApp.privateKeyVar, 'GRID_GITHUB_APP_KEY_MEMENTO');
-      // DELIVERY identity only. Polling is space-3ds; the deliver/commit-only
-      // selection is space-9d0. Neither field is authored here.
-      expect(seats.map((seat) => seat.githubPoll), everyElement(isNull));
+      // DELIVERY identity here; the poll VALUES are pinned by the intake group
+      // below (space-3ds). The deliver / commit-only selection is space-9d0 and
+      // is still unauthored.
       expect(seats.map((seat) => seat.landingPolicy), everyElement(isNull));
     });
 
@@ -173,6 +173,52 @@ void main() {
     });
   });
 
+  group('the org INTAKE — GitHub polling, per substation (space-3ds)', () {
+    test('every org seat polls its OWN repository under the org App '
+        'installation, and the three cadence defaults stand', () {
+      final seats = _capturedSeats(delegate());
+      expect(seats.map((seat) => seat.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+      ]);
+      for (final seat in seats) {
+        final poll = seat.githubPoll;
+        expect(poll, isNotNull, reason: '${seat.name} must poll');
+        expect(poll!.owner, 'memento-engineering');
+        // repository AND substation are the SEAT NAME — never the bead-id
+        // prefix, which addresses the work store and not GitHub.
+        expect(poll.repository, seat.name);
+        expect(poll.substation, seat.name);
+        // ONE App: the poll installation IS the delivery installation.
+        expect(poll.installationId, kMementoOrgApp.installationId);
+        expect(poll.installationId, '152260260');
+        // Unauthored, so the package defaults stand.
+        expect(poll.arm, github.GitHubReconcilerArm.live);
+        expect(poll.interval, const Duration(minutes: 1));
+        expect(poll.minimumSpacing, const Duration(seconds: 5));
+      }
+    });
+
+    test('a downstream override inherits the six polling org seats through '
+        'super and keeps its own seat on its own installation', () {
+      final seats = _capturedSeats(
+        _DownstreamDelegate(gridRoot: '/home/me/my_station'),
+      );
+      expect(seats, hasLength(7));
+      expect(
+        seats.take(6).map((seat) => seat.githubPoll?.installationId),
+        everyElement('152260260'),
+      );
+      expect(seats.last.name, 'mine');
+      expect(seats.last.githubPoll?.installationId, '1');
+      expect(seats.last.githubPoll?.arm, github.GitHubReconcilerArm.offline);
+    });
+  });
+
   group('the SUBCLASS extension seam — a downstream station overrides the '
       'delegate hooks (extend, never fork)', () {
     test('an overridden substations() composes super\'s org (at the '
@@ -206,36 +252,46 @@ void main() {
       expect(scopes, hasLength(7));
     });
 
-    test(
-      'coded roster snapshot keeps scopes and reports only GitHub polling seats',
-      () {
-        final base = codedRosterSnapshotOf(
-          SpaceDelegate.new,
-          gridRoot: gridHome,
-        );
-        expect(base.scopes.map((scope) => scope.name), [
-          'genesis',
-          'the_grid',
-          'power_station',
-          'space_station',
-          'lenny',
-          'decisions',
-        ]);
-        expect(base.githubPollingSeatNames, isEmpty);
+    test('coded roster snapshot keeps scopes and reports every GitHub polling '
+        'seat — the six org seats, plus a downstream seat that polls', () {
+      final base = codedRosterSnapshotOf(SpaceDelegate.new, gridRoot: gridHome);
+      expect(base.scopes.map((scope) => scope.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+      ]);
+      expect(base.githubPollingSeatNames, {
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+      });
 
-        final downstream = codedRosterSnapshotOf(_DownstreamDelegate.new);
-        expect(downstream.scopes.map((scope) => scope.name), [
-          'genesis',
-          'the_grid',
-          'power_station',
-          'space_station',
-          'lenny',
-          'decisions',
-          'mine',
-        ]);
-        expect(downstream.githubPollingSeatNames, {'mine'});
-      },
-    );
+      final downstream = codedRosterSnapshotOf(_DownstreamDelegate.new);
+      expect(downstream.scopes.map((scope) => scope.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+        'mine',
+      ]);
+      expect(downstream.githubPollingSeatNames, {
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+        'mine',
+      });
+    });
   });
 
   group(
