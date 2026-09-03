@@ -201,38 +201,69 @@ void main() {
       },
     );
 
-    test(
-      'live boot skips gh when the coded roster has no GitHub polling seats',
-      () async {
-        final roster = codedRosterSnapshotOf(
-          SpaceDelegate.new,
-          gridRoot: '/home/memento/space_station',
-        );
-        var calls = 0;
-        final diagnostics = <String>[];
-        Future<ProcessResult> fakeGh(
-          String executable,
-          List<String> arguments, {
-          String? workingDirectory,
-        }) async {
-          calls += 1;
-          return ProcessResult(1, 0, 'NiCo\n', '');
-        }
+    test('resolveGitHubSelfTrustFromGh SKIPS gh when NO armed seat polls — the '
+        'function\'s own contract, keyed on the flag; and the coded roster now '
+        'reports six polling seats, so a live boot reaches the probe instead '
+        '(space-3ds)', () async {
+      var calls = 0;
+      final diagnostics = <String>[];
+      Future<ProcessResult> fakeGh(
+        String executable,
+        List<String> arguments, {
+        String? workingDirectory,
+      }) async {
+        calls += 1;
+        return ProcessResult(1, 0, 'NiCo\n', '');
+      }
 
-        final trust = await resolveGitHubSelfTrustFromGh(
-          workingDirectory: '/home/memento/space_station',
-          githubPollingConfigured: roster.githubPollingSeatNames.isNotEmpty,
-          writeDiagnostic: diagnostics.add,
-          timeout: const Duration(milliseconds: 10),
-          run: fakeGh,
-        );
+      final trust = await resolveGitHubSelfTrustFromGh(
+        workingDirectory: '/home/memento/space_station',
+        githubPollingConfigured: false,
+        writeDiagnostic: diagnostics.add,
+        timeout: const Duration(milliseconds: 10),
+        run: fakeGh,
+      );
 
-        expect(roster.githubPollingSeatNames, isEmpty);
-        expect(calls, 0);
-        expect(trust, isNull);
-        expect(diagnostics, isEmpty);
-      },
-    );
+      expect(calls, 0, reason: 'the flag alone gates the probe');
+      expect(trust, isNull);
+      expect(diagnostics, isEmpty);
+
+      // The PRODUCTION input to that flag is no longer empty: `up` computes
+      // `githubPollingArmed` from this set (up_command.dart:444-446), so a
+      // live boot over the real umbrella takes the probe branch, not this one.
+      final roster = codedRosterSnapshotOf(
+        SpaceDelegate.new,
+        gridRoot: '/home/memento/space_station',
+      );
+      expect(roster.githubPollingSeatNames, hasLength(6));
+    });
+
+    test('the six LIVE poll values author NO reconciler runtime on an OFFLINE '
+        'mount: without self trust the per-seat binding provides no cursor '
+        'store or sink, and the App client resolves asynchronously so a '
+        'synchronous flush never has one (space-3ds)', () {
+      expect(
+        _mountedValues<github.GitHubReconcilerRuntime>(
+          _Author(delegate(live: true)),
+        ),
+        isEmpty,
+      );
+      expect(
+        _mountedValues<github.GitHubReconcilerRuntime>(
+          _Author(
+            delegate(
+              live: true,
+              githubSelfTrust: github.GitHubSelfTrust(githubUser: 'NiCo'),
+            ),
+          ),
+        ),
+        isEmpty,
+        reason:
+            'trust alone does not arm a runtime — GitHubReconcilerAssets also '
+            'requires a GitHubAppClient, which the credential load never '
+            'produces within one synchronous flush',
+      );
+    });
 
     test('an appended (--substation) seat mounts clean after the literal '
         'coded org (space-6ds: the six coded seats are always authored)', () {

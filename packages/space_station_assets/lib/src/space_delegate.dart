@@ -542,12 +542,31 @@ class SpaceDelegate extends sdk.GridDelegate {
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
+    // ONE STATION OWNS INTAKE FOR THESE REPOS. Each seat below carries its own
+    // `githubPoll` VALUE, so whichever station runs resident polls all six of
+    // them; two resident stations over the same umbrella would intake the same
+    // issues twice. The one-grid-per-machine rule already fences that, exactly
+    // as it fences the delivery identity above (kMementoOrgApp).
+    //
+    // The poll `repository` and `substation` are the SEAT NAME. The bead-id
+    // `prefix` (`tg`/`pow`/`space`/`dec`) addresses the WORK STORE and has
+    // nothing to do with polling.
+    //
+    // The three defaults stand unauthored — interval 1 minute, minimum
+    // spacing 5 seconds, arm live — which is the posture the downstream
+    // station's private seats already run under.
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
     SubstationSeed(
       name: 'genesis',
       root: p.join(umbrella, 'genesis'),
       app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'genesis',
+        substation: 'genesis',
+        installationId: '152260260',
+      ),
     ),
     // the framework — self-host; `tg` is the shared Dolt server (gc
     // coexists: read tg's frontier, write sessions to houston — A37)
@@ -556,6 +575,12 @@ class SpaceDelegate extends sdk.GridDelegate {
       root: p.join(umbrella, 'the_grid'),
       prefix: 'tg',
       app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'the_grid',
+        substation: 'the_grid',
+        installationId: '152260260',
+      ),
     ),
     // the asset packs — self-host, and the org's EVALUATION seat: its BUILD
     // build seat is armed on `frontier` (claude/opus) while every other seat rides
@@ -569,6 +594,12 @@ class SpaceDelegate extends sdk.GridDelegate {
       root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
       app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'power_station',
+        substation: 'power_station',
+        installationId: '152260260',
+      ),
       arming: const AgentArming(build: BuildAgentEnvironment(kFrontierLadder)),
     ),
     // the runner — self-host; for space this IS the grid home. Its store
@@ -580,12 +611,24 @@ class SpaceDelegate extends sdk.GridDelegate {
       root: p.join(umbrella, 'space_station'),
       prefix: 'space',
       app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'space_station',
+        substation: 'space_station',
+        installationId: '152260260',
+      ),
     ),
     // the debug harness (memento-engineering/lenny)
     SubstationSeed(
       name: 'lenny',
       root: p.join(umbrella, 'lenny'),
       app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'lenny',
+        substation: 'lenny',
+        installationId: '152260260',
+      ),
     ),
     // the decision record (memento-engineering/decisions); its store mints
     // `dec-`, so the prefix differs from the repository name.
@@ -594,6 +637,12 @@ class SpaceDelegate extends sdk.GridDelegate {
       root: p.join(umbrella, 'decisions'),
       prefix: 'dec',
       app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'decisions',
+        substation: 'decisions',
+        installationId: '152260260',
+      ),
     ),
   ];
 }
