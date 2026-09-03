@@ -100,6 +100,32 @@ typedef SpaceDelegateFactory =
 /// station-owned write chokepoint.
 typedef NoteAppender = Future<void> Function(String beadId, String line);
 
+/// The memento org's ONE GitHub App delivery identity — the `grid-assets` App
+/// installed on `memento-engineering` (`repository_selection: all`), carried as
+/// a VALUE by each of the six org seats [SpaceDelegate.substations] authors.
+///
+/// PER SUBSTATION, never per station (pow-1rn): this is a shared value, not a
+/// station-level identity and not a name-keyed map. Nothing mounts it above the
+/// substation fan-out; a seat delivering under a DIFFERENT App simply passes a
+/// different [GitHubAppConfig], which is how a downstream station's private
+/// seats keep their own App while inheriting these six through `super`.
+///
+/// ONE STATION OWNS DELIVERY FOR THESE REPOS. Whichever station runs resident
+/// carries this identity; two resident stations over the same umbrella would
+/// deliver twice, which the one-grid-per-machine rule already fences.
+///
+/// [GitHubAppConfig] holds non-secret identifiers only.
+/// [GitHubAppConfig.privateKeyVar] is the NAME of an environment variable whose
+/// VALUE is a path to the PEM key; this library never reads the environment —
+/// the injected `github.GitHubAppClientAssets` resolves it at effect time. With
+/// `GRID_GITHUB_APP_KEY_MEMENTO` unset the seat composes INERT and the ambient
+/// opener stands: a missing key is a posture, never a boot error.
+const kMementoOrgApp = GitHubAppConfig(
+  appId: '4529262',
+  installationId: '152260260',
+  privateKeyVar: 'GRID_GITHUB_APP_KEY_MEMENTO',
+);
+
 /// Enumerates the CODED roster plus its GitHub-polling seat names from one
 /// shared offline mount of the station [factory] authors.
 ///
@@ -518,13 +544,18 @@ class SpaceDelegate extends sdk.GridDelegate {
   ) => [
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
-    SubstationSeed(name: 'genesis', root: p.join(umbrella, 'genesis')),
+    SubstationSeed(
+      name: 'genesis',
+      root: p.join(umbrella, 'genesis'),
+      app: kMementoOrgApp,
+    ),
     // the framework — self-host; `tg` is the shared Dolt server (gc
     // coexists: read tg's frontier, write sessions to houston — A37)
     SubstationSeed(
       name: 'the_grid',
       root: p.join(umbrella, 'the_grid'),
       prefix: 'tg',
+      app: kMementoOrgApp,
     ),
     // the asset packs — self-host, and the org's EVALUATION seat: its BUILD
     // build seat is armed on `frontier` (claude/opus) while every other seat rides
@@ -537,6 +568,7 @@ class SpaceDelegate extends sdk.GridDelegate {
       name: 'power_station',
       root: p.join(umbrella, 'power_station'),
       prefix: 'pow',
+      app: kMementoOrgApp,
       arming: const AgentArming(build: BuildAgentEnvironment(kFrontierLadder)),
     ),
     // the runner — self-host; for space this IS the grid home. Its store
@@ -547,15 +579,21 @@ class SpaceDelegate extends sdk.GridDelegate {
       name: 'space_station',
       root: p.join(umbrella, 'space_station'),
       prefix: 'space',
+      app: kMementoOrgApp,
     ),
     // the debug harness (memento-engineering/lenny)
-    SubstationSeed(name: 'lenny', root: p.join(umbrella, 'lenny')),
+    SubstationSeed(
+      name: 'lenny',
+      root: p.join(umbrella, 'lenny'),
+      app: kMementoOrgApp,
+    ),
     // the decision record (memento-engineering/decisions); its store mints
     // `dec-`, so the prefix differs from the repository name.
     SubstationSeed(
       name: 'decisions',
       root: p.join(umbrella, 'decisions'),
       prefix: 'dec',
+      app: kMementoOrgApp,
     ),
   ];
 }

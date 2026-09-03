@@ -23,6 +23,8 @@ import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, PullRequestRef, PullRequestResult, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderScope;
+import 'package:space_station_assets/src/space_delegate.dart'
+    show kMementoOrgApp;
 import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
@@ -493,6 +495,87 @@ void main() {
         [('101', '201'), ('102', '202')],
       );
     });
+
+    test('the memento org identity with GRID_GITHUB_APP_KEY_MEMENTO UNSET '
+        'composes INERT: no client, the ambient opener stands', () async {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final ambient = _FakePrOpener();
+      final root = owner.mountRoot(
+        ProviderScope(
+          child: Provider<PrOpener>.value(
+            ambient,
+            child: Provider<GitOps>(
+              create: (_) => GitOps(SystemGitRunner()),
+              child: sdk.RawAssetGrid(
+                root: '/home/me/station',
+                assets: [
+                  SubstationSeed(
+                    name: 'genesis',
+                    root: '../genesis',
+                    app: kMementoOrgApp,
+                    githubAppCredentialLoader:
+                        _FakeGitHubAppCredentials.loaderFor(const {}),
+                    githubTransportFactory: _FakeGitHubAppCredentials.transport,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await _settle(owner);
+      final walk = _Walk(root);
+      // The identity is authored even when the key is absent: a missing key
+      // is a POSTURE, never a boot error.
+      expect(walk.values<GitHubAppConfig>().single, kMementoOrgApp);
+      expect(walk.values<github.GitHubAppClient>(), isEmpty);
+      expect(identical(walk.values<PrOpener>().single, ambient), isTrue);
+    });
+
+    test(
+      'the memento org identity with GRID_GITHUB_APP_KEY_MEMENTO SET '
+      'provides the seat client and an App opener over the ambient one',
+      () async {
+        final owner = TreeOwner();
+        addTearDown(owner.dispose);
+        final ambient = _FakePrOpener();
+        final root = owner.mountRoot(
+          ProviderScope(
+            child: Provider<PrOpener>.value(
+              ambient,
+              child: Provider<GitOps>(
+                create: (_) => GitOps(SystemGitRunner()),
+                child: sdk.RawAssetGrid(
+                  root: '/home/me/station',
+                  assets: [
+                    SubstationSeed(
+                      name: 'genesis',
+                      root: '../genesis',
+                      app: kMementoOrgApp,
+                      githubAppCredentialLoader:
+                          _FakeGitHubAppCredentials.loaderFor(const {
+                            'GRID_GITHUB_APP_KEY_MEMENTO':
+                                _FakeGitHubAppCredentials.keyPath,
+                          }),
+                      githubTransportFactory:
+                          _FakeGitHubAppCredentials.transport,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await _settle(owner);
+        final walk = _Walk(root);
+        expect(walk.values<github.GitHubAppClient>(), hasLength(1));
+        final openers = walk.values<PrOpener>();
+        expect(openers, hasLength(2));
+        expect(identical(openers.first, ambient), isTrue);
+        expect(openers.last, isA<github.GitHubAppPrOpener>());
+      },
+    );
   });
 
   test(
@@ -1199,6 +1282,13 @@ final class _FakeGitHubAppCredentials {
   static github.GitHubAppCredentialLoader loader() =>
       github.GitHubAppCredentialLoader(
         environment: environment,
+        stat: stat,
+        read: read,
+      );
+
+  static github.GitHubAppCredentialLoader loaderFor(Map<String, String> env) =>
+      github.GitHubAppCredentialLoader(
+        environment: () => env,
         stat: stat,
         read: read,
       );

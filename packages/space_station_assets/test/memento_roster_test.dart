@@ -113,6 +113,66 @@ void main() {
     });
   });
 
+  group('the org DELIVERY IDENTITY — the memento App, per substation '
+      '(space-u8q)', () {
+    test('every org seat carries the memento App identity as its OWN value, '
+        'and no seat gains polling or a landing policy', () {
+      final seats = _capturedSeats(delegate());
+      expect(seats.map((seat) => seat.name), [
+        'genesis',
+        'the_grid',
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+      ]);
+      expect(seats.map((seat) => seat.app), everyElement(kMementoOrgApp));
+      expect(kMementoOrgApp.appId, '4529262');
+      expect(kMementoOrgApp.installationId, '152260260');
+      expect(kMementoOrgApp.privateKeyVar, 'GRID_GITHUB_APP_KEY_MEMENTO');
+      // DELIVERY identity only. Polling is space-3ds; the deliver/commit-only
+      // selection is space-9d0. Neither field is authored here.
+      expect(seats.map((seat) => seat.githubPoll), everyElement(isNull));
+      expect(seats.map((seat) => seat.landingPolicy), everyElement(isNull));
+    });
+
+    test('the identity binds PER SUBSTATION: six identity providers, each over '
+        'exactly one substation scope — none above the fan-out, no name-keyed '
+        'map', () {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final root = owner.mountRoot(_Author(delegate()));
+      owner.flush();
+      final identities = _branches<GitHubAppConfig>(root);
+      expect(identities, hasLength(6));
+      expect(identities.map((branch) => branch.value).toSet(), {
+        kMementoOrgApp,
+      });
+      for (final identity in identities) {
+        expect(
+          _branches<sdk.SubstationScope>(identity),
+          hasLength(1),
+          reason: 'an identity above the fan-out would carry all six scopes',
+        );
+      }
+    });
+
+    test('a downstream override inherits the six org seats WITH the memento '
+        'App through super, and its own seat keeps its own identity', () {
+      final seats = _capturedSeats(
+        _DownstreamDelegate(gridRoot: '/home/me/my_station'),
+      );
+      expect(seats, hasLength(7));
+      expect(
+        seats.take(6).map((seat) => seat.app),
+        everyElement(kMementoOrgApp),
+      );
+      expect(seats.last.name, 'mine');
+      expect(seats.last.app, _downstreamApp);
+      expect(seats.last.app?.privateKeyVar, 'GRID_GITHUB_APP_KEY_NICHOLAS');
+    });
+  });
+
   group('the SUBCLASS extension seam — a downstream station overrides the '
       'delegate hooks (extend, never fork)', () {
     test('an overridden substations() composes super\'s org (at the '
@@ -274,22 +334,63 @@ void main() {
   );
 }
 
+/// Calls [delegate]'s roster hook with a live [TreeContext] and returns the
+/// authored seeds — the VALUES only. The seats themselves are never mounted,
+/// so no seat asset resolves a credential and the read is machine-independent.
+List<SubstationSeed> _capturedSeats(SpaceDelegate delegate) {
+  final captured = <Seed>[];
+  final owner = TreeOwner();
+  addTearDown(owner.dispose);
+  owner.mountRoot(_RosterCapture(delegate, captured));
+  owner.flush();
+  return captured.cast<SubstationSeed>();
+}
+
+/// Collects every [InheritedBranch] of [T] under [root], in tree order.
+List<InheritedBranch<T>> _branches<T extends Object>(Branch root) {
+  final found = <InheritedBranch<T>>[];
+  void walk(Branch branch) {
+    if (branch is InheritedBranch<T>) found.add(branch);
+    branch.visitChildren(walk);
+  }
+
+  walk(root);
+  return found;
+}
+
+/// Mounts [delegate]'s roster hook and records the seeds it authored.
+class _RosterCapture extends StatelessSeed {
+  const _RosterCapture(this.delegate, this.captured);
+
+  final SpaceDelegate delegate;
+  final List<Seed> captured;
+
+  @override
+  Seed build(TreeContext context) {
+    captured
+      ..clear()
+      ..addAll(delegate.substations(context, const sdk.GridConfiguration()));
+    return const _Leaf();
+  }
+}
+
+/// A childless leaf — the capture's inert subtree.
+class _Leaf extends MultiChildSeed {
+  const _Leaf() : super(children: const []);
+}
+
 /// Mounts [root] in a bare tree, flushes one build pass (the Track B/F
 /// template, mirroring `space_delegate_test.dart`), and walks the mounted
 /// branches collecting every provided [sdk.SubstationScope] in tree order —
 /// the seats [SpaceDelegate.build] actually authored.
 List<sdk.SubstationScope> _mountedSeats(Seed root) {
   final owner = TreeOwner();
+  addTearDown(owner.dispose);
   final branch = owner.mountRoot(root);
   owner.flush();
-  final seats = <sdk.SubstationScope>[];
-  void walk(Branch b) {
-    if (b is InheritedBranch<sdk.SubstationScope>) seats.add(b.value);
-    b.visitChildren(walk);
-  }
-
-  walk(branch);
-  return seats;
+  return _branches<sdk.SubstationScope>(
+    branch,
+  ).map((seat) => seat.value).toList();
 }
 
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the
@@ -303,6 +404,15 @@ class _Author extends StatelessSeed {
   Seed build(TreeContext context) =>
       delegate.build(context, const sdk.GridConfiguration());
 }
+
+/// The DOWNSTREAM station's own App (lunar's shape): a SECOND identity on a
+/// SECOND key variable. Each seat carries exactly one — neither station gains
+/// a second identity.
+const _downstreamApp = GitHubAppConfig(
+  appId: '9001',
+  installationId: '9002',
+  privateKeyVar: 'GRID_GITHUB_APP_KEY_NICHOLAS',
+);
 
 /// The downstream-station shape, in miniature (the lunar pattern): a
 /// [SpaceDelegate] SUBCLASS whose constructor mirrors the base via
@@ -337,6 +447,7 @@ class _DownstreamDelegate extends SpaceDelegate {
       name: 'mine',
       root: '../mine',
       prefix: 'mn',
+      app: _downstreamApp,
       githubPoll: const github.GitHubReconcilerConfig(
         owner: 'memento',
         repository: 'mine',

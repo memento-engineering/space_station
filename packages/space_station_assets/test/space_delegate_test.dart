@@ -412,6 +412,10 @@ void main() {
 /// template).
 void _mount(Seed root) {
   final owner = TreeOwner();
+  // The coded seats carry the org App (space-u8q), so each mounts a
+  // GitHubAppClientAssets that starts a credential load. Disposing at teardown
+  // makes that load a no-op instead of letting it outlive the test.
+  addTearDown(owner.dispose);
   owner.mountRoot(root);
   owner.flush();
 }
@@ -439,6 +443,7 @@ List<T> _mountedValues<T extends Object>(Seed seed) {
 /// substation by taking `delivery != null` counts where bound.
 List<ServiceBundle> _mountedBundles(Seed root) {
   final owner = TreeOwner();
+  addTearDown(owner.dispose);
   final branch = owner.mountRoot(root);
   owner.flush();
   final bundles = <ServiceBundle>[];
