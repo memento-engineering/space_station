@@ -102,10 +102,15 @@ void main() {
   });
 
   group('the dual-read posture is FED, never sniffed', () {
-    test('an unfed runner arms off — the default posture needs no environment',
-        () {
-      expect(trajectoryConfigFrom(parse(const [])).dualRead, DualReadMode.off);
-    });
+    test(
+      'an unfed runner arms off — the default posture needs no environment',
+      () {
+        expect(
+          trajectoryConfigFrom(parse(const [])).dualRead,
+          DualReadMode.off,
+        );
+      },
+    );
 
     test('GRID_DUAL_READ names the posture when the entrypoint feeds it', () {
       for (final (value, expected) in const [
