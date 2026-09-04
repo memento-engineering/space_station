@@ -4,11 +4,11 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 /// A PROCESS-LEVEL smoke over the REAL `space` CLI: `space assets install`
-/// discovers the REAL vended `station_overlay` (grid_assets, found via
-/// `package:extension_discovery` over THIS checkout's package config) and
-/// materializes the whole operator manual onto a throwaway root. Root-parametric
-/// by design (power_station ADR-0000 A26(1)), so this test never touches the
-/// repo's own installed tree — `operator_assets_retired_test.dart` guards that.
+/// resolves the REAL vended `station_overlay` from the generated registry and
+/// the throwaway root's package facts, then materializes the whole operator
+/// manual there. Root-parametric by design (power_station ADR-0000 A26(1)), so
+/// this test never touches the repo's own installed tree —
+/// `operator_assets_retired_test.dart` guards that.
 void main() {
   const vended = <String>[
     '.claude/agents/governor.md',
@@ -44,6 +44,12 @@ void main() {
       'and LOUD on drift (1)', () async {
     final seat = Directory.systemTemp.createTempSync('space-assets-seat-');
     addTearDown(() => seat.deleteSync(recursive: true));
+    final packageConfig = File(
+      p.join(seat.path, '.dart_tool', 'package_config.json'),
+    )..createSync(recursive: true);
+    File(
+      p.join(repoRoot, '.dart_tool', 'package_config.json'),
+    ).copySync(packageConfig.path);
 
     final run = await install(seat.path);
     expect(
