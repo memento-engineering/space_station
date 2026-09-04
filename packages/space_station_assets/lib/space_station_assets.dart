@@ -86,8 +86,8 @@ export 'src/agent_arming.dart'
         preferenceArmingRefusal;
 // space_station authored as a Seed (Track G-space): the delegate the resident
 // verbs re-seat over is part of the public library surface. A downstream
-// station SUBCLASSES SpaceDelegate (the substations()/seat()/stationName/
-// umbrella override points) and hands its constructor tear-off to
+// station SUBCLASSES SpaceDelegate (the substations()/stationName/
+// stateStorePrefix/umbrella override points) and hands its constructor tear-off
 // [buildRunner] as a SpaceDelegateFactory. codedRosterOf is the owned
 // (construct → mount → dispose) roster enumeration over that factory.
 export 'src/space_delegate.dart'
@@ -127,8 +127,7 @@ export 'src/search_command.dart' show buildSpaceSearchCommand;
 // seat's work store is the station-context half a downstream station reuses.
 export 'src/filing_commands.dart'
     show SpaceFilingCommands, buildSpaceFilingCommands, storeRootForBead;
-export 'src/link_commands.dart'
-    show SpaceLinkCommands, buildSpaceLinkCommands, kSpaceStateStorePrefix;
+export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 
 /// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
 /// the power_station assets' exported Commands, with the COMPUTE asset's use
@@ -145,10 +144,11 @@ export 'src/link_commands.dart'
 /// (space-grl); [name] rides along as the runner word, and the STATION word
 /// comes from the delegate's `stationName`.
 /// [delegateFactory] is the station-authorship seam — the constructor
-/// tear-off of the station's [SpaceDelegate] SUBCLASS (identity, roster and
-/// seat stacks live on the class as override points), threaded into the
-/// resident verbs (`up`) and the station-context compositions
-/// (`search`/`assets`). Absent, the base [SpaceDelegate] — space's posture.
+/// tear-off of the station's [SpaceDelegate] SUBCLASS (identity, state
+/// partition, roster and seat stacks live on the class as override points),
+/// threaded into the resident verbs (`up`) and the station-context
+/// compositions (`search`/`assets`/link authoring). Absent, the base
+/// [SpaceDelegate] — space's posture.
 /// [environment] is the PROCESS environment, handed in by the entrypoint
 /// (`bin/space.dart` reads it from `dart:io` and passes it here). The assembly
 /// never reads it ambiently — `no_watcher_no_gate_test` bans that under
