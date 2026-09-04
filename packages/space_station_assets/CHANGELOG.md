@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0-rc.5
+
+- Breaking: `buildSpaceAssetsCommand` drops `roots:` (the retired
+  `StationOverlaySource` walk) for the rc.13 registry seams — `registry`,
+  `rosterOverride`, `factsRepository` (defaulting to the generated registry,
+  no override, and `FileSystemSubstationFactsRepository`). Migration: a
+  downstream caller passing `roots:` passes a `GridAssetRosterOverride` /
+  facts repository instead; none is known outside this repo (space-31x, #72).
+- Added: `buildRunner` composes the vended `PrimeCommand` and `SeatCommand`
+  bare, so the station overlay's SessionStart hook (`{{runner}} prime
+  --hook-json`) and the operator-seat launcher resolve on every station that
+  extends this runner; the three named claude environments carry
+  `--dangerously-skip-permissions` in `drivenArgs` (driven launches only),
+  and `kCodexFrontierEnvironment` mirrors the vended codex builtin's
+  `roleAsset` / `primeMode`. Floor: `grid_assets ^0.6.0-rc.13` (space-31x, #72).
+- Fixed: cross-store link beads are authored and closed in the DELEGATE's state
+  partition (`lunar link` mints `tranquility-*`), with the houston default
+  preserved (#71).
+- Fixed: worktree overlays render the delegate's runner and source ref instead
+  of the default runner and unknown provenance — the resident code registry
+  now carries station identity (#70).
+
 ## 0.3.0-rc.4
 
 - Breaking: none new in this candidate — it continues the 0.3.0 line; the
