@@ -1,5 +1,6 @@
 import 'package:grid_assets/grid_assets.dart'
     show
+        AgentBrief,
         AgentEnvironment,
         AvailableEnvironments,
         BaseScope,
@@ -9,7 +10,9 @@ import 'package:grid_assets/grid_assets.dart'
         EnvBaseRef,
         GatherAgentEnvironment,
         SpecAgentEnvironment,
-        kBuiltinEnvironments;
+        kBuiltinEnvironments,
+        spawnFor;
+import 'package:grid_engine/grid_engine.dart' show Workspace;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
@@ -88,10 +91,24 @@ void main() {
         expect(value.sessionAdapter, claude.sessionAdapter);
         expect(value.env, claude.env);
       }
-      expect(
-        kCodexFrontierEnvironment.flattened,
-        kBuiltinEnvironments['codex']!.flattened,
+      final codex = kBuiltinEnvironments['codex']!;
+      expect(kCodexFrontierEnvironment.roleAsset, codex.roleAsset);
+      expect(kCodexFrontierEnvironment.primeMode, codex.primeMode);
+      expect(kCodexFrontierEnvironment.flattened, codex.flattened);
+    });
+
+    test('the driven frontier launch retains the permission-skip flag', () {
+      final config = spawnFor(
+        environment: kFrontierEnvironment,
+        brief: const AgentBrief(task: 'test brief'),
+        workspace: const Workspace(
+          workspaceDir: '/workspace',
+          branch: 'grid/test',
+          baseBranch: 'main',
+        ),
       );
+
+      expect(config.args, contains('--dangerously-skip-permissions'));
     });
   });
 
