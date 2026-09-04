@@ -63,13 +63,15 @@ import 'package:grid_assets/grid_assets.dart'
         GatherAgentEnvironment,
         HarnessProvider,
         MountEligibilityAssets,
+        PackagedAssetLoader,
         ProcessEnvironmentProbe,
         SeatEnvironments,
         SpecAgentEnvironment,
         TypedEnvironmentProvider,
         buildCodeRegistry,
         mountedValueOf,
-        mountedValuesOf;
+        mountedValuesOf,
+        resolveOverlaySourceRefSync;
 import 'package:grid_runtime/grid_runtime.dart'
     show GhPrOpener, GitOps, PrOpener, StationGitService, SystemGitRunner;
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
@@ -78,6 +80,7 @@ import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
 
 import 'agent_arming.dart';
+import 'assets_command.dart' show kSpaceRunner;
 import 'substation_seed.dart';
 
 /// The factory signature the runner compositions construct a station's
@@ -218,6 +221,8 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 /// and [umbrella] are identity accessors:
 ///
 ///  * [stationName] — the station's identity;
+///  * [runnerInvocation] — the station runner's full JIT invocation;
+///  * [overlaySourceRef] — the provenance ref stamped into worktree overlays;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
 ///  * [environments] — the station's named inference environments;
 ///  * [arming] — the station's coded typed-environment posture;
@@ -240,6 +245,8 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 ///   LunarDelegate({required super.gridRoot, super.agentConfig, ...});
 ///   @override
 ///   String get stationName => 'lunar';
+///   @override
+///   String get runnerInvocation => 'dart run lunar:lunar';
 ///   @override
 ///   String get umbrella => '../../engineering.memento';
 ///   @override
@@ -300,6 +307,19 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// downstream station names itself here.
   String get stationName => 'space';
 
+  /// The station runner's full JIT invocation, rendered into every worktree
+  /// overlay command and provenance regeneration hint. OVERRIDE POINT: a
+  /// downstream station returns its own invocation.
+  String get runnerInvocation => kSpaceRunner;
+
+  /// The grid-assets ref stamped into every worktree overlay file. OVERRIDE
+  /// POINT: the default resolves the vended overlay checkout exactly once per
+  /// registry composition; a station that already knows its immutable source
+  /// ref returns it here.
+  String get overlaySourceRef => resolveOverlaySourceRefSync(
+    p.join(PackagedAssetLoader().root, 'station_overlay'),
+  );
+
   /// Where the coded org roster resolves, relative to the grid home (or
   /// absolute). OVERRIDE POINT: space's grid home IS an umbrella member, so
   /// the org repos are its `../` siblings; a downstream station whose grid
@@ -319,7 +339,10 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// writer. OVERRIDE POINT: downstream registries pass it to capabilities that
   /// persist operational lines; the code registry does not consume it.
   sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) =>
-      buildCodeRegistry();
+      buildCodeRegistry(
+        overlaySourceRef: overlaySourceRef,
+        overlayArgs: {'runner': runnerInvocation},
+      );
 
   /// The operator's `--substation` flags, parsed into ready [sdk.Substation]
   /// seats — the APPEND layer (Fork B, round 3): they spread AFTER the coded
