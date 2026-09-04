@@ -76,7 +76,10 @@ void main() {
         kCheapEnvironment,
       ]) {
         expect(value.command, claude.command);
+        expect(value.args, isNull);
         expect(value.args, claude.args);
+        expect(value.drivenArgs, ['--dangerously-skip-permissions']);
+        expect(value.drivenArgs, claude.drivenArgs);
         expect(value.promptMode, claude.promptMode);
         expect(value.promptFlag, claude.promptFlag);
         expect(value.target, claude.target);
