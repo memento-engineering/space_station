@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.3.0-rc.4
+version: 0.3.0-rc.5
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
