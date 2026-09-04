@@ -1,8 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:grid_assets/grid_assets.dart'
-    show StationOverlaySource, kDefaultStationOverlayMappings;
+    show
+        SubstationFacts,
+        SubstationFactsRepository,
+        SubstationFactsSnapshot,
+        SubstationKey,
+        kGridHomeSubstation;
+import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
@@ -14,20 +21,32 @@ import 'package:test/test.dart';
 /// own behaviour is pinned in power_station; this suite pins the WIRING.
 void main() {
   late Directory tmp;
-  late Directory overlay;
+  late Directory packageRoot;
   late Directory seat;
+  late sdk.GridAssetRegistry registry;
 
-  /// The installed file, at the SAME relative path in the overlay and the seat
-  /// (the overlay is path-preserving).
+  /// The installed file under an operator seat.
   File skillIn(Directory root) => File(
     p.join(root.path, '.claude', 'skills', 'station-operations', 'SKILL.md'),
   );
 
+  File skillSource(Directory root) => File(
+    p.join(
+      root.path,
+      'extension',
+      'station_overlay',
+      'claude',
+      'skills',
+      'station-operations',
+      'SKILL.md',
+    ),
+  );
+
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('space-assets-');
-    overlay = Directory(p.join(tmp.path, 'station_overlay'));
+    packageRoot = Directory(p.join(tmp.path, 'fixture_assets'));
     seat = Directory(p.join(tmp.path, 'seat'))..createSync(recursive: true);
-    skillIn(overlay)
+    skillSource(packageRoot)
       ..createSync(recursive: true)
       ..writeAsStringSync(
         '---\n'
@@ -36,6 +55,29 @@ void main() {
         '\n'
         'Boot: `{{runner}} up --grid-home {{gridHome}}`.\n',
       );
+    registry = sdk.GridAssetRegistry(<sdk.GridAssetPackDefinition>[
+      sdk.GridAssetPackDefinition(
+        package: 'fixture_assets',
+        assets: const <sdk.GridAssetDefinition>[
+          sdk.GridAssetDefinition(
+            assetKey: sdk.AssetKey(
+              package: 'fixture_assets',
+              kind: sdk.AssetKind.skill,
+              id: 'station-operations',
+            ),
+            description: 'the station operations fixture skill',
+            artifacts: <sdk.AssetArtifact>[
+              sdk.AssetArtifact(
+                target: sdk.AssetDeliveryTarget.claude,
+                path:
+                    'extension/station_overlay/claude/skills/'
+                    'station-operations/SKILL.md',
+              ),
+            ],
+          ),
+        ],
+      ),
+    ]);
   });
 
   tearDown(() => tmp.deleteSync(recursive: true));
@@ -50,12 +92,19 @@ void main() {
         buildSpaceAssetsCommand(
           gridHomeDefault: () => seat.path,
           runnerInvocation: runnerInvocation,
-          roots: (_) async => [
-            StationOverlaySource(
-              root: overlay.path,
-              mappings: kDefaultStationOverlayMappings,
-            ),
-          ],
+          registry: registry,
+          factsRepository: ({required roots, required registry}) =>
+              _FixtureFactsRepository(
+                SubstationFactsSnapshot(<SubstationKey, SubstationFacts>{
+                  kGridHomeSubstation: SubstationFacts(
+                    root: roots[kGridHomeSubstation]!,
+                    dartPackages: const <String>['fixture_assets'],
+                    packageRoots: <String, String>{
+                      'fixture_assets': packageRoot.path,
+                    },
+                  ),
+                }),
+              ),
           sourceRef: (_) => 'deadbee',
           out: out,
           err: err,
@@ -139,4 +188,20 @@ void main() {
       throwsA(isA<UsageException>()),
     );
   });
+}
+
+final class _FixtureFactsRepository implements SubstationFactsRepository {
+  _FixtureFactsRepository(this.current);
+
+  @override
+  final SubstationFactsSnapshot current;
+
+  @override
+  Stream<SubstationFactsSnapshot> get changes => const Stream.empty();
+
+  @override
+  void dispose() {}
+
+  @override
+  void refresh() {}
 }

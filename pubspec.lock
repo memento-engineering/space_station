@@ -165,10 +165,10 @@ packages:
     dependency: transitive
     description:
       name: dart_grid_assets
-      sha256: "0b7ca79f03e82776a84bbfaf8afc3e20e558d69f5a249b546d95a30191691c0c"
+      sha256: f1e4debecad208ad1ffc74085ed620f23a724f4d5fba55ce13e86a21e3cad84a
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.1"
+    version: "0.1.3"
   dart_jsonwebtoken:
     dependency: transitive
     description:
@@ -177,14 +177,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.1"
-  extension_discovery:
+  dart_style:
     dependency: transitive
     description:
-      name: extension_discovery
-      sha256: de1fce715ab013cdfb00befc3bdf0914bea5e409c3a567b7f8f144bc061611a7
+      name: dart_style
+      sha256: "82ade9fc4273f29ed673e33166944465225b4f7fc5d4aaef48605cc751c18fc1"
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.0"
+    version: "3.1.13"
   federated_grid_assets:
     dependency: transitive
     description:
@@ -253,10 +253,10 @@ packages:
     dependency: transitive
     description:
       name: github_grid_assets
-      sha256: "5bc8b0378dd42a111527c11d5e68a7dcd60ff7c62449db0b4cfc7ffb13e91517"
+      sha256: "6948033c4689398c2d9834c58b60b6b7cc356e0e2f5b8335ee15a9a9297145d6"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0-rc.9"
+    version: "0.1.0-rc.13"
   glob:
     dependency: transitive
     description:
@@ -277,18 +277,18 @@ packages:
     dependency: transitive
     description:
       name: grid_assets
-      sha256: "7a3b470707a19d445f3f16de6e1434d62adbddd1eb11103769c5f36c17134bc3"
+      sha256: "5170fb7f17a79237469456d9b4b8431f0077ba6a94acc8ca419b517508730527"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0-rc.9"
+    version: "0.6.0-rc.13"
   grid_cli:
     dependency: transitive
     description:
       name: grid_cli
-      sha256: "02a2ff51d680c0f71059556e5a103b3903731afdfc9dc548d8fd215538241011"
+      sha256: f1cd444372ce2bafae415164c271177bee33de5c5f45ad32c40362bcce9ac70c
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0-rc.11"
+    version: "0.5.0-rc.13"
   grid_diagnostics_contract:
     dependency: transitive
     description:
@@ -301,10 +301,10 @@ packages:
     dependency: transitive
     description:
       name: grid_engine
-      sha256: a341de004ce8f26c7cf115adbbbed1c7d8eb81cbe99b3d8294bfa2db613b0838
+      sha256: "568e4820d940b0cf25c2e6e8ee2e406ebd1bf02e5fe5fe93fc3efc51ab6adc66"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.11"
+    version: "0.3.0-rc.15"
   grid_exploration:
     dependency: transitive
     description:
@@ -317,26 +317,26 @@ packages:
     dependency: transitive
     description:
       name: grid_runtime
-      sha256: d16dc9577d404e84aa7243bdae3ac832615500527106788be44dd1954ab41069
+      sha256: "047927c44e4716bfbe883739f6de27409a3f06e91d8ec9bb2fd0c724922734bb"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-rc.9"
+    version: "0.2.0-rc.12"
   grid_sdk:
     dependency: transitive
     description:
       name: grid_sdk
-      sha256: "03d073ee6794c063e0bdf142bf8150b9fc27eb9f428226160f8dc79880d8f5f4"
+      sha256: "08ab652e4fe0706a96750312d75131831d4aead94ad2ef3ff9d06652e3fe7926"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.9"
+    version: "0.3.0-rc.12"
   grid_trajectory:
     dependency: transitive
     description:
       name: grid_trajectory
-      sha256: e603a18f370518f5c4e39b253397c18e05ff9de3ada62641d5f8b07cf1e2161b
+      sha256: efab6046333bbabd22ecb1368c03777de8c8150ccd60b880a87828032ae75360
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.2"
+    version: "0.2.0-rc.4"
   http:
     dependency: transitive
     description:
@@ -461,10 +461,10 @@ packages:
     dependency: transitive
     description:
       name: package_config
-      sha256: ffcf4cf3d6c0b74ac43708d9f56625506e8a68aa935abe9d267a7330f320eb5d
+      sha256: f096c55ebb7deb7e384101542bfba8c52696c1b56fca2eb62827989ef2353bbc
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.0"
+    version: "2.2.0"
   path:
     dependency: transitive
     description:

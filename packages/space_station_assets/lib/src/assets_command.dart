@@ -3,11 +3,11 @@
 ///
 /// The asset owns the domain AND its CLI component (the_grid ADR-0011 D3;
 /// power_station ADR-0001): `grid_assets` ships the root-parametric overlay
-/// installer ([OverlayInstallService] + the non-prescriptive
-/// `extension_discovery` root walk) plus the THIN Command over it, and a station
-/// COMPOSES that Command with ITS resident-station context. space's context is
-/// [SpaceDelegate]: the `RawAssetGrid` root it authors IS the repo the overlay
-/// lands on, and IS the `{{gridHome}}` every vended skill is rendered against.
+/// installer ([OverlayInstallService] + the declaration-driven asset registry)
+/// plus the THIN Command over it, and a station COMPOSES that Command with ITS
+/// resident-station context. space's context is [SpaceDelegate]: the
+/// `RawAssetGrid` root it authors IS the repo the overlay lands on, and IS the
+/// `{{gridHome}}` every vended skill is rendered against.
 /// Nothing about installing is reimplemented here — this file only curries the
 /// delegate and guards the one input.
 ///
@@ -22,7 +22,15 @@ library;
 import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart'
-    show AssetsCommand, OverlayInstallService, StationOverlaySource;
+    show
+        AssetsCommand,
+        FileSystemSubstationFactsRepository,
+        GridAssetRosterOverride,
+        OverlayInstallService,
+        SubstationFactsRepository,
+        SubstationFactsRepositoryFactory,
+        SubstationKey;
+import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
@@ -43,23 +51,25 @@ const String kSpaceRunner = 'dart run space:space';
 /// resident-station context ([SpaceDelegate]).
 ///
 /// [gridHomeDefault] resolves the home used when `--grid-home` is absent (the
-/// real CWD; tests inject a fixture home). [service] is the vended install
-/// service, [roots] the overlay-root resolver and [sourceRef] the
-/// provenance-ref resolver — all three default to the vended implementations
-/// (tests inject a fake overlay root and a fixed ref, so no `git` subprocess
-/// runs). [runnerInvocation] is the JIT invocation rendered into the manual's
-/// `{{runner}}` holes through [AssetsCommand.runnerInvocation], the single
-/// vended seam for a station's JIT invocation (a downstream station passes its
-/// own, e.g. `dart run lunar:lunar`). [delegateFactory] names WHICH
-/// [SpaceDelegate] subclass authors the station (the base class absent: space's
-/// posture).
+/// real CWD; tests inject a fixture home). [registry], [rosterOverride],
+/// [factsRepository], and [service] are the vended declaration-driven install
+/// seams; their defaults retain the generated registry, filesystem facts, and
+/// real installer. [sourceRef] is the provenance-ref resolver (tests inject a
+/// fixed ref, so no `git` subprocess runs). [runnerInvocation] is the JIT
+/// invocation rendered into the manual's `{{runner}}` holes through
+/// [AssetsCommand.runnerInvocation], the single vended seam for a station's JIT
+/// invocation (a downstream station passes its own, e.g. `dart run
+/// lunar:lunar`). [delegateFactory] names WHICH [SpaceDelegate] subclass
+/// authors the station (the base class absent: space's posture).
 /// [out]/[err] default to the process sinks.
 AssetsCommand buildSpaceAssetsCommand({
   String Function() gridHomeDefault = _currentDirectory,
+  sdk.GridAssetRegistry? registry,
+  GridAssetRosterOverride? rosterOverride,
+  SubstationFactsRepositoryFactory factsRepository = _fileFactsRepository,
   OverlayInstallService? service,
   String runnerInvocation = kSpaceRunner,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
-  Future<List<StationOverlaySource>> Function(String gridHome)? roots,
   String Function(String overlayRoot)? sourceRef,
   StringSink? out,
   StringSink? err,
@@ -85,14 +95,21 @@ AssetsCommand buildSpaceAssetsCommand({
       // ADR-0008 D10) rides — this authoring-only mount never reads it.
       return delegateFactory(gridRoot: p.normalize(home));
     },
+    registry: registry,
+    rosterOverride: rosterOverride,
+    factsRepository: factsRepository,
     service: service ?? const OverlayInstallService(),
     runnerInvocation: runnerInvocation,
-    roots: roots,
     sourceRef: sourceRef,
     out: out,
     err: err,
   );
   return command;
 }
+
+SubstationFactsRepository _fileFactsRepository({
+  required Map<SubstationKey, String> roots,
+  required sdk.GridAssetRegistry registry,
+}) => FileSystemSubstationFactsRepository(roots: roots, registry: registry);
 
 String _currentDirectory() => Directory.current.path;
