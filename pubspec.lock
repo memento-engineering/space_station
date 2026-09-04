@@ -53,10 +53,10 @@ packages:
     dependency: transitive
     description:
       name: beads_dart
-      sha256: b0c9010ad8afb24d83d89810ea93b0bdd6f5fdaa03049c78e62901acccee0f05
+      sha256: "3190db02f8590e3b1df7ebcf06d4741eae7396496e005871af43831c972bb0e2"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0-rc.7"
+    version: "0.2.0-rc.8"
   boolean_selector:
     dependency: transitive
     description:
@@ -277,10 +277,10 @@ packages:
     dependency: transitive
     description:
       name: grid_assets
-      sha256: "5170fb7f17a79237469456d9b4b8431f0077ba6a94acc8ca419b517508730527"
+      sha256: be743ec60c51534a6245e496c19505bc9e98b4729b662141b31bbc95d7a28227
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0-rc.13"
+    version: "0.6.0-rc.14"
   grid_cli:
     dependency: transitive
     description:
@@ -301,10 +301,10 @@ packages:
     dependency: transitive
     description:
       name: grid_engine
-      sha256: "568e4820d940b0cf25c2e6e8ee2e406ebd1bf02e5fe5fe93fc3efc51ab6adc66"
+      sha256: f5caac60a30d4416507799ebd4d755d2c3c961b17e6f0460925becdb2b47868a
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.15"
+    version: "0.3.0-rc.18"
   grid_exploration:
     dependency: transitive
     description:
@@ -325,10 +325,10 @@ packages:
     dependency: transitive
     description:
       name: grid_sdk
-      sha256: "08ab652e4fe0706a96750312d75131831d4aead94ad2ef3ff9d06652e3fe7926"
+      sha256: "05ea01243649c7f8f29fcfb2135103b434897f64ac7d5003b64f280bddb28cc7"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0-rc.12"
+    version: "0.3.0-rc.15"
   grid_trajectory:
     dependency: transitive
     description:
