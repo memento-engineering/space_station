@@ -217,10 +217,11 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 /// A downstream station (an IC's private station) extends this delegate and
 /// overrides the designed hooks — the template-method pattern the whole
 /// substrate is built on. [substations] is a BUILD METHOD (it carries the
-/// master [build]'s context, like any decomposed build), while [stationName]
-/// and [umbrella] are identity accessors:
+/// master [build]'s context, like any decomposed build), while [stationName],
+/// [stateStorePrefix], and [umbrella] are identity accessors:
 ///
 ///  * [stationName] — the station's identity;
+///  * [stateStorePrefix] — the prefix of its partition in the state store;
 ///  * [runnerInvocation] — the station runner's full JIT invocation;
 ///  * [overlaySourceRef] — the provenance ref stamped into worktree overlays;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
@@ -245,6 +246,8 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 ///   LunarDelegate({required super.gridRoot, super.agentConfig, ...});
 ///   @override
 ///   String get stationName => 'lunar';
+///   @override
+///   String get stateStorePrefix => 'tranquility';
 ///   @override
 ///   String get runnerInvocation => 'dart run lunar:lunar';
 ///   @override
@@ -306,6 +309,10 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// The station's identity (the `Station` seat's name). OVERRIDE POINT: a
   /// downstream station names itself here.
   String get stationName => 'space';
+
+  /// The prefix of this station's partition in its state store. OVERRIDE
+  /// POINT: a downstream station returns the prefix its own state store mints.
+  String get stateStorePrefix => 'houston';
 
   /// The station runner's full JIT invocation, rendered into every worktree
   /// overlay command and provenance regeneration hint. OVERRIDE POINT: a
