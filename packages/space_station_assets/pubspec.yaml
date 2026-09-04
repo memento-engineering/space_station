@@ -43,12 +43,11 @@ dependencies:
   # composes agree on one grid_assets. Its own composed SubstationSeed is
   # deliberately NOT adopted here — see space-ovd.
   github_grid_assets: ^0.1.0-rc.9
-  # rc.9 is the floor: the typed-seat arming MECHANISM (AgentArming,
-  # TypedEnvironmentProvider, SeatEnvironments — power_station bead pow-lb0) is
-  # VENDED there, from lib/src/agent/seat_environments.dart, and this package
-  # deleted its own copies to consume it. rc.8 has the typed seat VOCABULARY
-  # but not the mechanism. It pins genesis_tree ^0.3.0 for InheritedModelSeed.
-  grid_assets: ^0.6.0-rc.9
+  # rc.13 is the floor: it vends PrimeCommand/SeatCommand, adds the
+  # declaration-driven operator-seat fields (including drivenArgs), and moves
+  # Claude's permission skip out of args without changing driven spawn argv.
+  # The typed-seat arming mechanism first vended in rc.9 remains consumed.
+  grid_assets: ^0.6.0-rc.13
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;

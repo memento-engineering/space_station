@@ -10,6 +10,9 @@ import 'package:grid_assets/grid_assets.dart'
         GitGridAssets,
         MountEligibilityAssets,
         PackagedAssetLoader,
+        SubstationFacts,
+        SubstationFactsSnapshot,
+        SubstationKey,
         kCodeCircuit,
         kProvenanceMarker,
         kUnknownSourceRef,
@@ -638,6 +641,20 @@ String _materializeDiscoverSkill(SpaceDelegate delegate) {
     FakeTreeContext(
       values: {
         Bead: const Bead(id: 'space-overlay'),
+        sdk.SubstationScope: sdk.SubstationScope(
+          name: 'space_station',
+          root: worktree.path,
+          prefix: 'space',
+        ),
+        SubstationFactsSnapshot: SubstationFactsSnapshot({
+          const SubstationKey('space_station'): SubstationFacts(
+            root: worktree.path,
+            dartPackages: const ['grid_assets'],
+            packageRoots: {
+              'grid_assets': p.dirname(PackagedAssetLoader().root),
+            },
+          ),
+        }),
         Workspace: testWorkspace(
           'space-overlay',
           workspaceDir: worktree.path,

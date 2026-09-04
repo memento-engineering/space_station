@@ -53,6 +53,7 @@ import 'package:grid_assets/grid_assets.dart'
         InferenceTarget,
         ModelPreference,
         PromptMode,
+        SeatPrimeMode,
         SpecAgentEnvironment,
         kBuiltinEnvironments;
 
@@ -61,7 +62,7 @@ import 'package:grid_assets/grid_assets.dart'
 const AgentEnvironment kFrontierEnvironment = AgentEnvironment(
   base: EnvBaseStandalone(),
   command: 'claude',
-  args: ['--dangerously-skip-permissions'],
+  drivenArgs: ['--dangerously-skip-permissions'],
   promptMode: PromptMode.flag,
   promptFlag: '-p',
   target: InferenceTarget.providerManaged,
@@ -74,7 +75,7 @@ const AgentEnvironment kFrontierEnvironment = AgentEnvironment(
 const AgentEnvironment kMidEnvironment = AgentEnvironment(
   base: EnvBaseStandalone(),
   command: 'claude',
-  args: ['--dangerously-skip-permissions'],
+  drivenArgs: ['--dangerously-skip-permissions'],
   promptMode: PromptMode.flag,
   promptFlag: '-p',
   target: InferenceTarget.providerManaged,
@@ -87,7 +88,7 @@ const AgentEnvironment kMidEnvironment = AgentEnvironment(
 const AgentEnvironment kCheapEnvironment = AgentEnvironment(
   base: EnvBaseStandalone(),
   command: 'claude',
-  args: ['--dangerously-skip-permissions'],
+  drivenArgs: ['--dangerously-skip-permissions'],
   promptMode: PromptMode.flag,
   promptFlag: '-p',
   target: InferenceTarget.providerManaged,
@@ -107,6 +108,8 @@ const AgentEnvironment kCodexFrontierEnvironment = AgentEnvironment(
   target: InferenceTarget.providerManaged,
   model: 'gpt-5.6-sol',
   sessionAdapter: 'acp',
+  roleAsset: '.agents/agents/{{seat}}.md',
+  primeMode: SeatPrimeMode.prompt,
 );
 
 /// memento's NAMED environments — the station's own SEMANTIC names. A name is

@@ -8,6 +8,7 @@
 /// asset-exported [DartCommand] from the DART domain, plus memento's OWN
 /// resident verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`):
 /// `up`/`down`/`status`, plus the SEARCH asset's exported `search` Command,
+/// plus the SEAT asset's exported `prime` and `seat` Commands,
 /// composed with space's own resident-station context (`SpaceDelegate`) — the
 /// coupled skill+command pattern (power_station ADR-0001).
 ///
@@ -40,6 +41,8 @@ import 'package:grid_assets/grid_assets.dart'
         CommandResult,
         ComputeBounds,
         DispatchCommand,
+        PrimeCommand,
+        SeatCommand,
         computeDispatchHandler,
         kComputeKind;
 // ignore: implementation_imports
@@ -206,6 +209,12 @@ CommandRunner<int> buildRunner({
     // owns it (power_station ADR-0001, the coupled skill+command pattern).
     ..addCommand(filingCommands.filing)
     ..addCommand(filingCommands.approve)
+    // The SEAT asset's exported CLI pair, composed BARE: PrimeCommand is the
+    // vended SessionStart hook target, and SeatCommand owns its builtin
+    // environment registry and launch/refusal behavior. No station-local
+    // command or service duplicates either implementation.
+    ..addCommand(PrimeCommand())
+    ..addCommand(SeatCommand())
     ..addCommand(linkCommands.link)
     ..addCommand(linkCommands.unlink)
     // The ASSETS domain's exported Command group, COMPOSED with space's
