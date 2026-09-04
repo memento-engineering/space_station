@@ -5,18 +5,51 @@ import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
+        AgentCapability,
         AgentConfig,
         GitGridAssets,
         MountEligibilityAssets,
-        buildCodeRegistry,
-        kCodeCircuit;
-import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
+        PackagedAssetLoader,
+        kCodeCircuit,
+        kProvenanceMarker,
+        kUnknownSourceRef,
+        resolveOverlaySourceRefSync;
+import 'package:grid_engine/grid_engine.dart'
+    show
+        CapabilityHost,
+        CapabilityStep,
+        Circuit,
+        NodeCursor,
+        ServiceBundle,
+        SessionHandle,
+        StepMount,
+        Workspace;
+import 'package:grid_engine/testing.dart'
+    show FakeTreeContext, stepArgs, testWorkspace;
 import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
+import 'package:path/path.dart' as p;
+import 'package:space_station_assets/src/assets_command.dart' show kSpaceRunner;
 import 'package:space_station_assets/src/space_delegate.dart';
 import 'package:space_station_assets/src/up_command.dart';
 import 'package:test/test.dart';
+
+const _overlayAgentCircuit = Circuit(
+  id: 'code',
+  terminalStepId: 'agent',
+  steps: [CapabilityStep(stepId: 'agent', capabilityId: 'agent')],
+);
+
+StepMount _overlayAgentMount() => StepMount(
+  step: const CapabilityStep(stepId: 'agent', capabilityId: 'agent'),
+  nodePath: 'space-overlay/agent',
+  circuit: _overlayAgentCircuit,
+  circuitPath: 'space-overlay',
+  session: const SessionHandle('space-overlay-s'),
+  node: const NodeCursor(),
+  key: const ValueKey('space-overlay/agent#0.0'),
+);
 
 /// Track G-space / H2 (tg-r81), re-cut by space-47t: offline coverage for
 /// [SpaceDelegate] — space_station authored as a Seed (the v3 §2 tree). Pure
@@ -391,6 +424,44 @@ void main() {
       }
     });
 
+    test(
+      'a downstream delegate materializes its runner and a real source ref',
+      () {
+        final sourceRef = resolveOverlaySourceRefSync(Directory.current.path);
+        expect(
+          sourceRef,
+          isNot(kUnknownSourceRef),
+          reason: 'the package test runs inside a git worktree',
+        );
+
+        final body = _materializeDiscoverSkill(
+          _OverlayIdentityDelegate(
+            gridRoot: '/home/lunar',
+            sourceRef: sourceRef,
+          ),
+        );
+
+        expect(body, contains('dart run lunar:lunar search --json'));
+        expect(body, contains('`dart run lunar:lunar assets install`'));
+        expect(body, contains('$kProvenanceMarker$sourceRef'));
+        expect(body, isNot(contains('$kProvenanceMarker$kUnknownSourceRef')));
+      },
+    );
+
+    test('the base delegate materializes the space runner', () {
+      final subject = SpaceDelegate(gridRoot: '/home/space');
+      expect(
+        subject.overlaySourceRef,
+        resolveOverlaySourceRefSync(
+          p.join(PackagedAssetLoader().root, 'station_overlay'),
+        ),
+      );
+
+      final body = _materializeDiscoverSkill(subject);
+      expect(body, contains('$kSpaceRunner search --json'));
+      expect(body, contains('`$kSpaceRunner assets install`'));
+    });
+
     test('a downstream delegate selects only its marker bead', () {
       final subject = _MarkerDelegate(gridRoot: '/home/space');
       expect(
@@ -548,6 +619,48 @@ class _MarkerDelegate extends SpaceDelegate {
   @override
   sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) {
     receivedAppender = appendNote;
-    return buildCodeRegistry();
+    return super.buildWorkRegistry(appendNote);
   }
+}
+
+String _materializeDiscoverSkill(SpaceDelegate delegate) {
+  addTearDown(delegate.dispose);
+  final worktree = Directory.systemTemp.createTempSync('delegate-overlay-');
+  addTearDown(() {
+    if (worktree.existsSync()) worktree.deleteSync(recursive: true);
+  });
+
+  final registry = delegate.buildWorkRegistry((_, _) async {});
+  final capability =
+      (registry.host(_overlayAgentMount()) as CapabilityHost).capability
+          as AgentCapability;
+  capability.spawn(
+    FakeTreeContext(
+      values: {
+        Bead: const Bead(id: 'space-overlay'),
+        Workspace: testWorkspace(
+          'space-overlay',
+          workspaceDir: worktree.path,
+          branch: 'grid/space-overlay',
+        ),
+      },
+    ),
+    stepArgs('space-overlay/agent'),
+  );
+
+  return File(
+    p.join(worktree.path, '.claude', 'skills', 'discover', 'SKILL.md'),
+  ).readAsStringSync();
+}
+
+class _OverlayIdentityDelegate extends SpaceDelegate {
+  _OverlayIdentityDelegate({required super.gridRoot, required this.sourceRef});
+
+  final String sourceRef;
+
+  @override
+  String get runnerInvocation => 'dart run lunar:lunar';
+
+  @override
+  String get overlaySourceRef => sourceRef;
 }
