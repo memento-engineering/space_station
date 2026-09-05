@@ -75,8 +75,13 @@ dependencies:
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
   # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
+  # Hosted release constraint (ADR-0003 D1 source amendment): a producer
+  # change is adopted DELIBERATELY by bumping this constraint. Hosted source
+  # is required because published siblings depend on each other from hosted;
+  # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # rc.15 is the floor: GridAssetDefinition carries the typed `teaches` field
-  # consumed by the paired command coverage fence.
+  # consumed by the paired command coverage fence (rc.11 first carried AssetKey,
+  # which this package re-exports for asset-roster override authoring).
   grid_sdk: ^0.3.0-rc.15
   path: ^1.9.0
 

@@ -6,7 +6,19 @@ import 'package:beads_dart/beads_dart.dart'
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
-    show GitSourceControl, kApprovedAtKey, kApprovedByKey, kApprovedRevKey;
+    show
+        AgentConfig,
+        GridAssetRosterOverride,
+        GitSourceControl,
+        HarnessProvider,
+        SeatEnvironments,
+        SubstationFacts,
+        SubstationFactsSnapshot,
+        SubstationKey,
+        kApprovedAtKey,
+        kApprovedByKey,
+        kApprovedRevKey,
+        resolveGridAssets;
 import 'package:grid_engine/grid_engine.dart'
     show
         MountEligibilityDecision,
@@ -31,6 +43,109 @@ import 'package:test/test.dart';
 /// production root).
 void main() {
   group('SubstationSeed — the composed seed', () {
+    test(
+      'a seat threads its authored assetRoster onto the mounted projection',
+      () {
+        const key = sdk.AssetKey(
+          package: 'fixture_assets',
+          kind: sdk.AssetKind.skill,
+          id: 'authored',
+        );
+        final override = GridAssetRosterOverride(include: <sdk.AssetKey>{key});
+        final walk = _mount(
+          ProviderScope(
+            child: sdk.RawAssetGrid(
+              root: '/home/me/station',
+              assets: [
+                SubstationSeed(
+                  name: 'mine',
+                  root: '../mine',
+                  assetRoster: override,
+                ),
+              ],
+            ),
+          ),
+        );
+
+        expect(
+          walk.values<MountedSubstationSeed>().single.assetRoster,
+          same(override),
+        );
+      },
+    );
+
+    test('a seat with no assetRoster projects null', () {
+      const agentConfig = AgentConfig(harness: 'claude');
+      final walk = _mount(
+        ProviderScope(
+          child: sdk.RawAssetGrid(
+            root: '/home/me/station',
+            assets: [
+              HarnessProvider(
+                config: agentConfig,
+                child: SubstationSeed(name: 'mine', root: '../mine'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final mounted = walk.values<MountedSubstationSeed>().single;
+      expect(mounted.assetRoster, isNull);
+      expect(mounted.scope.name, 'mine');
+      expect(mounted.scope.root, '/home/me/mine');
+      expect(mounted.githubPollingConfigured, isFalse);
+      expect(mounted.agentConfig, same(agentConfig));
+      expect(mounted.environments, const SeatEnvironments());
+    });
+
+    test('an overlapping include and exclude refuses at construction', () {
+      const key = sdk.AssetKey(
+        package: 'fixture_assets',
+        kind: sdk.AssetKind.skill,
+        id: 'overlap',
+      );
+
+      expect(
+        () => GridAssetRosterOverride(include: {key}, exclude: {key}),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'message',
+            contains(key.canonical),
+          ),
+        ),
+      );
+    });
+
+    test('an unknown roster key is refused by the shipped resolver', () {
+      const substation = SubstationKey('mine');
+      const unknown = sdk.AssetKey(
+        package: 'fixture_assets',
+        kind: sdk.AssetKind.skill,
+        id: 'unknown',
+      );
+      final snapshot = SubstationFactsSnapshot({
+        substation: SubstationFacts(root: '/home/me/mine'),
+      });
+
+      expect(
+        () => resolveGridAssets(
+          registry: sdk.GridAssetRegistry(const []),
+          snapshot: snapshot,
+          substation: substation,
+          rosterOverride: GridAssetRosterOverride(include: {unknown}),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'message',
+            contains(unknown.canonical),
+          ),
+        ),
+      );
+    });
+
     test(
       'explicit landing policies are observable on the effective gated seat',
       () {
