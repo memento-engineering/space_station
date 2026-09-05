@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0-rc.6
+
+- Fixed: `space status` consumes the lock's DECLARED lifecycle phase — the `AttachResult` switch names `Starting` and `Unreachable` (cli rc.15 split them out of `Stale`; the `Unreachable` branch keeps the prior wording and exit code, `Starting` is additive). Floors `grid_cli ^0.5.0-rc.15` and `grid_diagnostics_contract ^0.2.1`; a downstream station that resolves cli rc.15 compiled against rc.5's switch no longer breaks (space-b8u, #76).
+- Added: `SubstationSeed.assetRoster` carries a `GridAssetRosterOverride` through to `MountedSubstationSeed.assetRoster` (the coded EXCEPTION half of derived-by-default asset selection); `codedRosterSnapshotOf` projects an immutable seat-keyed `assetRosters` map; `GridAssetRosterOverride` and `AssetKey` are re-exported for override authoring. `MountedSubstationSeed.assetRoster` is a required constructor field — no downstream constructs the type directly. Floors `grid_sdk ^0.3.0-rc.15` (space-kwv, #75).
+- Added: `buildRunnerComposition()` returns the command runner together with the unmodifiable set of paired operator command names and the baseline asset registry, so a downstream station can teach its own skill/command pairs against the composed surface (space-eqh, #74).
+
 ## 0.3.0-rc.5
 
 - Breaking: `buildSpaceAssetsCommand` drops `roots:` (the retired
