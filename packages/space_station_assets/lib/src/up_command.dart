@@ -446,8 +446,11 @@ class UpCommand extends Command<int> {
     );
 
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
-    // Acquired before anything stateful; a LIVE holder is a LOUD refusal (exit
-    // 64). Caught generically so `up` never imports the kill-list refusal type.
+    // Acquire atomically publishes the declared `acquired` lifecycle before
+    // anything stateful; a LIVE holder is a LOUD refusal (exit 64). Every
+    // error unwind and graceful release below publishes `releasing` before
+    // deleting the owned lock. Caught generically so `up` never imports the
+    // kill-list refusal type.
     final bootTime = DateTime.now();
     final StationLockHandle stationLock;
     try {
@@ -599,10 +602,11 @@ class UpCommand extends Command<int> {
       return 64;
     }
 
-    // --- RS-4 the read-only control surface (D-C2): bound after the lock so it
-    // always has a lock file to advertise controlUrl/token through. space
-    // builds its OWN StationStatus — H2 drives no work, so ready/mounted/live
-    // sessions are 0 (the counts return with the runGrid→kernel bridge).
+    // --- RS-4 the read-only control surface (D-C2): bound after the acquired
+    // lock. `updateControl` atomically publishes the declared `live` lifecycle
+    // because this endpoint makes the station serve. space builds its OWN
+    // StationStatus — H2 drives no work, so ready/mounted/live sessions are 0
+    // (the counts return with the runGrid→kernel bridge).
     final token = mintControlToken();
     final StationControl control;
     try {
@@ -629,9 +633,9 @@ class UpCommand extends Command<int> {
     // --- the DEV-MODE host, JIT only: the exploration host — the SOLE registrar
     // — carrying the OPTIONAL ReassembleTool, so `ext.exploration.grid.reload`
     // exists and the station's `reload` verb re-composes THIS running station
-    // (no second process). The lock then advertises the VM-service URI so the
-    // client can find it; the lock is 0600 because that URI carries the
-    // service auth code.
+    // (no second process). The lock then advertises the VM-service URI while
+    // preserving its current declared lifecycle; the lock is 0600 because
+    // that URI carries the service auth code.
     // No VM service ⇒ no host, no tool, no advertisement, and `reload`
     // refuses LOUD.
     final DevModeHost? devMode;
@@ -740,7 +744,8 @@ class UpCommand extends Command<int> {
     // a released lock naming a dead endpoint would mislead `space status`),
     // then tear the tree down (unmount → effects kill), THEN the off-tree
     // machinery (the bridge outlives the tree, never the reverse), then
-    // release LAST.
+    // release LAST. Release atomically publishes `releasing` before deleting
+    // the owned lock.
     Future<void> shutdown() async {
       // The dev-mode host stops answering the wire FIRST — it re-composes the
       // tree, so it must not outlive it.

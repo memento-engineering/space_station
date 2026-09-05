@@ -24,7 +24,14 @@ import 'package:beads_dart/beads_dart.dart'
         ProcessBdRunner;
 // ignore: implementation_imports
 import 'package:grid_cli/src/station_attach.dart'
-    show AttachResult, Down, StationAttach, Stale, Unauthorized, Up;
+    show
+        AttachResult,
+        Down,
+        Starting,
+        StationAttach,
+        Unauthorized,
+        Unreachable,
+        Up;
 import 'package:grid_runtime/grid_runtime.dart' show BeadOwnershipPredicate;
 
 import 'attach_support.dart';
@@ -89,7 +96,13 @@ class StatusCommand extends Command<int> {
           case Down():
             await _renderDownFallback(results, workspace);
             return 0;
-          case Stale(:final pid, :final record):
+          case Starting(:final pid):
+            stdout
+              ..writeln('station: STARTING')
+              ..writeln('  state store: $home')
+              ..writeln('  pid: $pid');
+            return 0;
+          case Unreachable(:final pid, :final record):
             stderr.writeln(
               'status: station.lock at $home/.grid/station.lock '
               'names pid $pid but it is unreachable (dead, or '

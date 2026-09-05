@@ -46,11 +46,16 @@ dependencies:
   # rc.14 is the floor: its generated GridAssetsPack carries the four baseline
   # skill teaching claims that fence this package's paired command surface.
   grid_assets: ^0.6.0-rc.14
-  # Hosted release constraint (ADR-0003 D1 source amendment): a producer
-  # change is adopted DELIBERATELY by bumping this constraint. Hosted source
-  # is required because published siblings depend on each other from hosted;
-  # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_cli: ^0.5.0-rc.10
+  # rc.15 is the first hosted CLI release that exports StationLifecyclePhase,
+  # StationLockRecord.phase, AttachResult.Starting, and
+  # AttachResult.Unreachable. Hosted source is required because published
+  # siblings depend on each other from hosted; local co-editing still rides
+  # gitignored pubspec_overrides.yaml (ADR-0003 D1/D5).
+  grid_cli: ^0.5.0-rc.15
+  # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
+  # dependency pins the contract version; code imports the public grid_cli
+  # barrel rather than introducing a second import surface.
+  grid_diagnostics_contract: ^0.2.1
   # The engine's SDK-facing value types the composed seat stack provides into
   # the tree (`ServiceBundle` — space-47t's watch-based seat assets author it
   # directly now that the seat stack lives here).

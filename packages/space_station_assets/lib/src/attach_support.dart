@@ -1,9 +1,10 @@
-/// Shared plumbing for `space down`/`space status` (RS-5b) — both are thin
-/// renders over `grid_cli`'s [StationAttach] (RS-5a): read the SAME
-/// `--state-workspace` an `up` was given, resolve it to the discovered
-/// [BeadsWorkspace] root (the identical root `driveStation`'s station lock
-/// (RS-2) is scoped to), and hand that root to [StationAttach]. Neither verb
-/// re-derives arming/ownership — the lock is the only address that matters.
+/// Shared state-store address plumbing for `space down`/`space status`
+/// (RS-5b): read the SAME `--state-workspace` an `up` was given, resolve it to
+/// the discovered [BeadsWorkspace] root (the identical root `driveStation`'s
+/// station lock (RS-2) is scoped to), and hand that root to `grid_cli`'s
+/// `StationAttach` (RS-5a). Lock interpretation and OS signaling stay in
+/// `StationAttach`; these modules never classify lifecycle from nullable
+/// `controlUrl`, `token`, or `vmServiceUri` advertisements.
 library;
 
 import 'dart:io';

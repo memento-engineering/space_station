@@ -1,9 +1,9 @@
 /// `space down` — RS-5b (tg-3s8.6, `the_grid/docs/SCRATCH-resident-station.md`
-/// D-C3): a thin render over `grid_cli`'s [StationAttach.stop] (RS-5a).
-/// Lifecycle rides OS signals, never HTTP (D-C3) — this command reads the
-/// station lock, SIGTERMs the holder, and waits for the target's OWN
-/// graceful-shutdown release; it never mutates the lock file itself and never
-/// escalates to SIGKILL (that is a human/supervisor call).
+/// D-C3): resolves the state-store address and delegates lock interpretation
+/// and OS signaling to `grid_cli`'s [StationAttach.stop] (RS-5a). Lifecycle
+/// rides OS signals, never HTTP (D-C3): this command does not classify it from
+/// nullable `controlUrl`, `token`, or `vmServiceUri` advertisements, mutate the
+/// lock file itself, or escalate to SIGKILL (that is a human/supervisor call).
 ///
 /// Track G-space (tg-33n): the station it stops is the one `up` boots from its
 /// `SpaceDelegate`; `down` re-seats over that station by attaching to the SAME
