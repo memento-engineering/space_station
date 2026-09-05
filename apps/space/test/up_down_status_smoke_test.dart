@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-// ignore: implementation_imports
-import 'package:grid_cli/src/station_lock.dart' show StationLockService;
+import 'package:grid_cli/grid_cli.dart'
+    show StationLifecyclePhase, StationLockRecord, StationLockService;
 import 'package:test/test.dart';
 
 /// RS-5b / H2 (tg-r81, `the_grid/docs/SCRATCH-resident-station.md` D-R1/D-C3):
@@ -56,6 +56,244 @@ import 'package:test/test.dart';
 ///      and `--max-agents 0` admits none, so the bound halves are constructed
 ///      but never exercised (no `git`, no `gh`, no agent).
 void main() {
+  test(
+    'boot-order status reports STARTING then UP from the same lock store',
+    () async {
+      final gridHome = await _bdInitGridHome('space-status-boot-order-');
+      addTearDown(() => gridHome.delete(recursive: true));
+
+      final stationLock =
+          await StationLockService(
+            prepareProcessGroup: (stationPid) async => stationPid,
+          ).acquire(
+            stateWorkspaceDir: gridHome.path,
+            pid: pid,
+            now: DateTime.now(),
+          );
+      addTearDown(() => stationLock.release());
+
+      final starting = await _runStatus(gridHome.path);
+      expect(starting.exitCode, 0);
+      expect('${starting.stdout}', contains('station: STARTING'));
+      expect('${starting.stderr}', isEmpty);
+
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final listener = server.listen((request) async {
+        if (request.headers.value(HttpHeaders.authorizationHeader) !=
+            'Bearer test-token') {
+          request.response.statusCode = HttpStatus.unauthorized;
+          await request.response.close();
+          return;
+        }
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'station': {
+                'substation': 'smoketest',
+                'stateStore': gridHome.path,
+                'workRoot': 'smoketest=${gridHome.path}',
+                'dryRun': true,
+              },
+              'process': {'pid': pid, 'uptimeSeconds': 0, 'version': 'test'},
+              'work': {
+                'ready': 0,
+                'mounted': 0,
+                'liveSessions': 0,
+                'lastSyncAt': null,
+              },
+            }),
+          );
+        await request.response.close();
+      });
+      addTearDown(() async {
+        await listener.cancel();
+        await server.close(force: true);
+      });
+
+      await stationLock.updateControl(
+        controlUrl: 'http://${server.address.address}:${server.port}',
+        token: 'test-token',
+      );
+      final up = await _runStatus(gridHome.path);
+      expect(up.exitCode, 0, reason: '${up.stderr}');
+      expect('${up.stdout}', contains('station: UP'));
+    },
+  );
+
+  test(
+    'up adopts acquired live VM-preserving and releasing lock transitions',
+    () async {
+      final source = await File(
+        '../../packages/space_station_assets/lib/src/up_command.dart',
+      ).readAsString();
+      expect(
+        RegExp(
+          r'^\s*stationLock = await StationLockService\(',
+          multiLine: true,
+        ).allMatches(source),
+        hasLength(1),
+      );
+      expect(
+        RegExp(
+          r'^\s*await stationLock\.updateControl\(',
+          multiLine: true,
+        ).allMatches(source),
+        hasLength(1),
+      );
+      expect(
+        RegExp(
+          r'^\s*await stationLock\.updateVmService\(',
+          multiLine: true,
+        ).allMatches(source),
+        hasLength(1),
+      );
+      expect(
+        RegExp(r'await stationLock\.release\(\);').allMatches(source),
+        hasLength(6),
+      );
+
+      final gridHome = await _bdInitGridHome('space-lock-transitions-');
+      addTearDown(() => gridHome.delete(recursive: true));
+      final lockPath = StationLockService.lockPath(gridHome.path);
+      final stationLock =
+          await StationLockService(
+            prepareProcessGroup: (stationPid) async => stationPid,
+          ).acquire(
+            stateWorkspaceDir: gridHome.path,
+            pid: pid,
+            now: DateTime.now(),
+          );
+      addTearDown(() => stationLock.release());
+
+      expect(stationLock.record.phase, StationLifecyclePhase.acquired);
+      expect(
+        (await _readStationLock(lockPath)).phase,
+        StationLifecyclePhase.acquired,
+      );
+
+      await stationLock.updateControl(
+        controlUrl: 'http://127.0.0.1:1',
+        token: 'test-token',
+      );
+      expect(stationLock.record.phase, StationLifecyclePhase.live);
+      expect(
+        (await _readStationLock(lockPath)).phase,
+        StationLifecyclePhase.live,
+      );
+
+      await stationLock.updateVmService('http://127.0.0.1:2/test-vm-service');
+      expect(stationLock.record.phase, StationLifecyclePhase.live);
+      expect(
+        (await _readStationLock(lockPath)).phase,
+        StationLifecyclePhase.live,
+      );
+
+      await stationLock.release();
+      expect(stationLock.record.phase, StationLifecyclePhase.releasing);
+      expect(await File(lockPath).exists(), isFalse);
+    },
+  );
+
+  test('starting status is named non-error output', () async {
+    final gridHome = await _bdInitGridHome('space-status-starting-');
+    addTearDown(() => gridHome.delete(recursive: true));
+    final stationLock = await StationLockService(
+      prepareProcessGroup: (stationPid) async => stationPid,
+    ).acquire(stateWorkspaceDir: gridHome.path, pid: pid, now: DateTime.now());
+    addTearDown(() => stationLock.release());
+
+    final status = await _runStatus(gridHome.path);
+    expect(status.exitCode, 0);
+    expect(
+      '${status.stdout}',
+      'station: STARTING\n'
+          '  state store: ${gridHome.path}\n'
+          '  pid: $pid\n',
+    );
+    expect('${status.stderr}', isEmpty);
+  });
+
+  test(
+    'dead lock holder retains unreachable crash wording and exit 1',
+    () async {
+      final gridHome = await _bdInitGridHome('space-status-unreachable-');
+      addTearDown(() => gridHome.delete(recursive: true));
+
+      final dead = await Process.start(Platform.resolvedExecutable, [
+        '--version',
+      ]);
+      final deadPid = dead.pid;
+      await Future.wait<void>([
+        dead.stdout.drain<void>(),
+        dead.stderr.drain<void>(),
+      ]);
+      expect(await dead.exitCode, 0);
+      expect(
+        await _isAlive(deadPid),
+        isFalse,
+        reason: 'pid must be confirmed dead',
+      );
+
+      final lockPath = StationLockService.lockPath(gridHome.path);
+      await File(lockPath).writeAsString(
+        jsonEncode(
+          StationLockRecord(
+            pid: deadPid,
+            pgid: deadPid,
+            startedAt: DateTime.now(),
+            phase: StationLifecyclePhase.acquired,
+          ).toJson(),
+        ),
+      );
+
+      final status = await _runStatus(gridHome.path);
+      expect(status.exitCode, 1);
+      expect(
+        '${status.stderr}',
+        allOf(
+          contains(
+            'names pid $deadPid but it is unreachable '
+            '(dead, or alive-but-not-answering',
+          ),
+          contains('a fresh `up` steals a dead lock automatically'),
+          contains('if $deadPid is alive, investigate it directly'),
+        ),
+      );
+    },
+  );
+
+  test(
+    'read-side sources never derive lifecycle from nullable advertisements',
+    () async {
+      const sourcePaths = [
+        '../../packages/space_station_assets/lib/src/status_command.dart',
+        '../../packages/space_station_assets/lib/src/down_command.dart',
+        '../../packages/space_station_assets/lib/src/attach_support.dart',
+      ];
+      final nullableClassifier = RegExp(
+        r'\b(?:controlUrl|token|vmServiceUri)\b\s*(?:==|!=)\s*null|'
+        r'null\s*(?:==|!=)\s*\b(?:controlUrl|token|vmServiceUri)\b',
+      );
+      final sources = <String, String>{};
+      for (final path in sourcePaths) {
+        final source = await File(path).readAsString();
+        sources[path] = source;
+        expect(
+          nullableClassifier.hasMatch(source),
+          isFalse,
+          reason:
+              '$path must delegate lifecycle classification to StationAttach',
+        );
+      }
+
+      final statusSource = sources[sourcePaths.first]!;
+      expect(statusSource, contains('Starting'));
+      expect(statusSource, contains('Unreachable'));
+      expect(RegExp(r'\bStale\b').hasMatch(statusSource), isFalse);
+    },
+  );
+
   test('up boots resident (lock + control) -> a second up is refused LOUD -> '
       'status renders live -> `down` gracefully stops it (Stopped, exit 0, '
       'lock released, process exited) -> status falls back to '
@@ -540,6 +778,19 @@ Future<void> _bdInit(String dir, {required List<String> args}) async {
     );
   }
 }
+
+/// Runs the real process-level `space status` against [stateWorkspace].
+Future<ProcessResult> _runStatus(String stateWorkspace) => Process.run(
+  Platform.resolvedExecutable,
+  ['bin/space.dart', 'status', '--state-workspace', stateWorkspace],
+  workingDirectory: Directory.current.path,
+);
+
+/// Parses the producer-owned lifecycle record from [lockPath].
+Future<StationLockRecord> _readStationLock(String lockPath) async =>
+    StationLockRecord.fromJson(
+      jsonDecode(await File(lockPath).readAsString()) as Map<String, Object?>,
+    );
 
 /// Spawns `bin/space.dart` with [args] directly over `dart` (no `dart run`
 /// wrapper — mirrors `grid_cli`'s own process-level smoke), from THIS package's

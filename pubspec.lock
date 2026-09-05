@@ -285,18 +285,18 @@ packages:
     dependency: transitive
     description:
       name: grid_cli
-      sha256: f1cd444372ce2bafae415164c271177bee33de5c5f45ad32c40362bcce9ac70c
+      sha256: d70322a0038434f28a24a4243e20ce2f37b1a07d1a541f466bd398391fcca8f0
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0-rc.13"
+    version: "0.5.0-rc.15"
   grid_diagnostics_contract:
     dependency: transitive
     description:
       name: grid_diagnostics_contract
-      sha256: "0db40140c101591bed41aa20540cf41bf96e37119eaca7505c8392f0535fb898"
+      sha256: d3ee2e276ce4b6bfc9b6b339a2aa29c783816d42e078b4f4add5e4ebc6454763
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0"
+    version: "0.2.1"
   grid_engine:
     dependency: transitive
     description:
