@@ -1,7 +1,7 @@
 /// memento's grid station — the assembled runner (the Dart runner model — see
 /// the_grid `docs/SCRATCH-dart-runner-and-cli-sdk.md`).
 ///
-/// A station is a user-composed JIT runner: [buildRunner] assembles
+/// A station is a user-composed JIT runner: [buildRunnerComposition] assembles
 /// the Commands memento wants — the generic CLI-SDK ones (watch/gate/demo)
 /// from `grid_cli`, plus serve/lease ("leasing is core") from power_station's
 /// `federated_grid_assets` (AL-5c, D-A9 — moved out of `grid_cli`), plus the
@@ -41,6 +41,7 @@ import 'package:grid_assets/grid_assets.dart'
         CommandResult,
         ComputeBounds,
         DispatchCommand,
+        GridAssetsPack,
         PrimeCommand,
         SeatCommand,
         computeDispatchHandler,
@@ -53,6 +54,8 @@ import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
 import 'package:grid_cli/src/rework_command.dart' show ReworkCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/watch_command.dart' show WatchCommand;
+import 'package:grid_sdk/grid_sdk.dart'
+    show GridAssetPackDefinition, GridAssetRegistry;
 
 import 'src/assets_command.dart';
 import 'src/down_command.dart';
@@ -132,10 +135,13 @@ export 'src/filing_commands.dart'
     show SpaceFilingCommands, buildSpaceFilingCommands, storeRootForBead;
 export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 
-/// Builds memento's `space` [CommandRunner]: the generic CLI-SDK commands plus
-/// the power_station assets' exported Commands, with the COMPUTE asset's use
-/// (bounded dispatch + its payload/result codec) assembled into the generic
-/// serve/lease commands — the asset owns the "use" (ADR-0011 D3).
+/// Builds memento's runner and the baseline asset composition that teaches its
+/// paired operator commands.
+///
+/// The returned command names are derived from the same [Command] instances
+/// registered on [CommandRunner]. The asset registry composes the baseline
+/// [GridAssetsPack] once so callers can resolve the teaching side of each pair
+/// without scanning package files or constructing a parallel registry.
 ///
 /// A downstream station extends this runner instead of forking it: [name] and
 /// [description] rebrand the banner (`buildRunner(name: 'lunar', …)`);
@@ -157,7 +163,12 @@ export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 /// never reads it ambiently — `no_watcher_no_gate_test` bans that under
 /// `lib/`, gate or not — so an unfed runner arms the default posture and a
 /// test feeds a literal map.
-CommandRunner<int> buildRunner({
+({
+  CommandRunner<int> runner,
+  Set<String> pairedCommandNames,
+  GridAssetRegistry assetRegistry,
+})
+buildRunnerComposition({
   String name = 'space',
   String description = "memento's grid station",
   String runnerInvocation = kSpaceRunner,
@@ -171,20 +182,47 @@ CommandRunner<int> buildRunner({
   final filingCommands = buildSpaceFilingCommands(
     delegateFactory: delegateFactory,
   );
-  return CommandRunner<int>(name, description)
+  final assetsCommand = buildSpaceAssetsCommand(
+    runnerInvocation: runnerInvocation,
+    delegateFactory: delegateFactory,
+  );
+  final searchCommand = buildSpaceSearchCommand(
+    delegateFactory: delegateFactory,
+  );
+  final filingCommand = filingCommands.filing;
+  final approveCommand = filingCommands.approve;
+  final linkCommand = linkCommands.link;
+  final upCommand = UpCommand(
+    delegateFactory: delegateFactory,
+    environment: environment,
+    runnerName: name,
+    runnerInvocation: runnerInvocation,
+  );
+  final downCommand = DownCommand();
+  final statusCommand = StatusCommand();
+  final pairedCommands = <Command<int>>[
+    assetsCommand,
+    searchCommand,
+    filingCommand,
+    approveCommand,
+    linkCommand,
+    upCommand,
+    downCommand,
+    statusCommand,
+  ];
+  final pairedCommandNames = Set<String>.unmodifiable(
+    pairedCommands.map((command) => command.name),
+  );
+  final assetRegistry = GridAssetRegistry(<GridAssetPackDefinition>[
+    GridAssetsPack.definition,
+  ]);
+  final runner = CommandRunner<int>(name, description)
     ..addCommand(WatchCommand())
     // memento's OWN resident verbs (RS-5b): the composed resident station
     // (up) + the thin StationAttach renders over it (down/status).
-    ..addCommand(
-      UpCommand(
-        delegateFactory: delegateFactory,
-        environment: environment,
-        runnerName: name,
-        runnerInvocation: runnerInvocation,
-      ),
-    )
-    ..addCommand(DownCommand())
-    ..addCommand(StatusCommand())
+    ..addCommand(upCommand)
+    ..addCommand(downCommand)
+    ..addCommand(statusCommand)
     // The operator's EXPLICIT hot-reload trigger. `reload` talks to the
     // RESIDENT station over the VM service it advertised in its lock — it
     // starts no second station and watches no file. Generic and
@@ -199,7 +237,7 @@ CommandRunner<int> buildRunner({
     // of reinventing it by inference (the coupled skill+command pattern,
     // power_station ADR-0001). The logic is the asset's; this is the
     // last-mile composition.
-    ..addCommand(buildSpaceSearchCommand(delegateFactory: delegateFactory))
+    ..addCommand(searchCommand)
     // The FILING asset's exported CLI components, COMPOSED with space's
     // resident-station context — `space filing <id>` (the deterministic
     // four-row front-door preflight the `discover` skill CALLS) and
@@ -207,15 +245,15 @@ CommandRunner<int> buildRunner({
     // same preflight, then ONE stamped receipt on the work bead). Both take a
     // bead id and are curried with the roster that resolves WHICH seat's store
     // owns it (power_station ADR-0001, the coupled skill+command pattern).
-    ..addCommand(filingCommands.filing)
-    ..addCommand(filingCommands.approve)
+    ..addCommand(filingCommand)
+    ..addCommand(approveCommand)
     // The SEAT asset's exported CLI pair, composed BARE: PrimeCommand is the
     // vended SessionStart hook target, and SeatCommand owns its builtin
     // environment registry and launch/refusal behavior. No station-local
     // command or service duplicates either implementation.
     ..addCommand(PrimeCommand())
     ..addCommand(SeatCommand())
-    ..addCommand(linkCommands.link)
+    ..addCommand(linkCommand)
     ..addCommand(linkCommands.unlink)
     // The ASSETS domain's exported Command group, COMPOSED with space's
     // resident-station context — `space assets install`: the operator leg of
@@ -225,12 +263,7 @@ CommandRunner<int> buildRunner({
     // is GENERATED from grid_assets rather than hand-copied here. NEVER
     // folded into `up` — installing the manual is an explicit act, the same
     // reason auto-reload was rejected.
-    ..addCommand(
-      buildSpaceAssetsCommand(
-        runnerInvocation: runnerInvocation,
-        delegateFactory: delegateFactory,
-      ),
-    )
+    ..addCommand(assetsCommand)
     // The butane burn is TEMPORARILY decomposed (2026-07-02): the pack lives
     // in gc-owned butane_flutter, which is not yet migrated onto the Circuit
     // rename (the_grid #10 / power_station #4) — recompose `BurnRunCommand()`
@@ -306,4 +339,27 @@ CommandRunner<int> buildRunner({
         },
       ),
     );
+  return (
+    runner: runner,
+    pairedCommandNames: pairedCommandNames,
+    assetRegistry: assetRegistry,
+  );
 }
+
+/// Builds memento's `space` [CommandRunner] with its existing public surface.
+///
+/// This source-compatible wrapper delegates all composition to
+/// [buildRunnerComposition].
+CommandRunner<int> buildRunner({
+  String name = 'space',
+  String description = "memento's grid station",
+  String runnerInvocation = kSpaceRunner,
+  SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+  Map<String, String> environment = const <String, String>{},
+}) => buildRunnerComposition(
+  name: name,
+  description: description,
+  runnerInvocation: runnerInvocation,
+  delegateFactory: delegateFactory,
+  environment: environment,
+).runner;

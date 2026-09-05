@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:beads_dart/beads_dart.dart' show BdResult, BdRunner;
@@ -11,6 +12,7 @@ import 'package:grid_assets/grid_assets.dart'
         FilingService;
 import 'package:grid_runtime/grid_runtime.dart' show GitRunResult, GitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
+import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
@@ -88,9 +90,10 @@ class _HyphenatedRosterDelegate extends SpaceDelegate {
   ];
 }
 
-const String _umbrella = '/home/memento';
-const String _gridHome = '$_umbrella/space_station';
 const String _sha = '9f1c2d3e4b5a69788899aabbccddeeff00112233';
+late Directory _fixture;
+late String _umbrella;
+late String _gridHome;
 
 String _beadReply(String description, {String id = 'pow-child'}) => jsonEncode({
   'schema_version': 1,
@@ -135,9 +138,10 @@ Map<String, String> _metadataOf(List<String> argv) {
 })
 _harness(
   _ScriptedBdRunner bd, {
-  String home = _gridHome,
+  String? home,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
 }) {
+  final gridHome = home ?? _gridHome;
   final out = StringBuffer();
   final err = StringBuffer();
   final storeRoots = <String>[];
@@ -150,7 +154,7 @@ _harness(
   }
 
   final commands = buildSpaceFilingCommands(
-    gridHomeDefault: () => home,
+    gridHomeDefault: () => gridHome,
     delegateFactory: delegateFactory,
     filing: FilingService(
       source: ExactSubstationBeadSource(runnerFor: runnerFor),
@@ -176,6 +180,15 @@ _harness(
 }
 
 void main() {
+  setUp(() {
+    _fixture = Directory.systemTemp.createTempSync('space-filing-');
+    _umbrella = _fixture.path;
+    _gridHome = p.join(_umbrella, 'space_station');
+    Directory(p.join(_gridHome, '.grid', '.beads')).createSync(recursive: true);
+  });
+
+  tearDown(() => _fixture.deleteSync(recursive: true));
+
   test('`filing --json <id>` reads the seat the id PREFIX names in the CODED '
       'roster — `pow-…` is power_station at ../power_station, never the CWD '
       'store — and returns the four rows', () async {

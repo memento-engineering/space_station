@@ -120,6 +120,13 @@ Bead _work(String id, {bool closed = false}) => Bead(
   status: closed ? BeadStatus.closed : BeadStatus.open,
 );
 
+Bead _liveSession(String id, {required String workBeadId}) => Bead(
+  id: id,
+  issueType: GridIssueTypes.session,
+  status: BeadStatus.open,
+  metadata: <String, dynamic>{'rig': 'houston', 'work_bead': workBeadId},
+);
+
 JoinedSnapshot _read(JoinedSnapshotNotifier notifier) {
   late JoinedSnapshot value;
   final remove = notifier.addListener((next) => value = next);
@@ -268,8 +275,21 @@ void main() {
     });
     expect(recorder.mounted, contains('alpha-1'));
 
-    state.emit(_graph(stateBeads, tick: 1));
-    await Future<void>.delayed(Duration.zero);
+    final joinedChanged = Completer<void>();
+    final removeJoinedListener = bridge.notifier.addListener((snapshot) {
+      if (!snapshot.graph.readyIds.contains('alpha-1') &&
+          !joinedChanged.isCompleted) {
+        joinedChanged.complete();
+      }
+    });
+    state.emit(
+      _graph(<Bead>[
+        ...stateBeads,
+        _liveSession('houston-alpha-session', workBeadId: 'alpha-1'),
+      ], tick: 1),
+    );
+    await joinedChanged.future;
+    removeJoinedListener();
     owner.flush();
 
     expect(_read(bridge.notifier).graph.readyIds, isNot(contains('alpha-1')));

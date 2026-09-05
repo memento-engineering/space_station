@@ -43,11 +43,9 @@ dependencies:
   # composes agree on one grid_assets. Its own composed SubstationSeed is
   # deliberately NOT adopted here — see space-ovd.
   github_grid_assets: ^0.1.0-rc.9
-  # rc.13 is the floor: it vends PrimeCommand/SeatCommand, adds the
-  # declaration-driven operator-seat fields (including drivenArgs), and moves
-  # Claude's permission skip out of args without changing driven spawn argv.
-  # The typed-seat arming mechanism first vended in rc.9 remains consumed.
-  grid_assets: ^0.6.0-rc.13
+  # rc.14 is the floor: its generated GridAssetsPack carries the four baseline
+  # skill teaching claims that fence this package's paired command surface.
+  grid_assets: ^0.6.0-rc.14
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
@@ -77,11 +75,9 @@ dependencies:
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
   # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
-  # Hosted release constraint (ADR-0003 D1 source amendment): a producer
-  # change is adopted DELIBERATELY by bumping this constraint. Hosted source
-  # is required because published siblings depend on each other from hosted;
-  # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_sdk: ^0.3.0-rc.8
+  # rc.15 is the floor: GridAssetDefinition carries the typed `teaches` field
+  # consumed by the paired command coverage fence.
+  grid_sdk: ^0.3.0-rc.15
   path: ^1.9.0
 
 dev_dependencies:
