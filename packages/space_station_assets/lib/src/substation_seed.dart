@@ -38,6 +38,7 @@ import 'package:grid_assets/grid_assets.dart'
         CriticAgentEnvironment,
         GatherAgentEnvironment,
         GitSourceControl,
+        GridAssetRosterOverride,
         MountEligibilityAssets,
         SeatEnvironments,
         SpecAgentEnvironment,
@@ -96,6 +97,7 @@ final class MountedSubstationSeed {
   const MountedSubstationSeed({
     required this.scope,
     required this.githubPollingConfigured,
+    required this.assetRoster,
     this.agentConfig,
     this.environments,
   });
@@ -105,6 +107,13 @@ final class MountedSubstationSeed {
 
   /// Whether this substation carries authored GitHub polling configuration.
   final bool githubPollingConfigured;
+
+  /// The authored asset-selection exceptions for this substation.
+  ///
+  /// Null means selection is purely derived from asset selectors. The mounted
+  /// projection preserves the authored override instance unchanged so offline
+  /// enumeration can inspect composition without evaluating selection.
+  final GridAssetRosterOverride? assetRoster;
 
   /// The agent config RESOLVED AT THIS SEAT'S POSITION — the station's ambient
   /// value (the `--env` rung). Null only when no `HarnessProvider` is mounted
@@ -136,6 +145,7 @@ class SubstationSeed extends StatelessSeed {
     this.githubPoll,
     this.landingPolicy,
     this.arming,
+    this.assetRoster,
     this.githubAppCredentialLoader = const github.GitHubAppCredentialLoader(),
     this.githubTransportFactory = github.createGitHubHttpTransport,
     this.mountEligibilityRunnerFor,
@@ -177,6 +187,12 @@ class SubstationSeed extends StatelessSeed {
   /// lookup.
   final AgentArming? arming;
 
+  /// The seat's explicit exceptions to selector-derived asset selection.
+  ///
+  /// Null means pure derived selection. This coded value is stored and
+  /// projected unchanged; the seed does not inspect or resolve it.
+  final GridAssetRosterOverride? assetRoster;
+
   /// Loads this seat's App private key; injectable for deterministic tests.
   final github.GitHubAppCredentialLoader githubAppCredentialLoader;
 
@@ -199,6 +215,7 @@ class SubstationSeed extends StatelessSeed {
     final githubPoll = this.githubPoll;
     final mountEligibilityRunnerFor = this.mountEligibilityRunnerFor;
     final landingPolicy = this.landingPolicy;
+    final assetRoster = this.assetRoster;
     // The PER-SUBSTATION rung (ADR-0002 D5; ADR-0006 D2). A NESTED
     // TypedEnvironmentProvider already shadows the station's for this seat's
     // subtree, per TYPE: a seat that arms only `build` leaves spec/critic/
@@ -208,7 +225,10 @@ class SubstationSeed extends StatelessSeed {
       // OUTERMOST on purpose: every asset, every work mount and the offline
       // projection below must read the SEAT's seats, not the station's.
       if (arming != null) TypedEnvironmentProvider(arming: arming),
-      _MountedSubstationSeedAssets(githubPollingConfigured: githubPoll != null),
+      _MountedSubstationSeedAssets(
+        githubPollingConfigured: githubPoll != null,
+        assetRoster: assetRoster,
+      ),
       const GitGridAssets(),
       if (githubPoll != null &&
           githubPoll.arm == github.GitHubReconcilerArm.live)
@@ -276,12 +296,14 @@ typedef SubstationSeat = SubstationSeed;
 final class _MountedSubstationSeedAssets extends SingleChildStatelessSeed {
   const _MountedSubstationSeedAssets({
     required this.githubPollingConfigured,
+    required this.assetRoster,
     // Nest supplies this fold child; direct call sites deliberately omit it.
     // ignore: unused_element_parameter
     super.child,
   });
 
   final bool githubPollingConfigured;
+  final GridAssetRosterOverride? assetRoster;
 
   @override
   Seed buildWithChild(TreeContext context, Seed child) {
@@ -298,6 +320,7 @@ final class _MountedSubstationSeedAssets extends SingleChildStatelessSeed {
       MountedSubstationSeed(
         scope: sdk.SubstationScope.of(context),
         githubPollingConfigured: githubPollingConfigured,
+        assetRoster: assetRoster,
         agentConfig: context.dependOnInheritedSeedOfExactType<AgentConfig>(),
         environments: SeatEnvironments.of(context),
       ),

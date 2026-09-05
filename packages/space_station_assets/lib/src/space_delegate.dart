@@ -61,6 +61,7 @@ import 'package:grid_assets/grid_assets.dart'
         CriticAgentEnvironment,
         EnvironmentRegistry,
         GatherAgentEnvironment,
+        GridAssetRosterOverride,
         HarnessProvider,
         MountEligibilityAssets,
         PackagedAssetLoader,
@@ -132,8 +133,9 @@ const kMementoOrgApp = GitHubAppConfig(
   privateKeyVar: 'GRID_GITHUB_APP_KEY_MEMENTO',
 );
 
-/// Enumerates the CODED roster plus its GitHub-polling seat names from one
-/// shared offline mount of the station [factory] authors.
+/// Enumerates the CODED roster, its GitHub-polling seat names, and authored
+/// asset-selection exceptions from one shared offline mount of the station
+/// [factory] authors.
 ///
 /// The mount lifecycle and tree walk are owned by `grid_assets`'
 /// `mountedValuesOf`; this package projects the [MountedSubstationSeed] values
@@ -144,7 +146,11 @@ const kMementoOrgApp = GitHubAppConfig(
 /// names/prefixes (seat names are grid-home-independent); pass the real home
 /// when the resolved roots matter (they arrive resolved by the SDK's own
 /// seat build).
-({List<sdk.SubstationScope> scopes, Set<String> githubPollingSeatNames})
+({
+  List<sdk.SubstationScope> scopes,
+  Set<String> githubPollingSeatNames,
+  Map<String, GridAssetRosterOverride> assetRosters,
+})
 codedRosterSnapshotOf(SpaceDelegateFactory factory, {String gridRoot = '/'}) {
   final delegate = factory(gridRoot: gridRoot);
   try {
@@ -156,6 +162,11 @@ codedRosterSnapshotOf(SpaceDelegateFactory factory, {String gridRoot = '/'}) {
       githubPollingSeatNames: Set<String>.unmodifiable({
         for (final seat in seats)
           if (seat.githubPollingConfigured) seat.scope.name,
+      }),
+      assetRosters: Map<String, GridAssetRosterOverride>.unmodifiable({
+        for (final seat in seats)
+          if (seat.assetRoster case final assetRoster?)
+            seat.scope.name: assetRoster,
       }),
     );
   } finally {

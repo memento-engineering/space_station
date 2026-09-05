@@ -8,6 +8,7 @@ import 'package:grid_assets/grid_assets.dart'
         AgentCapability,
         AgentConfig,
         GitGridAssets,
+        GridAssetRosterOverride,
         MountEligibilityAssets,
         PackagedAssetLoader,
         SubstationFacts,
@@ -33,6 +34,7 @@ import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
+import 'package:space_station_assets/space_station_assets.dart' as station;
 import 'package:space_station_assets/src/assets_command.dart' show kSpaceRunner;
 import 'package:space_station_assets/src/space_delegate.dart';
 import 'package:space_station_assets/src/up_command.dart';
@@ -78,6 +80,33 @@ void main() {
     githubSelfTrust: githubSelfTrust,
     live: live,
   );
+
+  test('the coded roster snapshot carries per-seat asset rosters', () {
+    final snapshot = codedRosterSnapshotOf(_AssetRosterDelegate.new);
+
+    expect(
+      snapshot.scopes.map((scope) => scope.name),
+      orderedEquals(['authored', 'polling']),
+    );
+    expect(snapshot.githubPollingSeatNames, {'polling'});
+    expect(snapshot.assetRosters.keys, orderedEquals(['authored']));
+    expect(
+      snapshot.assetRosters['authored'],
+      same(_AssetRosterDelegate.assetRoster),
+    );
+    expect(
+      () => snapshot.assetRosters['polling'] = _AssetRosterDelegate.assetRoster,
+      throwsUnsupportedError,
+    );
+  });
+
+  test('the barrel re-exports the roster override vocabulary', () {
+    final override = station.GridAssetRosterOverride(
+      include: <station.AssetKey>{},
+    );
+
+    expect(override.include, isEmpty);
+  });
 
   group('SpaceDelegate.build — space_station as a Seed (v3 §2)', () {
     test('the well-formed offline tree mounts clean (ProviderScope → '
@@ -624,6 +653,49 @@ class _MarkerDelegate extends SpaceDelegate {
     receivedAppender = appendNote;
     return super.buildWorkRegistry(appendNote);
   }
+}
+
+class _AssetRosterDelegate extends SpaceDelegate {
+  _AssetRosterDelegate({
+    required super.gridRoot,
+    super.agentConfig,
+    super.appended,
+    super.harnesses,
+    super.wiring,
+    super.provisioner,
+    super.githubSelfTrust,
+    super.live,
+  });
+
+  static const assetKey = sdk.AssetKey(
+    package: 'fixture_assets',
+    kind: sdk.AssetKind.skill,
+    id: 'authored',
+  );
+  static final assetRoster = GridAssetRosterOverride(include: {assetKey});
+
+  @override
+  List<Seed> substations(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [
+    station.SubstationSeed(
+      name: 'authored',
+      root: '../authored',
+      assetRoster: assetRoster,
+    ),
+    station.SubstationSeed(
+      name: 'polling',
+      root: '../polling',
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'fixture',
+        repository: 'polling',
+        substation: 'polling',
+        installationId: '1',
+        arm: github.GitHubReconcilerArm.offline,
+      ),
+    ),
+  ];
 }
 
 String _materializeDiscoverSkill(SpaceDelegate delegate) {

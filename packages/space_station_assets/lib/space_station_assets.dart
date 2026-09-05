@@ -71,7 +71,12 @@ import 'src/up_command.dart';
 // forked: a downstream station (lunar) imports `AgentArming` through this
 // barrel and its `show` clause is unchanged by the move.
 export 'package:grid_assets/grid_assets.dart'
-    show AgentArming, SeatEnvironments, TypedEnvironmentProvider;
+    show
+        AgentArming,
+        GridAssetRosterOverride,
+        SeatEnvironments,
+        TypedEnvironmentProvider;
+export 'package:grid_sdk/grid_sdk.dart' show AssetKey;
 // The ARMING layer: memento's POSTURE — the station's coded environments as
 // COMPLETE const values, the canned preference ladders, the coded station
 // arming and the boot-eager guard. A downstream station overrides
