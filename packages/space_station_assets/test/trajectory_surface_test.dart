@@ -196,6 +196,7 @@ void main() {
           appended: 42,
           deduped: 3,
           dropped: 1,
+          suppressed: 4,
           queueDepth: 12,
         ),
       );
@@ -203,8 +204,7 @@ void main() {
       expect(line, contains('epoch 7'));
       expect(line, contains('appended 42'));
       expect(line, contains('deduped 3'));
-      expect(line, contains('dropped 1'));
-      expect(line, contains('queue 12'));
+      expect(line, contains('dropped 1  ·  suppressed 4  ·  queue 12'));
     });
 
     test('every non-live posture says legacy-only AND that the window is not '
@@ -270,13 +270,18 @@ void main() {
       expect(line, contains('(no secret)'));
     });
 
-    test('DEGRADED surfaces the drop count inline (§3: a dropped append '
-        'disqualifies the round)', () {
+    test('DEGRADED surfaces dropped and suppressed counts before its '
+        'legacy-only clause', () {
       expect(
         trajectoryBannerLine(
-          status(TrajectoryHarnessMode.degraded, cause: 'socket', dropped: 9),
+          status(
+            TrajectoryHarnessMode.degraded,
+            cause: 'socket',
+            dropped: 9,
+            suppressed: 6,
+          ),
         ),
-        contains('dropped 9'),
+        contains('dropped 9  ·  suppressed 6 — running legacy-only'),
       );
     });
 
@@ -541,7 +546,8 @@ void main() {
       expect(rendered.line, contains('epoch 4'));
       expect(rendered.line, contains('queue 2'));
       expect(rendered.line, contains('appended 118'));
-      expect(rendered.line, contains('dropped 0'));
+      expect(rendered.line, contains('dropped 0  ·  suppressed 0'));
+      expect(rendered.line, isNot(startsWith('!!')));
     });
 
     test('DISABLED renders ONE quiet line — a flag the operator passed is not '
@@ -621,6 +627,54 @@ void main() {
       expect(rendered.line, startsWith('!!'));
       expect(rendered.line, contains('7 dropped append'));
       expect(rendered.line, contains('clean round'));
+    });
+
+    test('a LIVE harness with ANY suppressed append is LOUD and cannot count '
+        'as a clean round', () {
+      final rendered = trajectoryStatusLine(
+        payload(
+          status(
+            TrajectoryHarnessMode.live,
+            epoch: 4,
+            appended: 90,
+            suppressed: 7,
+          ),
+        ),
+      )!;
+      expect(rendered.loud, isTrue);
+      expect(rendered.line, startsWith('!!'));
+      expect(rendered.line, contains('dropped 0  ·  suppressed 7'));
+      expect(
+        rendered.line,
+        contains(
+          '7 suppressed append(s) — a round with any suppressed append '
+          'cannot count as a clean round',
+        ),
+      );
+    });
+
+    test('DEGRADED renders dropped then suppressed and explains suppression '
+        'while remaining LOUD', () {
+      final rendered = trajectoryStatusLine(
+        payload(
+          status(
+            TrajectoryHarnessMode.degraded,
+            cause: 'socket',
+            dropped: 9,
+            suppressed: 6,
+          ),
+        ),
+      )!;
+      expect(rendered.loud, isTrue);
+      expect(rendered.line, startsWith('!! trajectory: DEGRADED'));
+      expect(rendered.line, contains('dropped 9  ·  suppressed 6'));
+      expect(
+        rendered.line,
+        contains(
+          '6 suppressed append(s) — a round with any suppressed append '
+          'cannot count as a clean round',
+        ),
+      );
     });
 
     test('a LIVE harness with an exit-join gap is LOUD, the same '

@@ -118,7 +118,8 @@ String trajectoryBannerLine(
     case TrajectoryHarnessMode.live:
       return 'trajectory: $word  ·  epoch ${status.epoch}  ·  '
           'appended ${status.appended}  ·  deduped ${status.deduped}  ·  '
-          'dropped ${status.dropped}  ·  queue ${status.queueDepth}';
+          'dropped ${status.dropped}  ·  '
+          'suppressed ${status.suppressed}  ·  queue ${status.queueDepth}';
     case TrajectoryHarnessMode.disabled:
       // The operator's own flag outranks the dry-run force as the CAUSE: both
       // are true on `--no-trajectory --dry-run` (the default), and reporting
@@ -135,6 +136,7 @@ String trajectoryBannerLine(
       return 'trajectory: $word$cause$legacyOnly';
     case TrajectoryHarnessMode.degraded:
       return 'trajectory: $word$cause  ·  dropped ${status.dropped}'
+          '  ·  suppressed ${status.suppressed}'
           '$legacyOnly';
     case TrajectoryHarnessMode.fencedOut:
       return 'trajectory: $word$cause  ·  epoch ${status.epoch}$legacyOnly';
@@ -182,8 +184,9 @@ String? trajectoryRequiredWarning(
 
 /// The `/status` trajectory block (stage1-wiring §3): the posture, its cause,
 /// the claimed epoch, the queue depth, and the divergence counters the cut
-/// criterion is read off — a round with any dropped append cannot count as a
-/// clean round, so `dropped` is a first-class field, not a log line.
+/// criterion is read off — a round with any dropped or suppressed append cannot
+/// count as a clean round, so `dropped` and `suppressed` are first-class
+/// fields, not log lines.
 ///
 /// [armed] is the derived one-bit read a watcher polls; [mode] keeps the
 /// harness's own vocabulary so the wire never invents a second one.
@@ -228,6 +231,8 @@ typedef TrajectoryLine = ({String line, bool loud});
 ///    degradation;
 ///  * `dropped > 0` — §3: a round with ANY dropped append cannot count as a
 ///    clean round, even from an otherwise LIVE harness;
+///  * `suppressed > 0` — a fenced-out, halted, or degraded latch refused an
+///    append, which likewise disqualifies the round;
 ///  * `exitJoinGaps > 0` — a derivation that never joined its exit, the same
 ///    disqualification.
 TrajectoryLine? trajectoryStatusLine(Map<String, Object?> payload) {
@@ -240,17 +245,20 @@ TrajectoryLine? trajectoryStatusLine(Map<String, Object?> payload) {
   final cause = block['cause'] as String?;
   final epoch = block['epoch'];
   final dropped = count('dropped');
+  final suppressed = count('suppressed');
   final gaps = count('exitJoinGaps');
   // `disabled` and `unprovisioned` are the two postures §1.3 designs to be
   // quiet — a flag the operator passed, and an unprovisioned home.
   final quietPosture =
       mode == TrajectoryHarnessMode.disabled.name ||
       mode == TrajectoryHarnessMode.unprovisioned.name;
-  final loud = (!armed && !quietPosture) || dropped > 0 || gaps > 0;
+  final loud =
+      (!armed && !quietPosture) || dropped > 0 || suppressed > 0 || gaps > 0;
 
   final counters =
       '  ·  epoch ${epoch ?? '—'}  ·  queue ${count('queueDepth')}  ·  '
-      'appended ${count('appended')}  ·  dropped $dropped';
+      'appended ${count('appended')}  ·  dropped $dropped  ·  '
+      'suppressed $suppressed';
 
   if (!loud) {
     final armedNote = armed
@@ -269,6 +277,9 @@ TrajectoryLine? trajectoryStatusLine(Map<String, Object?> payload) {
     if (dropped > 0)
       '$dropped dropped append(s) — a round with any dropped append cannot '
           'count as a clean round',
+    if (suppressed > 0)
+      '$suppressed suppressed append(s) — a round with any suppressed append '
+          'cannot count as a clean round',
     if (gaps > 0) '$gaps exit-join gap(s)',
   ];
   return (
