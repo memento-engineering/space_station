@@ -27,6 +27,7 @@ import 'package:grid_cli/src/station_attach.dart'
     show
         AttachResult,
         Down,
+        SlowUp,
         Starting,
         StationAttach,
         Unauthorized,
@@ -92,6 +93,14 @@ class StatusCommand extends Command<int> {
         switch (result) {
           case Up(:final payload):
             _renderUp(payload);
+            return 0;
+          case SlowUp(:final payload, :final elapsed):
+            _renderUp(payload);
+            stdout.writeln(
+              '  door: SLOW — /status answered after ${elapsed.inSeconds} s '
+              '(alive but saturated; a status that reads DOWN under load is '
+              'this door, not the resident)',
+            );
             return 0;
           case Down():
             await _renderDownFallback(results, workspace);

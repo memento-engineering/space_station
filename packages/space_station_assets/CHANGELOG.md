@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0-rc.7
+
+- Fixed: `space status` names `SlowUp` — grid_cli 0.5.0-rc.16 (tg-k5hl, the_grid#337) split a slow-but-alive resident door out of `Up`, and the exhaustive `AttachResult` switch made every downstream station that resolved cli rc.16+ fail to compile (lunar held `grid_cli` at rc.15 for exactly this). A slow door renders as UP plus one `door: SLOW` line carrying the elapsed seconds, exit 0. Floors `grid_cli ^0.5.0-rc.17` (the first cli that compiles against grid_trajectory 0.2.0-rc.5's `ShadowCompare` surface), `grid_sdk ^0.3.0-rc.17` and `grid_runtime ^0.2.0-rc.14`, so a resolved pair is coherent with the_grid rc wave 13.
+
 ## 0.3.0-rc.6
 
 - Fixed: `space status` consumes the lock's DECLARED lifecycle phase — the `AttachResult` switch names `Starting` and `Unreachable` (cli rc.15 split them out of `Stale`; the `Unreachable` branch keeps the prior wording and exit code, `Starting` is additive). Floors `grid_cli ^0.5.0-rc.15` and `grid_diagnostics_contract ^0.2.1`; a downstream station that resolves cli rc.15 compiled against rc.5's switch no longer breaks (space-b8u, #76).
