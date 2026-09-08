@@ -36,6 +36,8 @@ void main() {
     int appended = 0,
     int deduped = 0,
     int dropped = 0,
+    int? decisionBearingDropped,
+    int fireAndForgetDropped = 0,
     int suppressed = 0,
     int queueDepth = 0,
     int exitJoinGaps = 0,
@@ -45,7 +47,8 @@ void main() {
     epoch: epoch,
     appended: appended,
     deduped: deduped,
-    dropped: dropped,
+    decisionBearingDropped: decisionBearingDropped ?? dropped,
+    fireAndForgetDropped: fireAndForgetDropped,
     suppressed: suppressed,
     queueDepth: queueDepth,
     exitJoinGaps: exitJoinGaps,
@@ -435,20 +438,36 @@ void main() {
 
     test('LIVE reads armed, with the epoch, the queue depth, and every '
         'counter the cut criterion is scored on', () {
-      final block =
-          _status(
-                status(
-                  TrajectoryHarnessMode.live,
-                  epoch: 4,
-                  appended: 11,
-                  deduped: 2,
-                  dropped: 0,
-                  suppressed: 1,
-                  queueDepth: 6,
-                  exitJoinGaps: 2,
-                ),
-              ).toJson()['trajectory']!
-              as Map<String, Object?>;
+      final snapshot = _status(
+        status(
+          TrajectoryHarnessMode.live,
+          epoch: 4,
+          appended: 11,
+          deduped: 2,
+          decisionBearingDropped: 3,
+          fireAndForgetDropped: 4,
+          suppressed: 1,
+          queueDepth: 6,
+          exitJoinGaps: 2,
+        ),
+      );
+      final block = snapshot.toJson()['trajectory']! as Map<String, Object?>;
+      expect(
+        block.keys,
+        unorderedEquals(const [
+          'mode',
+          'armed',
+          'cause',
+          'epoch',
+          'queueDepth',
+          'appended',
+          'deduped',
+          'dropped',
+          'suppressed',
+          'exitJoinGaps',
+        ]),
+      );
+      expect(snapshot.trajectory, same(block));
       expect(block['mode'], 'live');
       expect(block['armed'], isTrue);
       expect(block['cause'], isNull);
@@ -456,7 +475,7 @@ void main() {
       expect(block['queueDepth'], 6);
       expect(block['appended'], 11);
       expect(block['deduped'], 2);
-      expect(block['dropped'], 0);
+      expect(block['dropped'], 7);
       expect(block['suppressed'], 1);
       expect(block['exitJoinGaps'], 2);
     });
@@ -483,6 +502,13 @@ void main() {
         'parameter this subclass forgets is unreachable, silently', () {
       final json = SpaceStationStatus(
         trajectory: status(TrajectoryHarnessMode.live, epoch: 1),
+        roster: const [
+          (
+            name: 'power_station',
+            root: '/home/memento/power_station',
+            prefix: 'pow',
+          ),
+        ],
         substation: 'space_station',
         stateStore: '/home/memento/space_station',
         workRoot: 'space_station=/home/memento/space_station',
@@ -500,6 +526,13 @@ void main() {
       ).toJson();
       expect(json.keys, contains('trajectory'));
       expect(json.keys, contains('wedge'));
+      expect((json['station']! as Map<String, Object?>)['roster'], const [
+        {
+          'name': 'power_station',
+          'root': '/home/memento/power_station',
+          'prefix': 'pow',
+        },
+      ]);
     });
   });
 

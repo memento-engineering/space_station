@@ -10,7 +10,6 @@ import 'package:grid_assets/grid_assets.dart'
         CrossLinkBlockerSource,
         ExactSubstationBeadSource,
         FilingService;
-import 'package:grid_runtime/grid_runtime.dart' show GitRunResult, GitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
@@ -21,8 +20,7 @@ import 'package:test/test.dart';
 /// store each one reads (and, for approve, WRITES) is the seat the bead id's
 /// PREFIX names in the coded roster (`SpaceDelegate.substations`) — never the
 /// CWD's store. The Commands' own behaviour is pinned in power_station; this
-/// suite pins the WIRING. Offline: a scripted `bd` runner + a fake git runner +
-/// captured sinks.
+/// suite pins the WIRING. Offline: a scripted `bd` runner + captured sinks.
 final class _ScriptedBdRunner implements BdRunner {
   _ScriptedBdRunner(this.replies);
 
@@ -45,22 +43,6 @@ final class _ScriptedBdRunner implements BdRunner {
 
   List<List<String>> get updates =>
       argvs.where((argv) => argv.first == 'update').toList();
-}
-
-final class _FakeGitRunner implements GitRunner {
-  _FakeGitRunner(this.result);
-
-  final GitRunResult result;
-  final List<String> workingDirectories = [];
-
-  @override
-  Future<GitRunResult> run({
-    required String workingDirectory,
-    required List<String> args,
-  }) async {
-    workingDirectories.add(workingDirectory);
-    return result;
-  }
 }
 
 /// A downstream roster whose seats include a HYPHENATED prefix AND the strict
@@ -90,7 +72,6 @@ class _HyphenatedRosterDelegate extends SpaceDelegate {
   ];
 }
 
-const String _sha = '9f1c2d3e4b5a69788899aabbccddeeff00112233';
 late Directory _fixture;
 late String _umbrella;
 late String _gridHome;
@@ -134,7 +115,6 @@ Map<String, String> _metadataOf(List<String> argv) {
   StringBuffer out,
   StringBuffer err,
   List<String> storeRoots,
-  _FakeGitRunner git,
 })
 _harness(
   _ScriptedBdRunner bd, {
@@ -145,9 +125,6 @@ _harness(
   final out = StringBuffer();
   final err = StringBuffer();
   final storeRoots = <String>[];
-  final git = _FakeGitRunner(
-    const GitRunResult(exitCode: 0, output: '$_sha\n'),
-  );
   BdRunner runnerFor(String storeRoot) {
     storeRoots.add(storeRoot);
     return bd;
@@ -162,7 +139,6 @@ _harness(
     ),
     approve: ApproveService(
       runnerFor: runnerFor,
-      git: git,
       now: () => DateTime.utc(2026, 9, 2, 14, 30),
     ),
     out: out,
@@ -175,7 +151,6 @@ _harness(
     out: out,
     err: err,
     storeRoots: storeRoots,
-    git: git,
   );
 }
 
@@ -234,23 +209,24 @@ void main() {
     expect(h.out.toString(), isEmpty);
   });
 
-  test('`approve` REFUSES an unwired named blocker: exit 1, nothing written, '
-      'no revision read', () async {
-    final bd = _ScriptedBdRunner({
-      'query': _beadReply('Child 2 of epic pow-n6n. Depends on pow-n6n.1.'),
-      'dep': _depReply(const []),
-    });
-    final h = _harness(bd);
+  test(
+    '`approve` REFUSES an unwired named blocker: exit 1, nothing written',
+    () async {
+      final bd = _ScriptedBdRunner({
+        'query': _beadReply('Child 2 of epic pow-n6n. Depends on pow-n6n.1.'),
+        'dep': _depReply(const []),
+      });
+      final h = _harness(bd);
 
-    expect(
-      await h.runner.run(['approve', '--actor', 'governor', 'pow-child']),
-      1,
-    );
-    expect(h.out.toString(), contains('REFUSED pow-child'));
-    expect(h.out.toString(), contains('pow-n6n.1'));
-    expect(bd.updates, isEmpty);
-    expect(h.git.workingDirectories, isEmpty);
-  });
+      expect(
+        await h.runner.run(['approve', '--actor', 'governor', 'pow-child']),
+        1,
+      );
+      expect(h.out.toString(), contains('REFUSED pow-child'));
+      expect(h.out.toString(), contains('pow-n6n.1'));
+      expect(bd.updates, isEmpty);
+    },
+  );
 
   test(
     '`approve` STAMPS a wired bead in ONE bd update against the '
@@ -273,18 +249,25 @@ void main() {
         0,
         reason: '${h.out}${h.err}',
       );
-      expect(h.git.workingDirectories, ['$_umbrella/power_station']);
       expect(bd.updates, hasLength(1));
       final argv = bd.updates.single;
       expect(argv.take(2), ['update', 'pow-child']);
       expect(argv, containsAllInOrder(['--actor', 'governor']));
       // grid_assets rc.8: the stamp IS approval — the verb adds no label.
       expect(argv, isNot(contains('--add-label')));
-      expect(_metadataOf(argv), {
-        'grid.approved_by': 'governor',
-        'grid.approved_at': '2026-09-02T14:30:00.000Z',
-        'grid.approved_rev': _sha,
-      });
+      final metadata = _metadataOf(argv);
+      expect(
+        metadata.keys,
+        unorderedEquals(const [
+          'grid.approved_by',
+          'grid.approved_at',
+          'grid.approved_rev',
+        ]),
+      );
+      expect(metadata['grid.approved_by'], 'governor');
+      expect(metadata['grid.approved_at'], '2026-09-02T14:30:00.000Z');
+      final approvedRev = metadata['grid.approved_rev'];
+      expect(approvedRev, matches(RegExp(r'^filing:v1:sha256:[0-9a-f]{64}$')));
       expect(
         h.storeRoots,
         contains('$_umbrella/power_station'),
@@ -297,7 +280,7 @@ void main() {
       );
       final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
       expect(report['approved'], isTrue);
-      expect(report['rev'], _sha);
+      expect(report['rev'], approvedRev);
     },
   );
 
@@ -376,7 +359,6 @@ void main() {
       0,
       reason: '${h.out}${h.err}',
     );
-    expect(h.git.workingDirectories, ['$_umbrella/swift-infer']);
     expect(bd.updates, hasLength(1));
     expect(bd.updates.single.take(2), ['update', 'swift-infer-zfor']);
     expect(h.storeRoots, contains('$_umbrella/swift-infer'));

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0-rc.8
+
+- Breaking: `SpaceStationStatus.trajectory` is now grid_cli's inherited
+  `Map<String, Object?>` wire field. Constructor callers continue to pass the
+  typed `trajectory:` input unchanged; typed consumers migrate to
+  `StationWorkRuntime.trajectory.status`. `trajectoryStatusJson` remains the
+  single serializer. This release floors `grid_cli ^0.5.0-rc.19`,
+  `grid_engine ^0.3.0-rc.22`, `grid_sdk ^0.3.0-rc.19`,
+  `grid_runtime ^0.2.0-rc.16`, and `grid_assets ^0.6.0-rc.20` for the complete
+  grid wave-15 shape.
+- Added: the live status snapshot publishes the ordered resolved substation
+  roster under `station.roster`, and attached status renders it. Older payloads
+  without roster entries remain compatible.
+- Fixed: the assets command resolves an omitted grid-home override from the
+  mounted delegate's tree position, preserving downstream station roots while
+  still refusing relative overrides.
+
 ## 0.3.0-rc.7
 
 - Fixed: `space status` names `SlowUp` — grid_cli 0.5.0-rc.16 (tg-k5hl, the_grid#337) split a slow-but-alive resident door out of `Up`, and the exhaustive `AttachResult` switch made every downstream station that resolved cli rc.16+ fail to compile (lunar held `grid_cli` at rc.15 for exactly this). A slow door renders as UP plus one `door: SLOW` line carrying the elapsed seconds, exit 0. Floors `grid_cli ^0.5.0-rc.17` (the first cli that compiles against grid_trajectory 0.2.0-rc.5's `ShadowCompare` surface), `grid_sdk ^0.3.0-rc.17` and `grid_runtime ^0.2.0-rc.14`, so a resolved pair is coherent with the_grid rc wave 13.
