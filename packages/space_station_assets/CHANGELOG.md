@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0-rc.9
+
+- Fixed: `SpaceDelegate.maintainsStateStoreOnBoot` directly projects `live`,
+  enabling `runGrid`'s pre-boot state-store maintenance on live arms while
+  keeping it disabled for dry probes.
+- Changed: adopts the grid wave-16 floors: `grid_engine ^0.3.0-rc.23`,
+  `grid_sdk ^0.3.0-rc.20`, `grid_cli ^0.5.0-rc.20`, and
+  `grid_runtime ^0.2.0-rc.16`.
+
 ## 0.3.0-rc.8
 
 - Breaking: `SpaceStationStatus.trajectory` is now grid_cli's inherited

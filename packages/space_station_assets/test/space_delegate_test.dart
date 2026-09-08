@@ -81,6 +81,16 @@ void main() {
     live: live,
   );
 
+  test('state-store maintenance follows the live posture', () {
+    final dryDelegate = delegate();
+    final liveDelegate = delegate(live: true);
+    addTearDown(dryDelegate.dispose);
+    addTearDown(liveDelegate.dispose);
+
+    expect(dryDelegate.maintainsStateStoreOnBoot, isFalse);
+    expect(liveDelegate.maintainsStateStoreOnBoot, isTrue);
+  });
+
   test('the coded roster snapshot carries per-seat asset rosters', () {
     final snapshot = codedRosterSnapshotOf(_AssetRosterDelegate.new);
 
