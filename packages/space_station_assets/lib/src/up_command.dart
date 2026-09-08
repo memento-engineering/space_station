@@ -62,6 +62,7 @@ import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         GridHandle,
+        GridHookError,
         GridStateStore,
         StationWorkRuntime,
         StoreLocator,
@@ -85,6 +86,45 @@ typedef GitHubLoginProcess =
       List<String> arguments, {
       String? workingDirectory,
     });
+
+/// Builds the resident sink for a post-mount [GridHookError].
+///
+/// The attributed refusal is projected onto the station's flare stream before
+/// a compact summary is retained on stderr. Both representations are bounded:
+/// the flare carries only the delegate-lifecycle fields the error owns, while
+/// the summary collapses line breaks so one contained failure remains one log
+/// line.
+void Function(GridHookError) buildContainedGridHookErrorSink({
+  required StationDiagnosticsReporter diagnostics,
+  required void Function(String message) writeError,
+  required String runnerName,
+}) {
+  return (error) {
+    final cause = error.cause.toString();
+    final truncatedCause = cause.length <= 500
+        ? cause
+        : cause.substring(0, 500);
+    final truncatedStack = error.causeStackTrace
+        .toString()
+        .split(RegExp(r'\r\n?|\n'))
+        .where((frame) => frame.isNotEmpty)
+        .take(8)
+        .join('\n');
+
+    diagnostics.flare('station.errorContained', <String, String>{
+      'hook': error.hook,
+      'delegateType': error.delegateType.toString(),
+      'cause': truncatedCause,
+      'stack': truncatedStack,
+    });
+
+    final oneLineCause = truncatedCause.replaceAll(RegExp(r'[\r\n]+'), ' ');
+    writeError(
+      '$runnerName up: contained ${error.delegateType}.${error.hook}() error '
+      '— $oneLineCause',
+    );
+  };
+}
 
 /// Resolves station-global SELF trust from the authenticated `gh` CLI login.
 ///
@@ -590,6 +630,11 @@ class UpCommand extends Command<int> {
     try {
       grid = await runGrid(
         buildDelegate(),
+        onError: buildContainedGridHookErrorSink(
+          diagnostics: diagnostics,
+          writeError: err,
+          runnerName: runnerName,
+        ),
         onFlushed: workRuntime.afterFlush,
         treeProjector: diagnostics.treeProjector,
         delegateFactory: vmServiceUri == null ? null : buildDelegate,
