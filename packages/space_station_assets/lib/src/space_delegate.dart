@@ -49,6 +49,8 @@
 /// and overrides it. No-flag `space up` arms the org.
 library;
 
+import 'dart:io' show InternetAddress, InternetAddressType;
+
 import 'package:args/args.dart';
 import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
@@ -751,6 +753,7 @@ class SpaceStationConfig {
     this.appended = const [],
     this.dryRun = true,
     this.controlPort = 0,
+    this.controlAddress,
     this.runFor,
   });
 
@@ -771,8 +774,12 @@ class SpaceStationConfig {
   /// the human gate (Track J).
   final bool dryRun;
 
-  /// The StationControl loopback port (RS-4). 0 = ephemeral (default).
+  /// The StationControl port (RS-4). 0 = ephemeral (default).
   final int controlPort;
+
+  /// The operator-selected StationControl bind address. `null` preserves the
+  /// loopback default; a non-loopback value is an explicit LAN posture.
+  final InternetAddress? controlAddress;
 
   /// Run for a fixed number of seconds then exit (scripted / CI), else run
   /// resident until the first termination signal.
@@ -837,7 +844,15 @@ void addSpaceStationFlags(
     ..addOption(
       'control-port',
       defaultsTo: '0',
-      help: 'The StationControl loopback port (RS-4). 0 = ephemeral (default).',
+      help: 'The StationControl port (RS-4). 0 = ephemeral (default).',
+    )
+    ..addOption(
+      'bind',
+      valueHelp: 'address',
+      help:
+          'Bind StationControl to `lan` (0.0.0.0 / '
+          'InternetAddress.anyIPv4) or an IPv4 literal. Absent: loopback '
+          '(InternetAddress.loopbackIPv4).',
     );
 }
 
@@ -943,11 +958,25 @@ SpaceStationConfig? spaceStationConfigFrom(
   }
 
   final seconds = args.option('for-seconds');
+  final bind = args.option('bind');
+  final parsedAddress = bind == null
+      ? null
+      : bind == 'lan'
+      ? InternetAddress.anyIPv4
+      : InternetAddress.tryParse(bind);
+  if (bind != null &&
+      (parsedAddress == null ||
+          parsedAddress.type != InternetAddressType.IPv4)) {
+    throw FormatException(
+      'space up: --bind "$bind" must be "lan" or an IPv4 literal.',
+    );
+  }
   return SpaceStationConfig(
     gridHome: gridHome,
     appended: appended,
     dryRun: args.flag('dry-run'),
     controlPort: int.parse(args.option('control-port')!),
+    controlAddress: parsedAddress,
     runFor: seconds == null ? null : Duration(seconds: int.parse(seconds)),
   );
 }
