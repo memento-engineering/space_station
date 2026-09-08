@@ -290,17 +290,13 @@ TrajectoryLine? trajectoryStatusLine(Map<String, Object?> payload) {
   );
 }
 
-/// space's `/status` snapshot: grid_cli's [StationStatus] plus the Stage-1
-/// trajectory block, added by overriding [toJson].
+/// space's `/status` snapshot: grid_cli's [StationStatus] plus space's resolved
+/// roster projection.
 ///
-/// It is a SUBCLASS rather than a new grid_cli field on purpose. The block is
-/// a space_station deliverable (stage1-wiring §1.1 lists `/status` under
-/// chunk WS), and the wire type belongs to grid_cli, whose constraint here is
-/// a hosted release pin that must not move inside the shadow window
-/// (§5: no publish, no version bumps — the release train is a cut
-/// deliverable). Overriding the serializer keeps `trajectory` TOP-LEVEL on
-/// the wire — a peer of `work` and `wedge`, not smuggled into `sync` — with
-/// no producer change at all.
+/// The base owns the top-level `trajectory` wire map and its serialization;
+/// this subclass converts the typed constructor input through
+/// [trajectoryStatusJson]. The only wire augmentation owned here is the roster
+/// nested under `station`.
 ///
 /// **Maintenance contract:** the forwarding constructor below enumerates the
 /// base's parameters by hand, so a field ADDED to [StationStatus] upstream is
@@ -312,7 +308,7 @@ TrajectoryLine? trajectoryStatusLine(Map<String, Object?> payload) {
 class SpaceStationStatus extends StationStatus {
   /// Creates the snapshot; every base field is forwarded unchanged.
   SpaceStationStatus({
-    required this.trajectory,
+    required TrajectoryHarnessStatus trajectory,
     this.roster = const [],
     required super.substation,
     required super.stateStore,
@@ -325,13 +321,12 @@ class SpaceStationStatus extends StationStatus {
     required super.mounted,
     required super.liveSessions,
     required super.lastSyncAt,
+    super.mintFailedScopes,
     super.perSubstation,
     super.wedge,
     super.sync,
-  });
-
-  /// The harness's fresh status read at the moment `/status` was served.
-  final TrajectoryHarnessStatus trajectory;
+    super.admission,
+  }) : super(trajectory: trajectoryStatusJson(trajectory));
 
   /// The ordered substation roster resolved and armed by this live station.
   final List<({String name, String root, String prefix})> roster;
@@ -352,7 +347,6 @@ class SpaceStationStatus extends StationStatus {
             },
         ],
       },
-      'trajectory': trajectoryStatusJson(trajectory),
     };
   }
 }

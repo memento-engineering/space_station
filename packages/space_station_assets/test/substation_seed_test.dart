@@ -323,7 +323,15 @@ void main() {
       }
 
       expect(
-        await confirmedRefusal(_bead(metadata: const {})),
+        await confirmedRefusal(
+          _bead(
+            metadata: const {
+              kApprovedByKey: 'governor',
+              kApprovedAtKey: '2026-09-02T14:30:00.000Z',
+              kApprovedRevKey: '9f1c2d3e4b5a69788899aabbccddeeff00112233',
+            },
+          ),
+        ),
         isA<MountRefused>().having(
           (r) => r.clause,
           'clause',
@@ -356,7 +364,7 @@ void main() {
             'receipt, and nothing else readies work',
       );
       expect(
-        store.reads,
+        store.reads.where((args) => args.first == 'query'),
         hasLength(3),
         reason: 'exactly one confirming read per refusal, none per admit',
       );
@@ -1232,10 +1240,10 @@ _Walk _mount(Seed root) => _mountOwned(root).walk;
 
 /// The mount gate's `bd` seam as a FAKE (house rule: Fakes, not mocks).
 ///
-/// Every `bd query` answers with [fresh], enveloped in the same
-/// `{schema_version, data}` shape `test/filing_composition_test.dart`'s
-/// `_ScriptedBdRunner` uses — so a refused snapshot's confirming re-read
-/// resolves offline, with no process and no store on disk.
+/// Every `bd query` answers with [fresh], while the filing read's dependency
+/// and cross-store link probes answer with empty rows. All use the same
+/// `{schema_version, data}` envelope as bd, so a refused snapshot's confirming
+/// re-read resolves offline, with no process and no store on disk.
 final class _FakeMountGateRunner implements BdRunner {
   /// The bead the store reports on the confirming re-read.
   Bead fresh = _bead();
@@ -1253,12 +1261,12 @@ final class _FakeMountGateRunner implements BdRunner {
     String? stdin,
   }) async {
     reads.add(args);
+    final data = args.first == 'query'
+        ? <Map<String, dynamic>>[fresh.toJson()]
+        : const <Map<String, dynamic>>[];
     return BdResult(
       exitCode: 0,
-      stdout: jsonEncode({
-        'schema_version': 1,
-        'data': [fresh.toJson()],
-      }),
+      stdout: jsonEncode({'schema_version': 1, 'data': data}),
       stderr: '',
     );
   }
