@@ -420,6 +420,13 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// pre-built instance threaded through boot.
   final bool live;
 
+  /// Whether `runGrid` performs its pre-boot state-store maintenance.
+  ///
+  /// The existing [live] posture is the sole authority: a live arm maintains
+  /// the store, while the default dry probe leaves it untouched.
+  @override
+  bool get maintainsStateStoreOnBoot => live;
+
   /// The station's work-axis wiring (Track J, tg-yl8/space-6nj): the DI'd
   /// ambient values `runGrid`'s tree provides through `StationWork` so each
   /// substation's `SubstationWork` mounts the engine's `WorkList`. Null ⇒ the
