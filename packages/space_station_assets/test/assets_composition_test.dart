@@ -85,12 +85,13 @@ void main() {
   ({CommandRunner<int> runner, StringBuffer out, StringBuffer err}) harness({
     String runnerInvocation = kSpaceRunner,
   }) {
+    expect(Directory.current.absolute.path, isNot(seat.absolute.path));
     final out = StringBuffer();
     final err = StringBuffer();
     final runner = CommandRunner<int>('space', "memento's grid station")
       ..addCommand(
         buildSpaceAssetsCommand(
-          gridHomeDefault: () => seat.path,
+          delegate: () => SpaceDelegate(gridRoot: seat.absolute.path),
           runnerInvocation: runnerInvocation,
           registry: registry,
           factsRepository: ({required roots, required registry}) =>
@@ -185,7 +186,21 @@ void main() {
       'never a relative path baked into the committed manual', () async {
     await expectLater(
       harness().runner.run(['assets', 'install', '--grid-home', 'rel/home']),
-      throwsA(isA<UsageException>()),
+      throwsA(
+        isA<UsageException>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains(
+                'install RENDERS the grid home into every asset it stamps',
+              ),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('baked into the committed manual'),
+            ),
+      ),
     );
   });
 }

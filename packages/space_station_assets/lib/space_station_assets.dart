@@ -32,6 +32,8 @@
 /// running it: `buildRunner(name: 'lunar', …)..addCommand(...)`.
 library;
 
+import 'dart:io';
+
 import 'package:args/command_runner.dart';
 import 'package:dart_grid_assets/dart_grid_assets.dart' show DartCommand;
 import 'package:federated_grid_assets/federated_grid_assets.dart'
@@ -187,9 +189,10 @@ buildRunnerComposition({
   final filingCommands = buildSpaceFilingCommands(
     delegateFactory: delegateFactory,
   );
+  final assetsGridRoot = Directory.current.absolute.path;
   final assetsCommand = buildSpaceAssetsCommand(
     runnerInvocation: runnerInvocation,
-    delegateFactory: delegateFactory,
+    delegate: () => delegateFactory(gridRoot: assetsGridRoot),
   );
   final searchCommand = buildSpaceSearchCommand(
     delegateFactory: delegateFactory,

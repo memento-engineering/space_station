@@ -25,18 +25,21 @@ void main() {
   // config is what names the vended packs, and it is the grid home.
   final repoRoot = p.normalize(p.join(Directory.current.path, '..', '..'));
 
-  Future<ProcessResult> install(String seat, {bool check = false}) =>
-      Process.run(Platform.resolvedExecutable, [
-        'bin/space.dart',
-        'assets',
-        'install',
-        if (check) '--check',
-        '--no-diff',
-        '--grid-home', repoRoot,
-        '--root', seat,
-        // A FIXED ref — no `git rev-parse` subprocess, and a stable stamp.
-        '--source-ref', 'testref',
-      ], workingDirectory: Directory.current.path);
+  Future<ProcessResult> install(
+    String seat, {
+    bool check = false,
+    String? gridHome,
+  }) => Process.run(Platform.resolvedExecutable, [
+    'bin/space.dart',
+    'assets',
+    'install',
+    if (check) '--check',
+    '--no-diff',
+    '--grid-home', gridHome ?? repoRoot,
+    '--root', seat,
+    // A FIXED ref — no `git rev-parse` subprocess, and a stable stamp.
+    '--source-ref', 'testref',
+  ], workingDirectory: Directory.current.path);
 
   test('`space assets install --root <seat>` materializes the REAL vended '
       'station_overlay — six operator skills, the governor agent-def and the '
@@ -76,4 +79,19 @@ void main() {
     expect(drifted.exitCode, 1);
     expect('${drifted.stdout}', contains('DRIFTED'));
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('a relative --grid-home exits 64 with the install-specific stamping '
+      'refusal', () async {
+    final seat = Directory.systemTemp.createTempSync('space-assets-seat-');
+    addTearDown(() => seat.deleteSync(recursive: true));
+
+    final run = await install(seat.path, gridHome: 'rel/home');
+
+    expect(run.exitCode, 64, reason: 'stderr: ${run.stderr}');
+    expect(
+      '${run.stderr}',
+      contains('install RENDERS the grid home into every asset it stamps'),
+    );
+    expect('${run.stderr}', contains('baked into the committed manual'));
+  });
 }
