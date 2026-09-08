@@ -806,6 +806,7 @@ class UpCommand extends Command<int> {
     final capturedAt = latest.graph.capturedAt;
     return SpaceStationStatus(
       trajectory: workRuntime.trajectory.status,
+      roster: armed,
       substation: armed.map((s) => s.name).join(','),
       stateStore: config.gridHome,
       workRoot: armed.map((s) => '${s.name}=${s.root}').join(', '),

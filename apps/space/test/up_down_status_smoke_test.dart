@@ -35,8 +35,8 @@ import 'package:test/test.dart';
 ///      raw-OS-SIGTERM path is proven as its OWN case below.
 ///  (f) booting with TWO appended substations (v3: each a name AND its ONE
 ///      root; space-6ds round 3: flags APPEND, so both names are non-coded)
-///      reports BOTH under `GET /status`'s `station.workRoot`, proving the
-///      parsed multi-substation config reaches the live control surface.
+///      publishes both as the ordered `station.roster`, and `space status`
+///      renders that live roster without consulting its fallback flags.
 ///  (g) a NO-FLAG `up` over a fabricated umbrella (space-6ds Fork A/B: the
 ///      memento roster hardcoded in `SpaceDelegate.build` IS the default)
 ///      arms exactly the coded siblings that resolve work stores — skipping
@@ -504,8 +504,8 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('up --dry-run with TWO appended substations (v3: each a name AND its '
-      'ONE root) reports BOTH under GET /status\'s station.workRoot', () async {
+  test('up --dry-run with TWO appended substations exposes and renders the '
+      'live resolved roster', () async {
     final gridHome = await _bdInitGridHome('space-up-multi-home-');
     final rootA = await _bdInitWorkspace('space-up-multi-a-');
     final rootB = await _bdInitWorkspace('space-up-multi-b-');
@@ -520,9 +520,9 @@ void main() {
       'up',
       '--dry-run',
       '--substation',
-      'smoketest=${rootA.path}',
+      'smoketest@smoke=${rootA.path}',
       '--substation',
-      'smokemate=${rootB.path}',
+      'smokemate@mate=${rootB.path}',
       '--grid-home',
       gridHome.path,
       '--control-port',
@@ -544,18 +544,58 @@ void main() {
       token: token,
     );
     final station = status['station']! as Map<String, Object?>;
-    final workRoot = station['workRoot'] as String?;
     expect(
-      workRoot,
-      allOf(
-        contains('smoketest=${rootA.path}'),
-        contains('smokemate=${rootB.path}'),
-      ),
+      station['roster'],
+      <Map<String, Object?>>[
+        <String, Object?>{
+          'name': 'smoketest',
+          'root': rootA.path,
+          'prefix': 'smoke',
+        },
+        <String, Object?>{
+          'name': 'smokemate',
+          'root': rootB.path,
+          'prefix': 'mate',
+        },
+      ],
       reason:
-          'both substation roots must reach the live control surface\n'
+          'the exact resolved roster must reach the live control surface\n'
           'full payload: $status\n'
           'stdout: ${upIo.out}\nstderr: ${upIo.err}',
     );
+
+    final rendered = await Process.run(Platform.resolvedExecutable, [
+      'bin/space.dart',
+      'status',
+      '--state-workspace',
+      gridHome.path,
+      '--workspace',
+      rootA.path,
+      '--substation',
+      'offline-decoy',
+    ], workingDirectory: Directory.current.path);
+    expect(rendered.exitCode, 0, reason: '${rendered.stderr}');
+    expect('${rendered.stderr}', isEmpty);
+
+    final output = '${rendered.stdout}';
+    final rowA =
+        '    - name: smoketest  ·  root: ${rootA.path}  ·  prefix: smoke';
+    final rowB =
+        '    - name: smokemate  ·  root: ${rootB.path}  ·  prefix: mate';
+    expect(output, contains('station: UP\n'));
+    expect(output, contains('  substation: smoketest,smokemate\n'));
+    expect(
+      output,
+      contains(
+        '  work root: smoketest=${rootA.path}, '
+        'smokemate=${rootB.path}\n',
+      ),
+    );
+    expect('  roster:\n'.allMatches(output), hasLength(1));
+    expect(rowA.allMatches(output), hasLength(1));
+    expect(rowB.allMatches(output), hasLength(1));
+    expect(output.indexOf(rowA), lessThan(output.indexOf(rowB)));
+    expect(output, isNot(contains('offline-decoy')));
   }, timeout: const Timeout(Duration(minutes: 1)));
 
   test('NO-FLAG up over a fabricated umbrella arms the coded siblings that '
@@ -849,8 +889,8 @@ Future<int> _get(Uri url, {required String token}) async {
 }
 
 /// A bearer-gated `GET`, decoding the JSON body — the multi-substation case (f)
-/// needs the actual `/status` payload (`station.workRoot`), not just
-/// reachability.
+/// needs the actual `/status` payload (`station.roster`), not just
+/// reachability, before exercising the CLI render of the same live values.
 Future<Map<String, Object?>> _getJson(Uri url, {required String token}) async {
   final client = HttpClient();
   try {

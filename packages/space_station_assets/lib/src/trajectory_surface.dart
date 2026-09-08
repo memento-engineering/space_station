@@ -313,6 +313,7 @@ class SpaceStationStatus extends StationStatus {
   /// Creates the snapshot; every base field is forwarded unchanged.
   SpaceStationStatus({
     required this.trajectory,
+    this.roster = const [],
     required super.substation,
     required super.stateStore,
     required super.workRoot,
@@ -332,9 +333,26 @@ class SpaceStationStatus extends StationStatus {
   /// The harness's fresh status read at the moment `/status` was served.
   final TrajectoryHarnessStatus trajectory;
 
+  /// The ordered substation roster resolved and armed by this live station.
+  final List<({String name, String root, String prefix})> roster;
+
   @override
-  Map<String, Object?> toJson() => <String, Object?>{
-    ...super.toJson(),
-    'trajectory': trajectoryStatusJson(trajectory),
-  };
+  Map<String, Object?> toJson() {
+    final json = super.toJson();
+    return <String, Object?>{
+      ...json,
+      'station': <String, Object?>{
+        ...json['station']! as Map<String, Object?>,
+        'roster': <Map<String, Object?>>[
+          for (final entry in roster)
+            <String, Object?>{
+              'name': entry.name,
+              'root': entry.root,
+              'prefix': entry.prefix,
+            },
+        ],
+      },
+      'trajectory': trajectoryStatusJson(trajectory),
+    };
+  }
 }
