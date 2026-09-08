@@ -657,6 +657,7 @@ class UpCommand extends Command<int> {
     try {
       control = await StationControl.start(
         port: config.controlPort,
+        address: config.controlAddress,
         token: token,
         view: () => _status(config, armed, bootTime, workRuntime),
         treeProjector: diagnostics.treeProjector,
@@ -776,7 +777,13 @@ class UpCommand extends Command<int> {
       requested: trajectoryConfig.mode,
     );
     if (requiredWarning != null) err(requiredWarning);
-    out('control: ${control.url}  ·  token: (see ${stationLock.path}, 0600)');
+    final controlLabel = config.controlAddress?.isLoopback == false
+        ? 'control (LAN)'
+        : 'control';
+    out(
+      '$controlLabel: ${control.url}  ·  token: '
+      '(see ${stationLock.path}, 0600)',
+    );
     out(
       devModeBannerLine(
         vmServiceUri: devMode?.vmServiceUri,
