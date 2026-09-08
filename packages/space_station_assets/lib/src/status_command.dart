@@ -139,7 +139,19 @@ class StatusCommand extends Command<int> {
       ..writeln('station: UP')
       ..writeln('  substation: ${station['substation']}')
       ..writeln('  state store: ${station['stateStore']}')
-      ..writeln('  work root: ${station['workRoot']}')
+      ..writeln('  work root: ${station['workRoot']}');
+    final roster = station['roster'] as List<Object?>? ?? const [];
+    if (roster.isNotEmpty) {
+      stdout.writeln('  roster:');
+      for (final value in roster) {
+        final entry = value as Map<String, Object?>;
+        stdout.writeln(
+          '    - name: ${entry['name']}  ·  root: ${entry['root']}  ·  '
+          'prefix: ${entry['prefix']}',
+        );
+      }
+    }
+    stdout
       ..writeln(
         '  mode: '
         '${(station['dryRun'] as bool? ?? true) ? 'DRY-RUN' : 'LIVE'}',
