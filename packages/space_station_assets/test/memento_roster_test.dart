@@ -19,7 +19,7 @@ import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
-/// evolved): the memento org is authored as six literal substations in
+/// evolved): the memento org is authored as seven literal substations in
 /// [SpaceDelegate.substations] (the roster BUILD HOOK) and `--substation`
 /// flags APPEND new substations after it — no merge, no override-by-name (Fork B
 /// as re-ruled: the roster changes in CODE — space edits [substations]; a
@@ -41,6 +41,7 @@ void main() {
     'space_station',
     'lenny',
     'decisions',
+    'memento-engineering',
   };
 
   SpaceDelegate delegate({List<sdk.Substation> appended = const []}) =>
@@ -51,7 +52,8 @@ void main() {
       );
 
   group('SpaceDelegate.build — the hardcoded memento org (Fork A)', () {
-    test('a BARE delegate mounts the six coded substations at their ../<repo> '
+    test('a BARE delegate mounts the seven coded substations at their '
+        '../<repo> '
         'umbrella siblings with the coded prefixes — the roster is the tree, '
         'not config', () {
       final substations = _mountedSubstations(_Author(delegate()));
@@ -64,6 +66,7 @@ void main() {
           'space_station',
           'lenny',
           'decisions',
+          'memento-engineering',
         ],
         reason: 'the org, in mount order, from the literal Substation values',
       );
@@ -78,6 +81,7 @@ void main() {
           'space_station': '$umbrella/space_station',
           'lenny': '$umbrella/lenny',
           'decisions': '$umbrella/decisions',
+          'memento-engineering': '$umbrella/memento-engineering',
         },
       );
       // Prefix is a SEPARATE axis from the name wherever the store mints
@@ -93,6 +97,7 @@ void main() {
           'space_station': 'space',
           'lenny': 'lenny',
           'decisions': 'dec',
+          'memento-engineering': 'org',
         },
       );
     });
@@ -117,10 +122,11 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
         'tgdog',
         'extra',
       ]);
-      expect(substations[6].root, '/work/td');
+      expect(substations[7].root, '/work/td');
       expect(substations.last.prefix, 'ex');
     });
   });
@@ -137,6 +143,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
       ]);
       expect(
         substations.map((substation) => substation.app),
@@ -154,7 +161,8 @@ void main() {
       );
     });
 
-    test('the identity binds PER SUBSTATION: six identity providers, each over '
+    test('the identity binds PER SUBSTATION: seven identity providers, each '
+        'over '
         'exactly one substation scope — none above the fan-out, no name-keyed '
         'map', () {
       final owner = TreeOwner();
@@ -162,7 +170,7 @@ void main() {
       final root = owner.mountRoot(_Author(delegate()));
       owner.flush();
       final identities = _branches<GitHubAppConfig>(root);
-      expect(identities, hasLength(6));
+      expect(identities, hasLength(7));
       expect(identities.map((branch) => branch.value).toSet(), {
         kMementoOrgApp,
       });
@@ -170,20 +178,20 @@ void main() {
         expect(
           _branches<sdk.SubstationScope>(identity),
           hasLength(1),
-          reason: 'an identity above the fan-out would carry all six scopes',
+          reason: 'an identity above the fan-out would carry all seven scopes',
         );
       }
     });
 
-    test('a downstream override inherits the six org substations WITH the '
+    test('a downstream override inherits the seven org substations WITH the '
         'memento App through super, and its own substation keeps its own '
         'identity', () {
       final substations = _capturedSubstations(
         _DownstreamDelegate(gridRoot: '/home/me/my_station'),
       );
-      expect(substations, hasLength(7));
+      expect(substations, hasLength(8));
       expect(
-        substations.take(6).map((substation) => substation.app),
+        substations.take(7).map((substation) => substation.app),
         everyElement(kMementoOrgApp),
       );
       expect(substations.last.name, 'mine');
@@ -206,6 +214,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
       ]);
       for (final substation in substations) {
         final poll = substation.githubPoll;
@@ -227,16 +236,16 @@ void main() {
     });
 
     test(
-      'a downstream override inherits the six polling org substations '
+      'a downstream override inherits the seven polling org substations '
       'through super and keeps its own substation on its own installation',
       () {
         final substations = _capturedSubstations(
           _DownstreamDelegate(gridRoot: '/home/me/my_station'),
         );
-        expect(substations, hasLength(7));
+        expect(substations, hasLength(8));
         expect(
           substations
-              .take(6)
+              .take(7)
               .map((substation) => substation.githubPoll?.installationId),
           everyElement('152260260'),
         );
@@ -265,6 +274,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
         'mine',
       ]);
       // The org resolves at the OVERRIDDEN umbrella (relative to the
@@ -280,11 +290,11 @@ void main() {
         'offline mount (construct → mount → dispose)', () {
       final scopes = codedRosterOf(_DownstreamDelegate.new);
       expect(scopes.map((s) => s.name), contains('mine'));
-      expect(scopes, hasLength(7));
+      expect(scopes, hasLength(8));
     });
 
     test('coded roster snapshot keeps scopes and reports every GitHub polling '
-        'substation — the six org substations, plus a downstream substation '
+        'substation — the seven org substations, plus a downstream substation '
         'that polls', () {
       final base = codedRosterSnapshotOf(SpaceDelegate.new, gridRoot: gridHome);
       expect(base.scopes.map((scope) => scope.name), [
@@ -294,6 +304,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
       ]);
       expect(base.githubPollingSubstationNames, {
         'genesis',
@@ -302,6 +313,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
       });
       expect(
         base.githubPollingSeatNames,
@@ -316,6 +328,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
         'mine',
       ]);
       expect(downstream.githubPollingSubstationNames, {
@@ -325,6 +338,7 @@ void main() {
         'space_station',
         'lenny',
         'decisions',
+        'memento-engineering',
         'mine',
       });
     });
@@ -361,7 +375,7 @@ void main() {
         expect(substation.root, '/work/td');
         expect(substation.prefix, 'td');
         // The parsed substation carries the standard substation stack — it
-        // mounts clean after the coded six.
+        // mounts clean after the coded seven.
         final substations = _mountedSubstations(
           _Author(delegate(appended: config.appended)),
         );
@@ -372,6 +386,7 @@ void main() {
           'space_station',
           'lenny',
           'decisions',
+          'memento-engineering',
           'tgdog',
         ]);
         expect(substations.last.prefix, 'td');

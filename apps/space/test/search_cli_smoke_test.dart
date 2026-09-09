@@ -59,6 +59,7 @@ void main() {
       'space_station',
       'lenny',
       'decisions',
+      'memento-engineering',
     ]);
     expect(stores.first['outcome'], 'searched');
     final hit = (stores.first['hits']! as List).single as Map<String, dynamic>;
@@ -69,7 +70,13 @@ void main() {
         for (final s in stores)
           if (s['outcome'] == 'absent') s['substation'],
       ],
-      ['power_station', 'space_station', 'lenny', 'decisions'],
+      [
+        'power_station',
+        'space_station',
+        'lenny',
+        'decisions',
+        'memento-engineering',
+      ],
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

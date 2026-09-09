@@ -27,7 +27,7 @@ void main() {
       'BUILDS on frontier while every other substation rides the coded codex '
       'posture', () {
     final bySubstation = seatEnvironmentsBySubstation();
-    expect(bySubstation.keys, hasLength(6));
+    expect(bySubstation.keys, hasLength(7));
     expect(bySubstation['power_station']?.build, registry.resolve('frontier'));
     for (final name in bySubstation.keys.where((n) => n != 'power_station')) {
       expect(

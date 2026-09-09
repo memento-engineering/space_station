@@ -120,7 +120,7 @@ void main() {
 
   group('SpaceDelegate.build — space_station as a Seed (v3 §2)', () {
     test('the well-formed offline tree mounts clean (ProviderScope → '
-        'RawAssetGrid → Station → HarnessProvider → Substations → the six '
+        'RawAssetGrid → Station → HarnessProvider → Substations → the seven '
         'coded SubstationSeed wrappers validate end to end)', () {
       expect(() => _mount(_Author(delegate())), returnsNormally);
     });
@@ -131,7 +131,7 @@ void main() {
       final bundles = _mountedBundles(_Author(delegate()));
       expect(
         bundles,
-        hasLength(6),
+        hasLength(7),
         reason: 'one gated bundle per coded substation',
       );
       expect(bundles.every((b) => b.delivery == null), isTrue);
@@ -143,7 +143,7 @@ void main() {
       final bundles = _mountedBundles(_Author(delegate(live: true)));
       expect(
         bundles.where((b) => b.delivery != null),
-        hasLength(6),
+        hasLength(7),
         reason: 'each coded substation re-provides its bundle delivery-bound',
       );
     });
@@ -283,7 +283,8 @@ void main() {
     test('resolveGitHubSelfTrustFromGh SKIPS gh when NO armed substation polls '
         '— the '
         'function\'s own contract, keyed on the flag; and the coded roster now '
-        'reports six polling substations, so a live boot reaches the probe instead '
+        'reports seven polling substations, so a live boot reaches the probe '
+        'instead '
         '(space-3ds)', () async {
       var calls = 0;
       final diagnostics = <String>[];
@@ -315,10 +316,11 @@ void main() {
         SpaceDelegate.new,
         gridRoot: '/home/memento/space_station',
       );
-      expect(roster.githubPollingSubstationNames, hasLength(6));
+      expect(roster.githubPollingSubstationNames, hasLength(7));
     });
 
-    test('the six LIVE poll values author NO reconciler runtime on an OFFLINE '
+    test('the seven LIVE poll values author NO reconciler runtime on an '
+        'OFFLINE '
         'mount: without self trust the per-substation binding provides no cursor '
         'store or sink, and the App client resolves asynchronously so a '
         'synchronous flush never has one (space-3ds)', () {
@@ -347,7 +349,7 @@ void main() {
 
     test(
       'an appended (--substation) substation mounts clean after the literal '
-      'coded org (space-6ds: the six coded substations are always authored)',
+      'coded org (space-6ds: the seven coded substations are always authored)',
       () {
         expect(
           () => _mount(
@@ -380,9 +382,9 @@ void main() {
             ),
           ),
         );
-        expect(bundles, hasLength(7));
+        expect(bundles, hasLength(8));
         expect(
-          bundles.take(6).every((bundle) => bundle.delivery != null),
+          bundles.take(7).every((bundle) => bundle.delivery != null),
           isTrue,
         );
         final appended = bundles.last;
