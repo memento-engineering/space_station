@@ -84,6 +84,7 @@ import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
 
+import '../station_asset_registry.dart';
 import 'agent_arming.dart';
 import 'assets_command.dart' show kSpaceRunner;
 import 'substation_seed.dart';
@@ -249,12 +250,14 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 /// overrides the designed hooks — the template-method pattern the whole
 /// substrate is built on. [substations] is a BUILD METHOD (it carries the
 /// master [build]'s context, like any decomposed build), while [stationName],
-/// [stateStorePrefix], and [umbrella] are identity accessors:
+/// [stateStorePrefix], [assetRegistry], and [umbrella] are immutable class
+/// policy rather than mutable notifier state:
 ///
 ///  * [stationName] — the station's identity;
 ///  * [stateStorePrefix] — the prefix of its partition in the state store;
 ///  * [runnerInvocation] — the station runner's full JIT invocation;
 ///  * [overlaySourceRef] — the provenance ref stamped into worktree overlays;
+///  * [assetRegistry] — the station's generated asset-pack closure;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
 ///  * [environments] — the station's named inference environments;
 ///  * [arming] — the station's coded typed-environment posture;
@@ -350,6 +353,15 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// downstream station returns its own invocation.
   String get runnerInvocation => kSpaceRunner;
 
+  /// The complete generated asset-pack closure available to this station.
+  ///
+  /// OVERRIDE POINT: a downstream station returns its own generated
+  /// registrant's static registry. The exact object is passed to the code
+  /// registry, whose provision and landing writers resolve against it once;
+  /// runtime package discovery never decides availability.
+  sdk.GridAssetRegistry get assetRegistry =>
+      GeneratedGridAssetRegistrant.registry;
+
   /// The grid-assets ref stamped into every worktree overlay file. OVERRIDE
   /// POINT: the default resolves the vended overlay checkout exactly once per
   /// registry composition; a station that already knows its immutable source
@@ -378,6 +390,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// persist operational lines; the code registry does not consume it.
   sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) =>
       buildCodeRegistry(
+        assetRegistry: assetRegistry,
         overlaySourceRef: overlaySourceRef,
         overlayArgs: {'runner': runnerInvocation},
       );
