@@ -26,8 +26,20 @@ import 'package:grid_sdk/grid_sdk.dart'
         TrajectoryHarnessMode,
         TrajectoryHarnessStatus;
 
+/// A resolved trajectory configuration together with invalid dual-read input.
+///
+/// [unrecognizedDualReadValue] is the exact set value that could not be
+/// resolved, or null when `GRID_DUAL_READ` was unset or recognized. Invalid
+/// input remains non-fatal and resolves [config]'s posture to
+/// [DualReadMode.off].
+typedef TrajectoryConfigResolution = ({
+  TrajectoryConfig config,
+  String? unrecognizedDualReadValue,
+});
+
 /// Maps `up`'s tri-state `--trajectory` flag onto the assembly's
-/// [TrajectoryConfig] (stage1-wiring §1.3).
+/// [TrajectoryConfig] and preserves invalid dual-read input (stage1-wiring
+/// §1.3).
 ///
 /// The flag is declared `defaultsTo: null` precisely so ABSENT is a third
 /// state: absent ⇒ [TrajectoryConfigMode.auto] (arm iff the home carries the
@@ -44,32 +56,52 @@ import 'package:grid_sdk/grid_sdk.dart'
 /// assembly can grow a hidden out-of-band gate. The environment enters at the
 /// composition root — `bin/space.dart` hands it to [buildRunner] — and an
 /// unfed runner simply arms the default posture.
-TrajectoryConfig trajectoryConfigFrom(
+TrajectoryConfigResolution trajectoryConfigResolutionFrom(
   ArgResults args, {
   Map<String, String> environment = const <String, String>{},
 }) {
   // The dual-read posture is the RUNNER's to feed (TrajectoryConfig.dualRead
   // docs): `GRID_DUAL_READ=<off|observe|primary>`, defaulting to `off` when
   // absent or unrecognized — a station that arms nothing arms `off`.
-  final env = environment;
-  final dualRead = switch (env['GRID_DUAL_READ']) {
-    'observe' => DualReadMode.observe,
-    'primary' => DualReadMode.primary,
-    _ => DualReadMode.off,
+  final rawDualRead = environment['GRID_DUAL_READ'];
+  final (dualRead, unrecognizedDualReadValue) = switch (rawDualRead) {
+    null || 'off' => (DualReadMode.off, null),
+    'observe' => (DualReadMode.observe, null),
+    'primary' => (DualReadMode.primary, null),
+    final value => (DualReadMode.off, value),
   };
+  final TrajectoryConfig config;
   if (!args.wasParsed('trajectory')) {
-    return TrajectoryConfig(dualRead: dualRead);
+    config = TrajectoryConfig(dualRead: dualRead);
+  } else {
+    config = args.flag('trajectory')
+        ? TrajectoryConfig(
+            mode: TrajectoryConfigMode.required,
+            dualRead: dualRead,
+          )
+        : TrajectoryConfig(
+            mode: TrajectoryConfigMode.disabled,
+            dualRead: dualRead,
+          );
   }
-  return args.flag('trajectory')
-      ? TrajectoryConfig(
-          mode: TrajectoryConfigMode.required,
-          dualRead: dualRead,
-        )
-      : TrajectoryConfig(
-          mode: TrajectoryConfigMode.disabled,
-          dualRead: dualRead,
-        );
+  return (config: config, unrecognizedDualReadValue: unrecognizedDualReadValue);
 }
+
+/// Maps `up`'s trajectory inputs onto their non-fatal resolved configuration.
+///
+/// Invalid `GRID_DUAL_READ` input retains the historical fallback to
+/// [DualReadMode.off]. Call [trajectoryConfigResolutionFrom] when the caller
+/// also needs to report the invalid value.
+TrajectoryConfig trajectoryConfigFrom(
+  ArgResults args, {
+  Map<String, String> environment = const <String, String>{},
+}) => trajectoryConfigResolutionFrom(args, environment: environment).config;
+
+/// Renders positive boot evidence for the resolved dual-read posture.
+String dualReadBootLogLine({
+  required String runnerName,
+  required DualReadMode posture,
+}) => '$runnerName up: dual-read posture resolved to ${posture.name}.';
 
 /// The operator-facing WORD for a harness posture — DERIVED from the mode's
 /// own name so no surface can invent a second vocabulary.
