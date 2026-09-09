@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0-rc.10
+## 0.3.0-rc.11
 
 - Added: `memento-engineering` — the org decision register — is the seventh
   coded org substation, at bead prefix `org`, carrying the memento org App and
@@ -12,6 +12,9 @@
   `githubPollingSubstationNames`; `githubPollingSeatNames` remains a deprecated
   compatibility getter for one minor cycle with the replacement message
   `Use githubPollingSubstationNames instead.`.
+
+## 0.3.0-rc.10
+
 - Added: every live boot emits the resolved dual-read posture (`off`, `observe`
   or `primary`) as a `trajectory.dualReadPosture` flare and a log line, and a
   SET but unrecognized `GRID_DUAL_READ` value emits its own flare naming the
