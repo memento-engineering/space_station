@@ -44,7 +44,7 @@ import 'package:test/test.dart';
 void main() {
   group('SubstationSeed — the composed seed', () {
     test(
-      'a seat threads its authored assetRoster onto the mounted projection',
+      'a substation threads its authored assetRoster onto the mounted projection',
       () {
         const key = sdk.AssetKey(
           package: 'fixture_assets',
@@ -74,7 +74,7 @@ void main() {
       },
     );
 
-    test('a seat with no assetRoster projects null', () {
+    test('a substation with no assetRoster projects null', () {
       const agentConfig = AgentConfig(harness: 'claude');
       final walk = _mount(
         ProviderScope(
@@ -147,7 +147,7 @@ void main() {
     });
 
     test(
-      'explicit landing policies are observable on the effective gated seat',
+      'explicit landing policies are observable on the effective gated substation',
       () {
         const policies = <github.GitHubDeliveryPolicy>[
           github.PrNoMergePolicy(),
@@ -240,7 +240,7 @@ void main() {
       expect(scope.prefix, 'mn');
     });
 
-    test('THE MOUNT GATE IS COMPOSED: the seat\'s ServiceBundle carries a '
+    test('THE MOUNT GATE IS COMPOSED: the substation\'s ServiceBundle carries a '
         'mountEligibility predicate that ADMITS an approved, STAMPED, '
         'plan-stamped, driveable bead and REFUSES one missing any of the '
         'four — every refusal CONFIRMED against a fresh store read', () async {
@@ -278,7 +278,7 @@ void main() {
         isNotNull,
         reason:
             'the gate derives from the ambient bundle — a gate that '
-            'dropped sourceControl would break provisioning for every seat',
+            'dropped sourceControl would break provisioning for every substation',
       );
       expect(
         predicate,
@@ -299,12 +299,13 @@ void main() {
       expect(
         store.roots,
         everyElement('/home/me/mine'),
-        reason: "the gate's bd seam is bound to the SEAT's own work store",
+        reason:
+            "the gate's bd seam is bound to the SUBSTATION's own work store",
       );
 
       /// Drives one refusal through BOTH phases and returns the CONFIRMED
       /// decision: rc.6 answers a refused snapshot with a pending projection
-      /// and re-reads the seat's own work store, so the clause an operator
+      /// and re-reads the substation's own work store, so the clause an operator
       /// ever sees is the second one.
       Future<MountEligibilityDecision> confirmedRefusal(Bead bead) async {
         store.fresh = bead;
@@ -462,7 +463,7 @@ void main() {
       expect('$a', contains('MY_APP_KEY'), reason: 'the NAME is config');
     });
 
-    test('app identity on an effects-enabled seat provides its own '
+    test('app identity on an effects-enabled substation provides its own '
         'GitHubAppClient', () async {
       final owner = TreeOwner();
       addTearDown(owner.dispose);
@@ -654,7 +655,7 @@ void main() {
 
     test(
       'the memento org identity with GRID_GITHUB_APP_KEY_MEMENTO SET '
-      'provides the seat client and an App opener over the ambient one',
+      'provides the substation client and an App opener over the ambient one',
       () async {
         final owner = TreeOwner();
         addTearDown(owner.dispose);
@@ -697,61 +698,59 @@ void main() {
     );
   });
 
-  test(
-    'live poll binding constructs the runtime from a fake client and seat-owned stores',
-    () async {
-      final owner = TreeOwner();
-      addTearDown(owner.dispose);
-      final transport = _FakeTransport();
-      final root = owner.mountRoot(
-        ProviderScope(
-          child: Provider<github.GitHubAppClient>.value(
-            _fakeClient(transport),
-            child: Provider<github.GitHubSelfTrust>.value(
-              github.GitHubSelfTrust(githubUser: 'NiCo'),
-              child: sdk.RawAssetGrid(
-                root: '/home/me/station',
-                assets: [
-                  SubstationSeed(
-                    name: 'armed',
-                    root: '../private',
-                    githubPoll: const github.GitHubReconcilerConfig(
-                      owner: 'private-owner',
-                      repository: 'personal-repo',
-                      substation: 'armed',
-                      installationId: '99',
-                      interval: Duration(days: 1),
-                    ),
+  test('live poll binding constructs the runtime from a fake client and '
+      'substation-owned stores', () async {
+    final owner = TreeOwner();
+    addTearDown(owner.dispose);
+    final transport = _FakeTransport();
+    final root = owner.mountRoot(
+      ProviderScope(
+        child: Provider<github.GitHubAppClient>.value(
+          _fakeClient(transport),
+          child: Provider<github.GitHubSelfTrust>.value(
+            github.GitHubSelfTrust(githubUser: 'NiCo'),
+            child: sdk.RawAssetGrid(
+              root: '/home/me/station',
+              assets: [
+                SubstationSeed(
+                  name: 'armed',
+                  root: '../private',
+                  githubPoll: const github.GitHubReconcilerConfig(
+                    owner: 'private-owner',
+                    repository: 'personal-repo',
+                    substation: 'armed',
+                    installationId: '99',
+                    interval: Duration(days: 1),
                   ),
-                  SubstationSeed(name: 'absent', root: '../other'),
-                ],
-              ),
+                ),
+                SubstationSeed(name: 'absent', root: '../other'),
+              ],
             ),
           ),
         ),
-      );
-      await _settle(owner);
-      final scopes = _Walk(root).branches<sdk.SubstationScope>();
-      final armed = scopes.singleWhere((b) => b.value.name == 'armed');
-      final absent = scopes.singleWhere((b) => b.value.name == 'absent');
-      final armedWalk = _Walk(armed);
-      final cursor =
-          armedWalk.values<github.GitHubCursorStore>().single
-              as github.FileGitHubCursorStore;
-      expect(
-        cursor.cursorPath,
-        '/home/me/private/.grid/github/private-owner-personal-repo.cursor.json',
-      );
-      expect(armedWalk.values<github.GitHubEventSink>(), hasLength(1));
-      final runtime = armedWalk.values<github.GitHubReconcilerRuntime>().single;
-      expect(runtime.reconciler.owner, 'private-owner');
-      expect(runtime.reconciler.repository, 'personal-repo');
-      expect(runtime.reconciler.substation, 'armed');
-      expect(_Walk(absent).values<github.GitHubCursorStore>(), isEmpty);
-      expect(_Walk(absent).values<github.GitHubEventSink>(), isEmpty);
-      expect(_Walk(absent).values<github.GitHubReconcilerRuntime>(), isEmpty);
-    },
-  );
+      ),
+    );
+    await _settle(owner);
+    final scopes = _Walk(root).branches<sdk.SubstationScope>();
+    final armed = scopes.singleWhere((b) => b.value.name == 'armed');
+    final absent = scopes.singleWhere((b) => b.value.name == 'absent');
+    final armedWalk = _Walk(armed);
+    final cursor =
+        armedWalk.values<github.GitHubCursorStore>().single
+            as github.FileGitHubCursorStore;
+    expect(
+      cursor.cursorPath,
+      '/home/me/private/.grid/github/private-owner-personal-repo.cursor.json',
+    );
+    expect(armedWalk.values<github.GitHubEventSink>(), hasLength(1));
+    final runtime = armedWalk.values<github.GitHubReconcilerRuntime>().single;
+    expect(runtime.reconciler.owner, 'private-owner');
+    expect(runtime.reconciler.repository, 'personal-repo');
+    expect(runtime.reconciler.substation, 'armed');
+    expect(_Walk(absent).values<github.GitHubCursorStore>(), isEmpty);
+    expect(_Walk(absent).values<github.GitHubEventSink>(), isEmpty);
+    expect(_Walk(absent).values<github.GitHubReconcilerRuntime>(), isEmpty);
+  });
 
   test(
     'binding stays absent without poll config, live trust, or effects-enabled arm',
@@ -813,7 +812,7 @@ void main() {
                 privateKeyVar: 'MY_APP_KEY',
               )
             : null;
-        Seed seat = sdk.RawAssetGrid(
+        Seed substation = sdk.RawAssetGrid(
           root: '/home/me/station',
           assets: [
             SubstationSeed(
@@ -826,7 +825,10 @@ void main() {
         );
         final selfTrust = posture.trust;
         if (selfTrust != null) {
-          seat = Provider<github.GitHubSelfTrust>.value(selfTrust, child: seat);
+          substation = Provider<github.GitHubSelfTrust>.value(
+            selfTrust,
+            child: substation,
+          );
         }
         final root = owner.mountRoot(
           ProviderScope(
@@ -834,7 +836,7 @@ void main() {
               _fakeClient(transport),
               child: Provider<GitOps>(
                 create: (_) => GitOps(SystemGitRunner()),
-                child: seat,
+                child: substation,
               ),
             ),
           ),
@@ -871,7 +873,7 @@ void main() {
   );
 
   test(
-    'sibling live seats own distinct cursor stores under their resolved roots',
+    'sibling live substations own distinct cursor stores under their resolved roots',
     () async {
       final owner = TreeOwner();
       addTearDown(owner.dispose);
@@ -957,7 +959,8 @@ void main() {
         reason: 'ops without an opener must stay commit-only',
       );
 
-      // Opener alone (an ambient opener with no GitOps anywhere — the seat
+      // Opener alone (an ambient opener with no GitOps anywhere — the
+      // substation
       // itself authors an opener only when it observes ops): still
       // commit-only (GitHub can only ADD delivery to a checkout it can
       // commit from).
@@ -980,7 +983,7 @@ void main() {
         reason: 'an opener without ops must stay commit-only',
       );
 
-      // Both halves: the seat re-provides a delivery-bound bundle.
+      // Both halves: the substation re-provides a delivery-bound bundle.
       final both = _mount(
         ProviderScope(
           child: sdk.RawAssetGrid(
@@ -997,14 +1000,17 @@ void main() {
           ),
         ),
       );
-      // Exactly ONE seat binds delivery. Assert it on the EFFECTIVE bundle:
+      // Exactly ONE substation binds delivery. Assert it on the EFFECTIVE
+      // bundle:
       // the gate derives from GitHubGridAssets' bundle and carries `delivery`
       // forward, so a raw `where(delivery != null)` count now sees both.
       expect(_gated(both).delivery, isNotNull);
       expect(
         both.values<ServiceBundle>().where((b) => b.mountEligibility != null),
         hasLength(1),
-        reason: 'one gated bundle per seat, and this tree mounts one seat',
+        reason:
+            'one gated bundle per substation, and this tree mounts one '
+            'substation',
       );
     });
 
@@ -1059,7 +1065,8 @@ void main() {
         reason: 'a sibling provider is not an ancestor — still commit-only',
       );
 
-      // The opener now mounts ABOVE the seat (the production shape: the seat
+      // The opener now mounts ABOVE the substation (the production shape: the
+      // substation
       // value gains an app identity, or the station's live arm authors the
       // ambient opener): the re-described subtree observes it and BINDS.
       host.swap(
@@ -1180,13 +1187,13 @@ void main() {
         reason:
             'an input-equal re-derivation must not rebuild dependents — '
             'instance-identity notification would re-run every WorkList '
-            'build beneath the seat on any ancestor re-description',
+            'build beneath the substation on any ancestor re-description',
       );
     });
   });
 
   group('a non-git seed (STYLE rule 4: no provider is universal)', () {
-    test('a composed seat whose stack carries NO git assets mounts clean '
+    test('a composed substation whose stack carries NO git assets mounts clean '
         'with neither StationGitService nor GitOps anywhere in the tree, '
         'and the roster enumeration still sees it', () {
       final walk = _mount(
@@ -1460,9 +1467,10 @@ Bead _bead({
   metadata: metadata,
 );
 
-/// The EFFECTIVE seat bundle — the one `SubstationWork` resolves. Each seat now
-/// mounts two: `GitGridAssets`' fresh bundle and, innermost, the bundle
+/// The EFFECTIVE substation bundle — the one `SubstationWork` resolves. Each
+/// substation now mounts two: `GitGridAssets`' fresh bundle and, innermost, the
+/// bundle
 /// `MountEligibilityAssets` derives from it. Only the latter carries the mount
-/// predicate, so it is the one every assertion about seat posture means.
+/// predicate, so it is the one every assertion about substation posture means.
 ServiceBundle _gated(_Walk walk) =>
     walk.values<ServiceBundle>().singleWhere((b) => b.mountEligibility != null);

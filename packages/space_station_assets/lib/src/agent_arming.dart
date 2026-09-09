@@ -14,7 +14,7 @@
 /// coded station arming and the boot-eager guard. Recorded at
 /// `docs/decisions/2026-09-03-the-typed-seat-arming-mechanism-is-consumed-from-grid-assets.md`.
 ///
-/// The ladder is: station default -> substation seat -> bead (`grid.agent`) ->
+/// The ladder is: station default -> substation -> bead (`grid.agent`) ->
 /// step (`StepArgs.params`). This library owns the top TWO rungs as pure
 /// VALUES ("config = VALUES in the tree; impls are DI"): [kMementoStationArming]
 /// is the station's, and a `SubstationSeed`'s own [AgentArming] nests UNDER it.

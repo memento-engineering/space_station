@@ -1,25 +1,36 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:args/args.dart';
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart' show AgentConfig;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
-import 'package:space_station_assets/src/space_delegate.dart';
+import 'package:space_station_assets/space_station_assets.dart'
+    show CodedRosterSnapshotCompatibility;
+import 'package:space_station_assets/src/space_delegate.dart'
+    show
+        SpaceDelegate,
+        addSpaceStationFlags,
+        codedRosterOf,
+        codedRosterSnapshotOf,
+        kMementoOrgApp,
+        spaceStationConfigFrom;
 import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
-/// evolved): the memento org is authored as six literal seats in
+/// evolved): the memento org is authored as six literal substations in
 /// [SpaceDelegate.substations] (the roster BUILD HOOK) and `--substation`
-/// flags APPEND new seats after it — no merge, no override-by-name (Fork B
+/// flags APPEND new substations after it — no merge, no override-by-name (Fork B
 /// as re-ruled: the roster changes in CODE — space edits [substations]; a
 /// downstream station SUBCLASSES and overrides it). Pure + offline: the
 /// delegate's tree mounts in a bare genesis tree (the same tree `runGrid`
 /// mounts under `space up`) and its mounted [sdk.SubstationScope]s are
-/// walked to prove the roster is authored IN the tree — literal seats, never
-/// threaded config values.
+/// walked to prove the roster is authored IN the tree — literal substations,
+/// never threaded config values.
 void main() {
   // A grid home that looks like the umbrella sibling (space_station beside its
-  // peers): each literal `../<repo>` seat resolves against the ambient
+  // peers): each literal `../<repo>` substation resolves against the ambient
   // GridRoot (tg-32r) to `<umbrella>/<repo>`.
   const gridHome = '/home/memento/space_station';
   const umbrella = '/home/memento';
@@ -40,12 +51,12 @@ void main() {
       );
 
   group('SpaceDelegate.build — the hardcoded memento org (Fork A)', () {
-    test('a BARE delegate mounts the six coded seats at their ../<repo> '
+    test('a BARE delegate mounts the six coded substations at their ../<repo> '
         'umbrella siblings with the coded prefixes — the roster is the tree, '
         'not config', () {
-      final seats = _mountedSeats(_Author(delegate()));
+      final substations = _mountedSubstations(_Author(delegate()));
       expect(
-        seats.map((s) => s.name),
+        substations.map((s) => s.name),
         [
           'genesis',
           'the_grid',
@@ -54,12 +65,12 @@ void main() {
           'lenny',
           'decisions',
         ],
-        reason: 'the org, in mount order, from the literal Substation seats',
+        reason: 'the org, in mount order, from the literal Substation values',
       );
       // Roots are the umbrella siblings `../<repo>`, resolved by the SDK
       // against the ambient GridRoot.
       expect(
-        {for (final s in seats) s.name: s.root},
+        {for (final s in substations) s.name: s.root},
         {
           'genesis': '$umbrella/genesis',
           'the_grid': '$umbrella/the_grid',
@@ -74,7 +85,7 @@ void main() {
       // space_station → `space-…`, decisions → `dec-…`); genesis and lenny
       // default to their names (round 3).
       expect(
-        {for (final s in seats) s.name: s.prefix},
+        {for (final s in substations) s.name: s.prefix},
         {
           'genesis': 'genesis',
           'the_grid': 'tg',
@@ -86,9 +97,10 @@ void main() {
       );
     });
 
-    test('appended seats mount AFTER the coded org, in order — never instead '
+    test('appended substations mount AFTER the coded org, in order — never '
+        'instead '
         'of it', () {
-      final seats = _mountedSeats(
+      final substations = _mountedSubstations(
         _Author(
           delegate(
             appended: [
@@ -98,7 +110,7 @@ void main() {
           ),
         ),
       );
-      expect(seats.map((s) => s.name), [
+      expect(substations.map((s) => s.name), [
         'genesis',
         'the_grid',
         'power_station',
@@ -108,17 +120,17 @@ void main() {
         'tgdog',
         'extra',
       ]);
-      expect(seats[6].root, '/work/td');
-      expect(seats.last.prefix, 'ex');
+      expect(substations[6].root, '/work/td');
+      expect(substations.last.prefix, 'ex');
     });
   });
 
   group('the org DELIVERY IDENTITY — the memento App, per substation '
       '(space-u8q)', () {
-    test('every org seat carries the memento App identity as its OWN value, '
-        'and no seat gains a landing policy', () {
-      final seats = _capturedSeats(delegate());
-      expect(seats.map((seat) => seat.name), [
+    test('every org substation carries the memento App identity as its OWN '
+        'value, and no substation gains a landing policy', () {
+      final substations = _capturedSubstations(delegate());
+      expect(substations.map((substation) => substation.name), [
         'genesis',
         'the_grid',
         'power_station',
@@ -126,14 +138,20 @@ void main() {
         'lenny',
         'decisions',
       ]);
-      expect(seats.map((seat) => seat.app), everyElement(kMementoOrgApp));
+      expect(
+        substations.map((substation) => substation.app),
+        everyElement(kMementoOrgApp),
+      );
       expect(kMementoOrgApp.appId, '4529262');
       expect(kMementoOrgApp.installationId, '152260260');
       expect(kMementoOrgApp.privateKeyVar, 'GRID_GITHUB_APP_KEY_MEMENTO');
       // DELIVERY identity here; the poll VALUES are pinned by the intake group
       // below (space-3ds). The deliver / commit-only selection is space-9d0 and
       // is still unauthored.
-      expect(seats.map((seat) => seat.landingPolicy), everyElement(isNull));
+      expect(
+        substations.map((substation) => substation.landingPolicy),
+        everyElement(isNull),
+      );
     });
 
     test('the identity binds PER SUBSTATION: six identity providers, each over '
@@ -157,27 +175,31 @@ void main() {
       }
     });
 
-    test('a downstream override inherits the six org seats WITH the memento '
-        'App through super, and its own seat keeps its own identity', () {
-      final seats = _capturedSeats(
+    test('a downstream override inherits the six org substations WITH the '
+        'memento App through super, and its own substation keeps its own '
+        'identity', () {
+      final substations = _capturedSubstations(
         _DownstreamDelegate(gridRoot: '/home/me/my_station'),
       );
-      expect(seats, hasLength(7));
+      expect(substations, hasLength(7));
       expect(
-        seats.take(6).map((seat) => seat.app),
+        substations.take(6).map((substation) => substation.app),
         everyElement(kMementoOrgApp),
       );
-      expect(seats.last.name, 'mine');
-      expect(seats.last.app, _downstreamApp);
-      expect(seats.last.app?.privateKeyVar, 'GRID_GITHUB_APP_KEY_NICHOLAS');
+      expect(substations.last.name, 'mine');
+      expect(substations.last.app, _downstreamApp);
+      expect(
+        substations.last.app?.privateKeyVar,
+        'GRID_GITHUB_APP_KEY_NICHOLAS',
+      );
     });
   });
 
   group('the org INTAKE — GitHub polling, per substation (space-3ds)', () {
-    test('every org seat polls its OWN repository under the org App '
+    test('every org substation polls its OWN repository under the org App '
         'installation, and the three cadence defaults stand', () {
-      final seats = _capturedSeats(delegate());
-      expect(seats.map((seat) => seat.name), [
+      final substations = _capturedSubstations(delegate());
+      expect(substations.map((substation) => substation.name), [
         'genesis',
         'the_grid',
         'power_station',
@@ -185,14 +207,15 @@ void main() {
         'lenny',
         'decisions',
       ]);
-      for (final seat in seats) {
-        final poll = seat.githubPoll;
-        expect(poll, isNotNull, reason: '${seat.name} must poll');
+      for (final substation in substations) {
+        final poll = substation.githubPoll;
+        expect(poll, isNotNull, reason: '${substation.name} must poll');
         expect(poll!.owner, 'memento-engineering');
-        // repository AND substation are the SEAT NAME — never the bead-id
+        // repository AND substation are the SUBSTATION NAME — never the
+        // bead-id
         // prefix, which addresses the work store and not GitHub.
-        expect(poll.repository, seat.name);
-        expect(poll.substation, seat.name);
+        expect(poll.repository, substation.name);
+        expect(poll.substation, substation.name);
         // ONE App: the poll installation IS the delivery installation.
         expect(poll.installationId, kMementoOrgApp.installationId);
         expect(poll.installationId, '152260260');
@@ -203,31 +226,39 @@ void main() {
       }
     });
 
-    test('a downstream override inherits the six polling org seats through '
-        'super and keeps its own seat on its own installation', () {
-      final seats = _capturedSeats(
-        _DownstreamDelegate(gridRoot: '/home/me/my_station'),
-      );
-      expect(seats, hasLength(7));
-      expect(
-        seats.take(6).map((seat) => seat.githubPoll?.installationId),
-        everyElement('152260260'),
-      );
-      expect(seats.last.name, 'mine');
-      expect(seats.last.githubPoll?.installationId, '1');
-      expect(seats.last.githubPoll?.arm, github.GitHubReconcilerArm.offline);
-    });
+    test(
+      'a downstream override inherits the six polling org substations '
+      'through super and keeps its own substation on its own installation',
+      () {
+        final substations = _capturedSubstations(
+          _DownstreamDelegate(gridRoot: '/home/me/my_station'),
+        );
+        expect(substations, hasLength(7));
+        expect(
+          substations
+              .take(6)
+              .map((substation) => substation.githubPoll?.installationId),
+          everyElement('152260260'),
+        );
+        expect(substations.last.name, 'mine');
+        expect(substations.last.githubPoll?.installationId, '1');
+        expect(
+          substations.last.githubPoll?.arm,
+          github.GitHubReconcilerArm.offline,
+        );
+      },
+    );
   });
 
   group('the SUBCLASS extension seam — a downstream station overrides the '
       'delegate hooks (extend, never fork)', () {
     test('an overridden substations() composes super\'s org (at the '
-        'overridden umbrella) plus the downstream seats, and stationName '
+        'overridden umbrella) plus the downstream substations, and stationName '
         're-identifies the station', () {
       final downstream = _DownstreamDelegate(gridRoot: '/home/me/my_station');
       expect(downstream.stationName, 'downstream');
-      final seats = _mountedSeats(_Author(downstream));
-      expect(seats.map((s) => s.name), [
+      final substations = _mountedSubstations(_Author(downstream));
+      expect(substations.map((s) => s.name), [
         'genesis',
         'the_grid',
         'power_station',
@@ -237,12 +268,12 @@ void main() {
         'mine',
       ]);
       // The org resolves at the OVERRIDDEN umbrella (relative to the
-      // downstream grid home), the downstream seat at its own root — both
+      // downstream grid home), the downstream substation at its own root — both
       // through the SAME SubstationSeed class (one seed class, different
       // VALUES — space-47t).
-      expect(seats.first.root, '/home/me/memento/genesis');
-      expect(seats.last.root, '/home/me/mine');
-      expect(seats.last.prefix, 'mn');
+      expect(substations.first.root, '/home/me/memento/genesis');
+      expect(substations.last.root, '/home/me/mine');
+      expect(substations.last.prefix, 'mn');
     });
 
     test('codedRosterOf enumerates the subclass roster through one OWNED '
@@ -253,7 +284,8 @@ void main() {
     });
 
     test('coded roster snapshot keeps scopes and reports every GitHub polling '
-        'seat — the six org seats, plus a downstream seat that polls', () {
+        'substation — the six org substations, plus a downstream substation '
+        'that polls', () {
       final base = codedRosterSnapshotOf(SpaceDelegate.new, gridRoot: gridHome);
       expect(base.scopes.map((scope) => scope.name), [
         'genesis',
@@ -263,7 +295,7 @@ void main() {
         'lenny',
         'decisions',
       ]);
-      expect(base.githubPollingSeatNames, {
+      expect(base.githubPollingSubstationNames, {
         'genesis',
         'the_grid',
         'power_station',
@@ -271,6 +303,10 @@ void main() {
         'lenny',
         'decisions',
       });
+      expect(
+        base.githubPollingSeatNames,
+        same(base.githubPollingSubstationNames),
+      );
 
       final downstream = codedRosterSnapshotOf(_DownstreamDelegate.new);
       expect(downstream.scopes.map((scope) => scope.name), [
@@ -282,7 +318,7 @@ void main() {
         'decisions',
         'mine',
       ]);
-      expect(downstream.githubPollingSeatNames, {
+      expect(downstream.githubPollingSubstationNames, {
         'genesis',
         'the_grid',
         'power_station',
@@ -313,22 +349,23 @@ void main() {
         expect(config!.appended, isEmpty);
       });
 
-      test('a NEW name parses into an appended seat (with its @prefix) that '
+      test('a NEW name parses into an appended substation (with its @prefix) '
+          'that '
           'composes into the delegate tree after the org', () {
         final config = spaceStationConfigFrom(
           parse(['--grid-home', gridHome, '--substation', 'tgdog@td=/work/td']),
           codedNames: codedNames,
         )!;
-        final seat = config.appended.single;
-        expect(seat.name, 'tgdog');
-        expect(seat.root, '/work/td');
-        expect(seat.prefix, 'td');
-        // The parsed seat carries the standard substation stack — it mounts
-        // clean after the coded six.
-        final seats = _mountedSeats(
+        final substation = config.appended.single;
+        expect(substation.name, 'tgdog');
+        expect(substation.root, '/work/td');
+        expect(substation.prefix, 'td');
+        // The parsed substation carries the standard substation stack — it
+        // mounts clean after the coded six.
+        final substations = _mountedSubstations(
           _Author(delegate(appended: config.appended)),
         );
-        expect(seats.map((s) => s.name), [
+        expect(substations.map((s) => s.name), [
           'genesis',
           'the_grid',
           'power_station',
@@ -337,7 +374,7 @@ void main() {
           'decisions',
           'tgdog',
         ]);
-        expect(seats.last.prefix, 'td');
+        expect(substations.last.prefix, 'td');
       });
 
       test('a flag naming a CODED substation is a LOUD FormatException — the '
@@ -391,9 +428,10 @@ void main() {
 }
 
 /// Calls [delegate]'s roster hook with a live [TreeContext] and returns the
-/// authored seeds — the VALUES only. The seats themselves are never mounted,
-/// so no seat asset resolves a credential and the read is machine-independent.
-List<SubstationSeed> _capturedSeats(SpaceDelegate delegate) {
+/// authored seeds — the VALUES only. The substations themselves are never
+/// mounted, so no substation asset resolves a credential and the read is
+/// machine-independent.
+List<SubstationSeed> _capturedSubstations(SpaceDelegate delegate) {
   final captured = <Seed>[];
   final owner = TreeOwner();
   addTearDown(owner.dispose);
@@ -438,15 +476,15 @@ class _Leaf extends MultiChildSeed {
 /// Mounts [root] in a bare tree, flushes one build pass (the Track B/F
 /// template, mirroring `space_delegate_test.dart`), and walks the mounted
 /// branches collecting every provided [sdk.SubstationScope] in tree order —
-/// the seats [SpaceDelegate.build] actually authored.
-List<sdk.SubstationScope> _mountedSeats(Seed root) {
+/// the substations [SpaceDelegate.build] actually authored.
+List<sdk.SubstationScope> _mountedSubstations(Seed root) {
   final owner = TreeOwner();
   addTearDown(owner.dispose);
   final branch = owner.mountRoot(root);
   owner.flush();
   return _branches<sdk.SubstationScope>(
     branch,
-  ).map((seat) => seat.value).toList();
+  ).map((substation) => substation.value).toList();
 }
 
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the
@@ -462,8 +500,8 @@ class _Author extends StatelessSeed {
 }
 
 /// The DOWNSTREAM station's own App (lunar's shape): a SECOND identity on a
-/// SECOND key variable. Each seat carries exactly one — neither station gains
-/// a second identity.
+/// SECOND key variable. Each substation carries exactly one — neither station
+/// gains a second identity.
 const _downstreamApp = GitHubAppConfig(
   appId: '9001',
   installationId: '9002',
@@ -474,7 +512,7 @@ const _downstreamApp = GitHubAppConfig(
 /// [SpaceDelegate] SUBCLASS whose constructor mirrors the base via
 /// super-parameters (so `.new` satisfies `SpaceDelegateFactory`) and whose
 /// hooks re-identify the station, re-point the org umbrella, and COMPOSE the
-/// inherited roster with its own seats.
+/// inherited roster with its own substations.
 class _DownstreamDelegate extends SpaceDelegate {
   _DownstreamDelegate({
     super.gridRoot = '/home/me/my_station',

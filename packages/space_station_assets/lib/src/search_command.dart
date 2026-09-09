@@ -11,20 +11,20 @@
 /// OFFLINE mount. Nothing about search is reimplemented here — this file only
 /// curries the delegate.
 ///
-/// **The grid home.** The coded seats are `../<repo>` siblings of the grid
+/// **The grid home.** The coded substations are `../<repo>` siblings of the grid
 /// home, so the home is the one input the composition supplies. `--grid-home`
 /// names it explicitly; absent, it is the CWD — `space` is run FROM its grid
 /// home (`./space search …`), and the installed `discover` skill calls
 /// `space search --json <query>` with no home flag. A cwd that is NOT a grid
-/// home needs no extra guard: every coded seat resolves to an absent store,
+/// home needs no extra guard: every coded substation resolves to an absent store,
 /// the report names each root, and the run exits 1 (the vended loud
 /// non-answer). A RELATIVE `--grid-home` is refused LOUD (exit 64): a relative
 /// grid root is the ambience the v3 model kills, and unguarded it surfaces as
 /// a raw `ArgumentError` out of the tree mount.
 ///
 /// READ-ONLY (A37): search touches no state store and no RS-2 lock — it reads
-/// each seat's work store through the vended `bd export --all` seam, one spawn
-/// per store, and has no mutation surface to fence.
+/// each substation's work store through the vended `bd export --all` seam, one
+/// spawn per store, and has no mutation surface to fence.
 library;
 
 import 'dart:io';

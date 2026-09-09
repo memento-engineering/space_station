@@ -2,6 +2,10 @@
 
 ## 0.3.0-rc.10
 
+- Changed: `codedRosterSnapshotOf` now exposes
+  `githubPollingSubstationNames`; `githubPollingSeatNames` remains a deprecated
+  compatibility getter for one minor cycle with the replacement message
+  `Use githubPollingSubstationNames instead.`.
 - Added: every live boot emits the resolved dual-read posture (`off`, `observe`
   or `primary`) as a `trajectory.dualReadPosture` flare and a log line, and a
   SET but unrecognized `GRID_DUAL_READ` value emits its own flare naming the
@@ -43,7 +47,7 @@
 ## 0.3.0-rc.6
 
 - Fixed: `space status` consumes the lock's DECLARED lifecycle phase — the `AttachResult` switch names `Starting` and `Unreachable` (cli rc.15 split them out of `Stale`; the `Unreachable` branch keeps the prior wording and exit code, `Starting` is additive). Floors `grid_cli ^0.5.0-rc.15` and `grid_diagnostics_contract ^0.2.1`; a downstream station that resolves cli rc.15 compiled against rc.5's switch no longer breaks (space-b8u, #76).
-- Added: `SubstationSeed.assetRoster` carries a `GridAssetRosterOverride` through to `MountedSubstationSeed.assetRoster` (the coded EXCEPTION half of derived-by-default asset selection); `codedRosterSnapshotOf` projects an immutable seat-keyed `assetRosters` map; `GridAssetRosterOverride` and `AssetKey` are re-exported for override authoring. `MountedSubstationSeed.assetRoster` is a required constructor field — no downstream constructs the type directly. Floors `grid_sdk ^0.3.0-rc.15` (space-kwv, #75).
+- Added: `SubstationSeed.assetRoster` carries a `GridAssetRosterOverride` through to `MountedSubstationSeed.assetRoster` (the coded EXCEPTION half of derived-by-default asset selection); `codedRosterSnapshotOf` projects an immutable substation-keyed `assetRosters` map; `GridAssetRosterOverride` and `AssetKey` are re-exported for override authoring. `MountedSubstationSeed.assetRoster` is a required constructor field — no downstream constructs the type directly. Floors `grid_sdk ^0.3.0-rc.15` (space-kwv, #75).
 - Added: `buildRunnerComposition()` returns the command runner together with the unmodifiable set of paired operator command names and the baseline asset registry, so a downstream station can teach its own skill/command pairs against the composed surface (space-eqh, #74).
 
 ## 0.3.0-rc.5
@@ -89,7 +93,7 @@
   stay this package's own. github_grid_assets 0.1.0-rc.9 also vends a composed
   `SubstationSeed`, but its `SubstationAppIdentity` carries an `int`
   `installationId` where this package's `GitHubAppConfig` carries a `String`,
-  so adopting it is a migration of every seat authoring site rather than a
+  so adopting it is a migration of every substation authoring site rather than a
   re-export — that is bead `space-ovd`'s scope.
 
 ## 0.3.0-rc.3
@@ -97,13 +101,13 @@
 - Breaking: none new in this candidate — it continues the 0.3.0 line; the
   migration notes under 0.3.0-rc.1 still apply.
 - Added: the memento org GitHub App identity (`kMementoOrgApp`) is authored and
-  exported, and every coded org seat carries it as its `app:` delivery identity
-  (space-u8q).
-- Added: every coded org seat carries a `githubPoll` reconciler value under the
+  exported, and every coded org substation carries it as its `app:` delivery
+  identity (space-u8q).
+- Added: every coded org substation carries a `githubPoll` reconciler value under the
   org App installation, so the resident station polls the six org repositories
   for issue intake. The defaults stand (1-minute interval, 5-second spacing,
   live arm); one station owns intake for these repos (space-3ds).
-- Fix: `filing` and `approve` resolve a bead's seat by the longest coded prefix
+- Fix: `filing` and `approve` resolve a bead's substation by the longest coded prefix
   at a complete identifier boundary, so roster prefixes may contain hyphens and
   overlapping prefixes route to the right store (space-fvg).
 - Changed: requires `grid_assets` 0.6.0-rc.8. Approval is the `grid.approved_*`
@@ -160,4 +164,4 @@ API additions since 0.1.0:
   stations.
 - Added `githubSelfTrust` forwarding through `SpaceDelegateFactory` and
   `SpaceDelegate`, providing the station-global GitHub trust value to polling
-  seats.
+  substations.

@@ -14,7 +14,8 @@
 /// **The grid home.** `--grid-home` is an explicit override only. When absent,
 /// the vended command mounts [delegate] and reads the ambient `GridRoot` by
 /// tree position. A RELATIVE home is refused LOUD (exit 64): the coded roster
-/// resolves its `../<repo>` seats against it (a relative root surfaces as a raw
+/// resolves its `../<repo>` substations against it (a relative root surfaces as
+/// a raw
 /// `ArgumentError` out of the tree mount), and the install RENDERS it into
 /// every asset it stamps — a relative `{{gridHome}}` would be baked into the
 /// committed manual.
