@@ -105,6 +105,8 @@ export 'src/agent_arming.dart'
 // (construct → mount → dispose) roster enumeration over that factory.
 export 'src/space_delegate.dart'
     show
+        CodedRosterSnapshot,
+        CodedRosterSnapshotCompatibility,
         NoteAppender,
         SpaceDelegate,
         SpaceDelegateFactory,
@@ -137,7 +139,8 @@ export 'src/search_command.dart' show buildSpaceSearchCommand;
 // The composition site of the VENDED front-door pair (`filing`/`approve`) —
 // exported so a test (or a Flutter app) can build the seat with its seams
 // injected. storeRootForBead rides along: resolving a bead id to its owning
-// seat's work store is the station-context half a downstream station reuses.
+// substation's work store is the station-context half a downstream station
+// reuses.
 export 'src/filing_commands.dart'
     show SpaceFilingCommands, buildSpaceFilingCommands, storeRootForBead;
 export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
@@ -161,7 +164,7 @@ export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 /// comes from the delegate's `stationName`.
 /// [delegateFactory] is the station-authorship seam — the constructor
 /// tear-off of the station's [SpaceDelegate] SUBCLASS (identity, state
-/// partition, roster and seat stacks live on the class as override points),
+/// partition, roster and substation stacks live on the class as override points),
 /// threaded into the resident verbs (`up`) and the station-context
 /// compositions (`search`/`assets`/link authoring). Absent, the base
 /// [SpaceDelegate] — space's posture.
@@ -251,8 +254,8 @@ buildRunnerComposition({
     // four-row front-door preflight the `discover` skill CALLS) and
     // `space approve --actor <name> <id>` (the operator's approval VERB: the
     // same preflight, then ONE stamped receipt on the work bead). Both take a
-    // bead id and are curried with the roster that resolves WHICH seat's store
-    // owns it (power_station ADR-0001, the coupled skill+command pattern).
+    // bead id and are curried with the roster that resolves WHICH substation's
+    // store owns it (power_station ADR-0001, the coupled skill+command pattern).
     ..addCommand(filingCommand)
     ..addCommand(approveCommand)
     // The SEAT asset's exported CLI pair, composed BARE: PrimeCommand is the

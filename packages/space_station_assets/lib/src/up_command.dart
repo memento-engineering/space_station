@@ -215,8 +215,8 @@ class UpCommand extends Command<int> {
   /// Creates the up command (space's own station flags MINUS `--bead`, plus
   /// the agent scope's). [delegateFactory] is the ONE downstream seam: which
   /// [SpaceDelegate] subclass authors this station (its identity, roster and
-  /// seat stacks live on the CLASS as override points). The coded roster is
-  /// read by MOUNTING the delegate's tree offline (`mountedValuesOf` through
+  /// substation stacks live on the CLASS as override points). The coded roster
+  /// is read by MOUNTING the delegate's tree offline (`mountedValuesOf` through
   /// [codedRosterSnapshotOf] — the same enumeration `search` uses) for the
   /// help text, the refusal set, and the store guard — the tree stays the
   /// single source.
@@ -238,8 +238,8 @@ class UpCommand extends Command<int> {
       argParser,
       // One owned enumeration (constructed, mounted, DISPOSED — a delegate
       // is a StateNotifier, never a throwaway value) at a placeholder home:
-      // seat NAMES are grid-home-independent, and only names render into the
-      // help. The real mounts (guard + tree) happen in [run].
+      // substation NAMES are grid-home-independent, and only names render into
+      // the help. The real mounts (guard + tree) happen in [run].
       codedNames: [for (final s in codedRosterOf(delegateFactory)) s.name],
     );
     // The allowed set of --env is the ARMED REGISTRY, read from the delegate
@@ -404,7 +404,8 @@ class UpCommand extends Command<int> {
     // construction — the hand-kept mirror this replaced could diverge (a
     // prefix divergence silently un-owned every `space-` bead).
     // A missing or RELATIVE home falls back to the placeholder mount: only
-    // seat NAMES are read before the home guards below refuse (exit 64), and
+    // substation NAMES are read before the home guards below refuse (exit 64),
+    // and
     // names are home-independent. The resolved ROOTS are only consumed after
     // those guards pass — i.e. always from a real absolute home.
     final homeFlag =
@@ -469,8 +470,8 @@ class UpCommand extends Command<int> {
     // The coded roster, restated as OFF-TREE specs: the work machinery (the
     // controllers `buildStationWork` builds, this guard, the /status view)
     // runs BEFORE the armed tree mounts, so it reads the OFFLINE mount above
-    // ([codedScopes]) — roots already resolved by the SDK's own seat build,
-    // byte-identical with what the armed tree will resolve.
+    // ([codedScopes]) — roots already resolved by the SDK's own substation
+    // build, byte-identical with what the armed tree will resolve.
     final coded = <_ArmedSubstation>[
       for (final s in codedScopes)
         (name: s.name, root: s.root, prefix: s.prefix),
@@ -509,7 +510,8 @@ class UpCommand extends Command<int> {
       return 1;
     }
     final githubPollingArmed = armed.any(
-      (seat) => codedRoster.githubPollingSeatNames.contains(seat.name),
+      (substation) =>
+          codedRoster.githubPollingSubstationNames.contains(substation.name),
     );
 
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
@@ -620,12 +622,12 @@ class UpCommand extends Command<int> {
 
     // --- space_station AS A SEED: author the delegate, ARMED with the work
     // wiring. The coded org is hardcoded in its build; only the operator's
-    // appended seats ride in.
+    // appended substations ride in.
     //
     // DELIVERY IS A BINDING, NOT AN ARM (the_grid ADR-0000 A51). A substation
     // BINDS a `DeliveryMethod` on its `ServiceBundle`, and binding NONE is the
     // commit-only posture — a real posture, not an unarmed one. space's coded
-    // seats compose github_grid_assets' `GitHubGridAssets`, which binds
+    // substations compose github_grid_assets' `GitHubGridAssets`, which binds
     // a `GitHubPrDelivery` iff it OBSERVES both halves (commit/push `GitOps` +
     // a `PrOpener`) from the tree. ADR-0006 D3 is preserved: the bound method
     // pushes and opens a PR from the per-bead branch, and nothing auto-merges.

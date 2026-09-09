@@ -60,7 +60,7 @@ StepMount _overlayAgentMount() => StepMount(
 /// [SpaceDelegate] — space_station authored as a Seed (the v3 §2 tree). Pure
 /// + offline: the delegate's [build] tree is mounted in a bare genesis tree
 /// (no kernel, no live git/claude — the dry authoring mounts NO effect
-/// providers, and the seat assets observe that absence as the commit-only /
+/// providers, and the substation assets observe that absence as the commit-only /
 /// offline posture), the same tree `runGrid(SpaceDelegate())` mounts under
 /// `space up`. The composed seed itself ([SubstationSeed] and its watch-based
 /// assets) is proven in `substation_seed_test.dart`; this proves space
@@ -91,14 +91,14 @@ void main() {
     expect(liveDelegate.maintainsStateStoreOnBoot, isTrue);
   });
 
-  test('the coded roster snapshot carries per-seat asset rosters', () {
+  test('the coded roster snapshot carries per-substation asset rosters', () {
     final snapshot = codedRosterSnapshotOf(_AssetRosterDelegate.new);
 
     expect(
       snapshot.scopes.map((scope) => scope.name),
       orderedEquals(['authored', 'polling']),
     );
-    expect(snapshot.githubPollingSeatNames, {'polling'});
+    expect(snapshot.githubPollingSubstationNames, {'polling'});
     expect(snapshot.assetRosters.keys, orderedEquals(['authored']));
     expect(
       snapshot.assetRosters['authored'],
@@ -126,21 +126,25 @@ void main() {
     });
 
     test('the DRY tree (the default) binds NO delivery anywhere — the effect '
-        'providers are ABSENT from the tree, so every seat bundle is '
+        'providers are ABSENT from the tree, so every substation bundle is '
         'commit-only (space-47t: inertness declared in the tree)', () {
       final bundles = _mountedBundles(_Author(delegate()));
-      expect(bundles, hasLength(6), reason: 'one gated bundle per coded seat');
+      expect(
+        bundles,
+        hasLength(6),
+        reason: 'one gated bundle per coded substation',
+      );
       expect(bundles.every((b) => b.delivery == null), isTrue);
     });
 
     test('a LIVE delegate authors the effect providers IN-TREE and every '
-        'coded seat binds GitHub delivery by OBSERVING both halves '
+        'coded substation binds GitHub delivery by OBSERVING both halves '
         '(space-47t: no effect instance passes through boot)', () {
       final bundles = _mountedBundles(_Author(delegate(live: true)));
       expect(
         bundles.where((b) => b.delivery != null),
         hasLength(6),
-        reason: 'each coded seat re-provides its bundle delivery-bound',
+        reason: 'each coded substation re-provides its bundle delivery-bound',
       );
     });
 
@@ -276,9 +280,10 @@ void main() {
       },
     );
 
-    test('resolveGitHubSelfTrustFromGh SKIPS gh when NO armed seat polls — the '
+    test('resolveGitHubSelfTrustFromGh SKIPS gh when NO armed substation polls '
+        '— the '
         'function\'s own contract, keyed on the flag; and the coded roster now '
-        'reports six polling seats, so a live boot reaches the probe instead '
+        'reports six polling substations, so a live boot reaches the probe instead '
         '(space-3ds)', () async {
       var calls = 0;
       final diagnostics = <String>[];
@@ -310,11 +315,11 @@ void main() {
         SpaceDelegate.new,
         gridRoot: '/home/memento/space_station',
       );
-      expect(roster.githubPollingSeatNames, hasLength(6));
+      expect(roster.githubPollingSubstationNames, hasLength(6));
     });
 
     test('the six LIVE poll values author NO reconciler runtime on an OFFLINE '
-        'mount: without self trust the per-seat binding provides no cursor '
+        'mount: without self trust the per-substation binding provides no cursor '
         'store or sink, and the App client resolves asynchronously so a '
         'synchronous flush never has one (space-3ds)', () {
       expect(
@@ -340,18 +345,21 @@ void main() {
       );
     });
 
-    test('an appended (--substation) seat mounts clean after the literal '
-        'coded org (space-6ds: the six coded seats are always authored)', () {
-      expect(
-        () => _mount(
-          _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
-        ),
-        returnsNormally,
-      );
-    });
+    test(
+      'an appended (--substation) substation mounts clean after the literal '
+      'coded org (space-6ds: the six coded substations are always authored)',
+      () {
+        expect(
+          () => _mount(
+            _Author(delegate(appended: [sdk.Substation('tgdog', '/work/td')])),
+          ),
+          returnsNormally,
+        );
+      },
+    );
 
     test(
-      'a LIVE flag-appended seat retains git and gate but binds no delivery',
+      'a LIVE flag-appended substation retains git and gate but binds no delivery',
       () {
         final bundles = _mountedBundles(
           _Author(
@@ -556,7 +564,7 @@ void main() {
 /// template).
 void _mount(Seed root) {
   final owner = TreeOwner();
-  // The coded seats carry the org App (space-u8q), so each mounts a
+  // The coded substations carry the org App (space-u8q), so each mounts a
   // GitHubAppClientAssets that starts a credential load. Disposing at teardown
   // makes that load a no-op instead of letting it outlive the test.
   addTearDown(owner.dispose);
@@ -581,10 +589,10 @@ List<T> _mountedValues<T extends Object>(Seed seed) {
 
 /// Mounts [root], flushes once, and collects every provided [ServiceBundle]
 /// in tree order — the delivery-posture projection of the authored tree.
-/// A commit-only seat provides ONE bundle (its git asset's); a
-/// delivery-bound seat re-provides a second, delivery-carrying bundle below
-/// it, so the outermost bundle per seat is filtered to the DEEPEST per
-/// substation by taking `delivery != null` counts where bound.
+/// A commit-only substation provides ONE bundle (its git asset's); a
+/// delivery-bound substation re-provides a second, delivery-carrying bundle
+/// below it, so the outermost bundle per substation is filtered to the DEEPEST
+/// per substation by taking `delivery != null` counts where bound.
 List<ServiceBundle> _mountedBundles(Seed root) {
   final owner = TreeOwner();
   addTearDown(owner.dispose);
@@ -597,12 +605,13 @@ List<ServiceBundle> _mountedBundles(Seed root) {
   }
 
   walk(branch);
-  // A seat mounts SEVERAL bundles as its stack assets each re-provide: git's,
+  // A substation mounts SEVERAL bundles as its stack assets each re-provide:
+  // git's,
   // GitHub's delivery re-provision, and innermost the one the mount gate
   // derives. Only the innermost is what `SubstationWork` resolves, so it is
-  // the only one a seat-posture assertion means.
+  // the only one a substation-posture assertion means.
   //
-  // `MountEligibilityAssets` is mounted innermost on EVERY seat, so
+  // `MountEligibilityAssets` is mounted innermost on EVERY substation, so
   // "carries a mount predicate" identifies that bundle exactly — replacing the
   // pairwise delivery heuristic this helper used to need, which could only
   // collapse pairs and silently mis-collapsed a triple.

@@ -27,7 +27,7 @@
 /// The engine's `WorkList` mounts INSIDE this tree: `space up` assembles the
 /// off-tree machinery (`grid_sdk.buildStationWork`) and threads its
 /// [sdk.StationWorkWiring] into this delegate; [build] mounts `StationWork`
-/// above the fan-out and each substation's `SubstationWork` seat establishes
+/// above the fan-out and each substation's `SubstationWork` establishes
 /// its `WorkList` (v3 §3). A delegate built WITHOUT wiring (offline tests,
 /// fixtures) keeps H2's authoring-only shape — the tree stands, drives no
 /// work. `--dry-run` (the default) arms the tree over INERT seams.
@@ -37,10 +37,11 @@
 /// space_station IS memento's grid instance
 /// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the six
 /// org substations — genesis, the_grid, power_station, space_station, lenny,
-/// decisions — are authored as literal seats in [SpaceDelegate.substations], the ONE
+/// decisions — are authored as literal substations in
+/// [SpaceDelegate.substations], the ONE
 /// definition both [SpaceDelegate.build] and `space up`'s off-tree machinery
 /// consume (the old hand-kept mirror in `up_command.dart` is gone — the
-/// divergence it risked silently un-owned beads). A seat roots at its
+/// divergence it risked silently un-owned beads). A substation roots at its
 /// umbrella sibling (the SDK resolves a relative root against the ambient
 /// `GridRoot` — tg-32r) or at an ABSOLUTE root. NO overriding by config
 /// (round 3): a `--substation` flag APPENDS a new substation after the
@@ -111,13 +112,15 @@ typedef NoteAppender = Future<void> Function(String beadId, String line);
 
 /// The memento org's ONE GitHub App delivery identity — the `grid-assets` App
 /// installed on `memento-engineering` (`repository_selection: all`), carried as
-/// a VALUE by each of the six org seats [SpaceDelegate.substations] authors.
+/// a VALUE by each of the six org substations [SpaceDelegate.substations]
+/// authors.
 ///
 /// PER SUBSTATION, never per station (pow-1rn): this is a shared value, not a
 /// station-level identity and not a name-keyed map. Nothing mounts it above the
-/// substation fan-out; a seat delivering under a DIFFERENT App simply passes a
+/// substation fan-out; a substation delivering under a DIFFERENT App simply
+/// passes a
 /// different [GitHubAppConfig], which is how a downstream station's private
-/// seats keep their own App while inheriting these six through `super`.
+/// substations keep their own App while inheriting these six through `super`.
 ///
 /// ONE STATION OWNS DELIVERY FOR THESE REPOS. Whichever station runs resident
 /// carries this identity; two resident stations over the same umbrella would
@@ -127,17 +130,31 @@ typedef NoteAppender = Future<void> Function(String beadId, String line);
 /// [GitHubAppConfig.privateKeyVar] is the NAME of an environment variable whose
 /// VALUE is a path to the PEM key; this library never reads the environment —
 /// the injected `github.GitHubAppClientAssets` resolves it at effect time. With
-/// `GRID_GITHUB_APP_KEY_MEMENTO` unset the seat composes INERT and the ambient
-/// opener stands: a missing key is a posture, never a boot error.
+/// `GRID_GITHUB_APP_KEY_MEMENTO` unset the substation composes INERT and the
+/// ambient opener stands: a missing key is a posture, never a boot error.
 const kMementoOrgApp = GitHubAppConfig(
   appId: '4529262',
   installationId: '152260260',
   privateKeyVar: 'GRID_GITHUB_APP_KEY_MEMENTO',
 );
 
-/// Enumerates the CODED roster, its GitHub-polling seat names, and authored
-/// asset-selection exceptions from one shared offline mount of the station
-/// [factory] authors.
+/// The public, transparent snapshot projected from a coded substation roster.
+typedef CodedRosterSnapshot = ({
+  List<sdk.SubstationScope> scopes,
+  Set<String> githubPollingSubstationNames,
+  Map<String, GridAssetRosterOverride> assetRosters,
+});
+
+/// Compatibility spelling for the retired roster terminology.
+extension CodedRosterSnapshotCompatibility on CodedRosterSnapshot {
+  /// The names of coded substations with GitHub polling configured.
+  @Deprecated('Use githubPollingSubstationNames instead.')
+  Set<String> get githubPollingSeatNames => githubPollingSubstationNames;
+}
+
+/// Enumerates the CODED roster, its GitHub-polling substation names, and
+/// authored asset-selection exceptions from one shared offline mount of the
+/// station [factory] authors.
 ///
 /// The mount lifecycle and tree walk are owned by `grid_assets`'
 /// `mountedValuesOf`; this package projects the [MountedSubstationSeed] values
@@ -145,30 +162,28 @@ const kMementoOrgApp = GitHubAppConfig(
 ///
 /// [gridRoot] defaults to `'/'` — a deterministic ABSOLUTE placeholder
 /// (v3 §0: the tree refuses a relative root) for reads that only need
-/// names/prefixes (seat names are grid-home-independent); pass the real home
-/// when the resolved roots matter (they arrive resolved by the SDK's own
-/// seat build).
-({
-  List<sdk.SubstationScope> scopes,
-  Set<String> githubPollingSeatNames,
-  Map<String, GridAssetRosterOverride> assetRosters,
-})
-codedRosterSnapshotOf(SpaceDelegateFactory factory, {String gridRoot = '/'}) {
+/// names/prefixes (substation names are grid-home-independent); pass the real
+/// home when the resolved roots matter (they arrive resolved by the SDK's own
+/// substation build).
+CodedRosterSnapshot codedRosterSnapshotOf(
+  SpaceDelegateFactory factory, {
+  String gridRoot = '/',
+}) {
   final delegate = factory(gridRoot: gridRoot);
   try {
-    final seats = mountedValuesOf<MountedSubstationSeed>(delegate);
+    final substations = mountedValuesOf<MountedSubstationSeed>(delegate);
     return (
       scopes: List<sdk.SubstationScope>.unmodifiable(
-        seats.map((seat) => seat.scope),
+        substations.map((substation) => substation.scope),
       ),
-      githubPollingSeatNames: Set<String>.unmodifiable({
-        for (final seat in seats)
-          if (seat.githubPollingConfigured) seat.scope.name,
+      githubPollingSubstationNames: Set<String>.unmodifiable({
+        for (final substation in substations)
+          if (substation.githubPollingConfigured) substation.scope.name,
       }),
       assetRosters: Map<String, GridAssetRosterOverride>.unmodifiable({
-        for (final seat in seats)
-          if (seat.assetRoster case final assetRoster?)
-            seat.scope.name: assetRoster,
+        for (final substation in substations)
+          if (substation.assetRoster case final assetRoster?)
+            substation.scope.name: assetRoster,
       }),
     );
   } finally {
@@ -216,11 +231,12 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
   }
 }
 
-/// The delegate seat memento's `space` verbs re-seat over — space_station
+/// The delegate memento's `space` verbs re-seat over — space_station
 /// authored as a Seed.
 ///
 /// Constructed from space's resolved station config (its [gridRoot] home, the
-/// operator's [appended] flag seats, the station-default [agentConfig], the
+/// operator's [appended] flag substations, the station-default [agentConfig],
+/// the
 /// work-runtime machinery ([wiring] / [provisioner]), and the [live] posture
 /// VALUE). The master [build] authors the v3 §2 tree; `space up` mounts it
 /// with `runGrid(this)`.
@@ -365,9 +381,9 @@ class SpaceDelegate extends sdk.GridDelegate {
       );
 
   /// The operator's `--substation` flags, parsed into ready [sdk.Substation]
-  /// seats — the APPEND layer (Fork B, round 3): they spread AFTER the coded
-  /// roster in [build], in flag order. Never a merge, never an override — the
-  /// coded roster is changed in code ([substations], the subclass hook).
+  /// substations — the APPEND layer (Fork B, round 3): they spread AFTER the
+  /// coded roster in [build], in flag order. Never a merge, never an override —
+  /// the coded roster is changed in code ([substations], the subclass hook).
   final List<sdk.Substation> appended;
 
   /// The station's NAMED inference environments — memento's semantic names
@@ -402,14 +418,15 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// provisioning no-ops (offline). [build] ADOPTS it over the fan-out as a
   /// `Provider<StationGitService>.value` (STYLE rule 2: `.value` adopts an
   /// instance held by another owner — the runtime — exactly as `StationWork`
-  /// adopts the wiring's values); each seat's [GitGridAssets] observes it
+  /// adopts the wiring's values); each substation's [GitGridAssets] observes it
   /// individually (the retired `GitServices` bundle's split, space-47t).
   final StationGitService? provisioner;
 
   /// The station-global SELF-only GitHub trust value.
   ///
   /// Null keeps intake binding absent. The live boot resolves this once through
-  /// `gh`; every polling seat observes the same value from the station tree.
+  /// `gh`; every polling substation observes the same value from the station
+  /// tree.
   final github.GitHubSelfTrust? githubSelfTrust;
 
   /// The LIVE posture VALUE — the boot's one remaining say on effects
@@ -446,33 +463,35 @@ class SpaceDelegate extends sdk.GridDelegate {
   ///
   /// **The roster is authored in [substations]** (space-6ds, evolved): the
   /// coded drive set is the delegate's OWN override point — literal
-  /// [sdk.Substation] seats, each with its root (relative resolved against
+  /// [sdk.Substation] values, each with its root (relative resolved against
   /// the ambient `GridRoot`, tg-32r; absolute used as-is) and the standard
-  /// asset stack ([seat]). NOT a manifest file, NOT filesystem discovery —
+  /// substation asset stack. NOT a manifest file, NOT filesystem discovery —
   /// the roster is code, and changing it is a code change: space edits
   /// [substations] here; a downstream station (extend, never fork) SUBCLASSES
   /// and overrides it.
   ///
   /// **Flags APPEND, never override** (Fork B, round 3): the parsed
-  /// `--substation` seats ([appended]) spread AFTER the coded roster, in flag
+  /// `--substation` values ([appended]) spread AFTER the coded roster, in flag
   /// order. No merge, no override-by-name. A coded sibling absent from this
-  /// checkout still mounts its seat (root resolution is pure path math); with
+  /// checkout still mounts its substation (root resolution is pure path math);
+  /// with
   /// no store controller feeding it (`space up` arms controllers only over
-  /// stores that resolve), that seat drives no work.
+  /// stores that resolve), that substation drives no work.
   ///
-  /// Each seat's git is substation-scoped (Track F, re-cut by space-47t):
-  /// the seat's [GitGridAssets] and imported GitHub extension WATCH the
+  /// Each substation's git is substation-scoped (Track F, re-cut by space-47t):
+  /// the substation's [GitGridAssets] and imported GitHub extension WATCH the
   /// station machinery individually — `StationGitService` (adopted from the
   /// work runtime), `GitOps` and `PrOpener` (created IN-TREE here, LIVE arms
-  /// only) — and a seat-scoped `Provider<PrOpener>` (a [GitHubAppConfig]
-  /// value on the seat, mounted only when the seat OBSERVES the station's
+  /// only) — and a substation-scoped `Provider<PrOpener>` (a [GitHubAppConfig]
+  /// value on the substation, mounted only when the substation OBSERVES the
+  /// station's
   /// `GitOps` — the live structural signal) shadows the station opener
   /// (ADR-0006 D3: land flows into the substations' GitHub assets, never
   /// through station services).
   /// Under dry-run NONE of the effect providers is authored — by this build
-  /// or by an app-bearing seat: the inert posture is provider ABSENCE in
+  /// or by an app-bearing substation: the inert posture is provider ABSENCE in
   /// the tree, visible in the projection.
-  /// Each seat's fold-child is [sdk.SubstationWork] — the seat the
+  /// Each substation's fold-child is [sdk.SubstationWork] — the substation the
   /// engine's `WorkList` binds into when the station is armed (Track J).
   /// FOLLOW-ON (space-7uc): the committee's rubric/extension asset root
   /// belongs in these `assets:` slots too, so the critic resolves
@@ -487,7 +506,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     final armedWiring = wiring;
     final git = provisioner;
     final selfTrust = githubSelfTrust;
-    // The availability registry (tg-1fa2.5): the seat assets OBSERVE their
+    // The availability registry (tg-1fa2.5): the substation assets OBSERVE their
     // collaborators (`watch<T>()` — nullable always, absence is a posture),
     // and a watch MISS parks a pending registration with the enclosing
     // ProviderScope. runGrid mounts one at the production root; this tree
@@ -500,10 +519,10 @@ class SpaceDelegate extends sdk.GridDelegate {
     // with THIS registry, never the production root's — so a provider
     // mounted ABOVE this delegate's tree (in runGrid's root scope) notifies
     // the OUTER registry and can never drain a registration parked here.
-    // Every provider a seat asset watches (StationGitService, GitOps,
+    // Every provider a substation asset watches (StationGitService, GitOps,
     // PrOpener, GitHubAppConfig) MUST therefore be authored INSIDE this
-    // delegate's tree — which they all are: this build and the seats author
-    // every one. Do not "help" a seat from above the delegate.
+    // delegate's tree — which they all are: this build and the substations
+    // author every one. Do not "help" a substation from above the delegate.
     return sdk.ProviderScope(
       child: sdk.RawAssetGrid(
         root: gridRoot,
@@ -524,7 +543,7 @@ class SpaceDelegate extends sdk.GridDelegate {
                 child: Nest(
                   children: [
                     // The TYPED seats (ADR-0006 D2), above the fan-out: every
-                    // substation inherits them and a seat shadows per TYPE.
+                    // substation inherits them and can shadow per TYPE.
                     TypedEnvironmentProvider(arming: arming),
                     // The station's own resolution, projected for the `up`
                     // banner and the offline suites.
@@ -558,10 +577,10 @@ class SpaceDelegate extends sdk.GridDelegate {
                   child: sdk.Substations(
                     substations: [
                       // ── The CODED roster (space-6ds): the [substations]
-                      // build hook — memento's six org seats unless a
+                      // build hook — memento's six org substations unless a
                       // subclass overrides. ──
                       ...substations(context, configuration),
-                      // ── The append layer (Fork B): `--substation` seats
+                      // ── The append layer (Fork B): `--substation` values
                       // fan out AFTER the roster, in flag order. ──
                       ...appended,
                     ],
@@ -579,7 +598,8 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// signature (the template-method idiom the substrate is built on): the
   /// station's coded drive set as authored [SubstationSeed] values, spread
   /// into [build] BEFORE the [appended] layer. Base = the
-  /// memento-engineering org, six seats at their [umbrella]-relative roots.
+  /// memento-engineering org, six substations at their [umbrella]-relative
+  /// roots.
   ///
   /// Returns `List<Seed>` (space-47t): a seed is the COMPOSED wrapper, and
   /// the offline enumeration (`mountedValuesOf` / [codedRosterSnapshotOf])
@@ -595,19 +615,20 @@ class SpaceDelegate extends sdk.GridDelegate {
     TreeContext context,
     sdk.GridConfiguration configuration,
   ) => [
-    // ONE STATION OWNS INTAKE FOR THESE REPOS. Each seat below carries its own
+    // ONE STATION OWNS INTAKE FOR THESE REPOS. Each substation below carries
+    // its own
     // `githubPoll` VALUE, so whichever station runs resident polls all six of
     // them; two resident stations over the same umbrella would intake the same
     // issues twice. The one-grid-per-machine rule already fences that, exactly
     // as it fences the delivery identity above (kMementoOrgApp).
     //
-    // The poll `repository` and `substation` are the SEAT NAME. The bead-id
-    // `prefix` (`tg`/`pow`/`space`/`dec`) addresses the WORK STORE and has
-    // nothing to do with polling.
+    // The poll `repository` and `substation` are the SUBSTATION NAME. The
+    // bead-id `prefix` (`tg`/`pow`/`space`/`dec`) addresses the WORK STORE and
+    // has nothing to do with polling.
     //
     // The three defaults stand unauthored — interval 1 minute, minimum
     // spacing 5 seconds, arm live — which is the posture the downstream
-    // station's private seats already run under.
+    // station's private substations already run under.
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
     SubstationSeed(
@@ -635,13 +656,15 @@ class SpaceDelegate extends sdk.GridDelegate {
         installationId: '152260260',
       ),
     ),
-    // the asset packs — self-host, and the org's EVALUATION seat: its BUILD
-    // build seat is armed on `frontier` (claude/opus) while every other seat rides
-    // the station's coded `codex-frontier`, so the SAME committee grades both
+    // the asset packs — self-host, and the org's EVALUATION substation: its
+    // BUILD Agent Seat is armed on `frontier` (claude/opus) while every other
+    // substation rides the station's coded `codex-frontier`, so the SAME
+    // committee grades both
     // and the environments can be compared instead of guessed at (ADR-0002 D5;
-    // D5's worked example arms this seat, in the inverse direction). power_station
-    // is the seat where the rubrics and the committee itself are authored, so
-    // its builds benefit most from being written by the family that grades them.
+    // D5's worked example arms this substation, in the inverse direction).
+    // power_station is the substation where the rubrics and the committee
+    // itself are authored, so its builds benefit most from being written by
+    // the family that grades them.
     SubstationSeed(
       name: 'power_station',
       root: p.join(umbrella, 'power_station'),
@@ -703,7 +726,7 @@ class SpaceDelegate extends sdk.GridDelegate {
 /// Projects the STATION's own typed resolution — the value `up`'s banner
 /// prints and [codedSeatEnvironmentsOf] reads off an offline mount. Mounted
 /// BELOW the station's [TypedEnvironmentProvider] and ABOVE the fan-out, so it
-/// reports the station posture, never a seat's.
+/// reports the station posture, never a substation's.
 final class _StationSeatEnvironmentsAssets extends SingleChildStatelessSeed {
   const _StationSeatEnvironmentsAssets({
     // Nest supplies this fold child; direct call sites deliberately omit it.
@@ -727,7 +750,7 @@ final class _StationSeatEnvironmentsAssets extends SingleChildStatelessSeed {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// space's OWN CLI surface — the seat the resident verbs re-seat over.
+// space's OWN CLI surface — the station the resident verbs re-seat over.
 //
 // v3 stores-at-roots (tg-r81): a substation is a name AND its ONE root, paired
 // in ONE `--substation <name>=<root>` flag. The coded roster is authored in
@@ -762,8 +785,9 @@ class SpaceStationConfig {
   final String gridHome;
 
   /// The operator's `--substation` flags, parsed into APPENDED
-  /// [sdk.Substation] seats (Fork B, round 3: append-only — the coded roster
-  /// lives in [SpaceDelegate.substations], never here). Every appended seat is
+  /// [sdk.Substation] values (Fork B, round 3: append-only — the coded roster
+  /// lives in [SpaceDelegate.substations], never here). Every appended
+  /// substation is
   /// operator-named: `up`'s store guard refuses LOUD when one resolves no
   /// work store (their error), while an absent CODED sibling is skipped loud
   /// so the rest of the org still arms.
@@ -789,10 +813,10 @@ class SpaceStationConfig {
 /// Adds space's resident-station flags to [parser] (the station surface MINUS
 /// `--bead`). Space's own design; there is deliberately no `--bead`.
 ///
-/// [codedNames] are the composing station's coded seats (enumerated off its
-/// delegate's [SpaceDelegate.substations]) — rendered into the `--substation`
-/// help so a downstream station's operator reads THEIR coded names, not
-/// memento's.
+/// [codedNames] are the composing station's coded substations (enumerated off
+/// its delegate's [SpaceDelegate.substations]) — rendered into the
+/// `--substation` help so a downstream station's operator reads THEIR coded
+/// names, not memento's.
 void addSpaceStationFlags(
   ArgParser parser, {
   required List<String> codedNames,
@@ -857,11 +881,12 @@ void addSpaceStationFlags(
 }
 
 /// Parses one `--substation <name>[@<prefix>]=<root>` value into an APPENDED
-/// [sdk.Substation] seat carrying the GIT half of the substation stack —
+/// [sdk.Substation] carrying the GIT half of the substation stack —
 /// `Nest[GitGridAssets] → SubstationWork` (provisioning observed from the
 /// ambient `Provider<StationGitService>`). The GitHub delivery node is
 /// deliberately ABSENT: PR-opening for an appended substation waits until it
-/// is CODED into the roster (round 3: flags append a seat, they do not rewire
+/// is CODED into the roster (round 3: flags append a substation, they do not
+/// rewire
 /// one), and under the composed assets that policy is authored STRUCTURALLY —
 /// no imported GitHub extension node, so no delivery can bind even on
 /// a live arm. Throws [FormatException] on a malformed pairing (no `=`, empty
@@ -919,14 +944,14 @@ sdk.Substation _parseSubstation(String raw) {
 /// Builds [SpaceStationConfig] from space's own flags ([addSpaceStationFlags]).
 /// The CODED roster is authored in the station delegate's
 /// [SpaceDelegate.substations] and consumed by [SpaceDelegate.build] — it
-/// never arrives through here; [codedNames] (the same seats' names,
+/// never arrives through here; [codedNames] (the same substations' names,
 /// enumerated by the caller) is the refusal set. `--substation` flags parse
-/// into APPENDED seats ([SpaceStationConfig.appended]); a flag naming a CODED
-/// substation is a loud [FormatException] (round 3: the roster is code, never
-/// overridden by config), as is the same name twice. A missing --grid-home is
-/// a null return, which the verb renders as a LOUD arming refusal (never a
-/// `''` sentinel — v3 kills those); the coded roster is never empty, so the
-/// old "no substation ⇒ refuse" gate stays retired.
+/// into APPENDED substations ([SpaceStationConfig.appended]); a flag naming a
+/// CODED substation is a loud [FormatException] (round 3: the roster is code,
+/// never overridden by config), as is the same name twice. A missing
+/// --grid-home is a null return, which the verb renders as a LOUD arming
+/// refusal (never a `''` sentinel — v3 kills those); the coded roster is never
+/// empty, so the old "no substation ⇒ refuse" gate stays retired.
 SpaceStationConfig? spaceStationConfigFrom(
   ArgResults args, {
   required Set<String> codedNames,

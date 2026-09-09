@@ -17,7 +17,8 @@ import 'package:test/test.dart';
 
 /// The LAST-MILE composition: `space filing` / `space approve` are the VENDED
 /// `grid_assets` Commands curried with space's resident-station context, so the
-/// store each one reads (and, for approve, WRITES) is the seat the bead id's
+/// store each one reads (and, for approve, WRITES) is the substation the bead
+/// id's
 /// PREFIX names in the coded roster (`SpaceDelegate.substations`) — never the
 /// CWD's store. The Commands' own behaviour is pinned in power_station; this
 /// suite pins the WIRING. Offline: a scripted `bd` runner + captured sinks.
@@ -45,9 +46,9 @@ final class _ScriptedBdRunner implements BdRunner {
       argvs.where((argv) => argv.first == 'update').toList();
 }
 
-/// A downstream roster whose seats include a HYPHENATED prefix AND the strict
+/// A downstream roster whose substations include a HYPHENATED prefix AND the strict
 /// prefix it extends (space-fvg): `swift-infer-…` must resolve to
-/// `swift-infer`, and `swift-…` to `swift`. The coded memento seats are
+/// `swift-infer`, and `swift-…` to `swift`. The coded memento substations are
 /// COMPOSED, never replaced, so the `pow-…` cases keep their meaning.
 class _HyphenatedRosterDelegate extends SpaceDelegate {
   _HyphenatedRosterDelegate({
@@ -164,46 +165,53 @@ void main() {
 
   tearDown(() => _fixture.deleteSync(recursive: true));
 
-  test('`filing --json <id>` reads the seat the id PREFIX names in the CODED '
-      'roster — `pow-…` is power_station at ../power_station, never the CWD '
-      'store — and returns the four rows', () async {
-    final h = _harness(
-      _ScriptedBdRunner({
-        'query': _beadReply('No local ordering.'),
-        'dep': _depReply(const []),
-      }),
-    );
+  test(
+    '`filing --json <id>` reads the substation the id PREFIX names in the CODED '
+    'roster — `pow-…` is power_station at ../power_station, never the CWD '
+    'store — and returns the four rows',
+    () async {
+      final h = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply('No local ordering.'),
+          'dep': _depReply(const []),
+        }),
+      );
 
-    expect(
-      await h.runner.run(['filing', '--json', 'pow-child']),
-      0,
-      reason: '${h.out}${h.err}',
-    );
-    expect(h.storeRoots, isNotEmpty);
-    expect(h.storeRoots, everyElement('$_umbrella/power_station'));
-    final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
-    expect(report['id'], 'pow-child');
-    expect(report['passed'], isTrue);
-    expect(
-      [
-        for (final row in report['requirements']! as List)
-          (row as Map<String, dynamic>)['requirement'],
-      ],
-      [
-        'driveable_type',
-        'validation_plan',
-        'acceptance_criteria',
-        'dependencies',
-      ],
-    );
-  });
+      expect(
+        await h.runner.run(['filing', '--json', 'pow-child']),
+        0,
+        reason: '${h.out}${h.err}',
+      );
+      expect(h.storeRoots, isNotEmpty);
+      expect(h.storeRoots, everyElement('$_umbrella/power_station'));
+      final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
+      expect(report['id'], 'pow-child');
+      expect(report['passed'], isTrue);
+      expect(
+        [
+          for (final row in report['requirements']! as List)
+            (row as Map<String, dynamic>)['requirement'],
+        ],
+        [
+          'driveable_type',
+          'validation_plan',
+          'acceptance_criteria',
+          'dependencies',
+        ],
+      );
+    },
+  );
 
-  test('a bead id NO coded seat mints is refused LOUD: exit 1, the seats '
+  test('a bead id NO coded substation mints is refused LOUD: exit 1, the '
+      'substations '
       'named, nothing read', () async {
     final h = _harness(_ScriptedBdRunner(const {}));
 
     expect(await h.runner.run(['filing', '--json', 'zzz-1']), 1);
-    expect(h.err.toString(), contains('no seat in the CODED roster mints'));
+    expect(
+      h.err.toString(),
+      contains('no substation in the CODED roster mints'),
+    );
     expect(h.err.toString(), contains('power_station@pow'));
     expect(h.storeRoots, isEmpty);
     expect(h.out.toString(), isEmpty);
@@ -271,7 +279,8 @@ void main() {
       expect(
         h.storeRoots,
         contains('$_umbrella/power_station'),
-        reason: 'the preflight and the stamp ride the roster-resolved seat',
+        reason:
+            'the preflight and the stamp ride the roster-resolved substation',
       );
       expect(
         h.storeRoots,
@@ -317,8 +326,9 @@ void main() {
     expect(approve.storeRoots, isEmpty);
   });
 
-  test('a HYPHENATED seat prefix is reachable end to end: `filing --json '
-      'swift-infer-zfor` reads the swift-infer seat, never the `swift` seat '
+  test('a HYPHENATED substation prefix is reachable end to end: `filing --json '
+      'swift-infer-zfor` reads the swift-infer substation, never the `swift` '
+      'substation '
       'and never a refusal (space-fvg)', () async {
     final h = _harness(
       _ScriptedBdRunner({
@@ -340,33 +350,36 @@ void main() {
     expect(report['passed'], isTrue);
   });
 
-  test('`approve` STAMPS a bead minted by a HYPHENATED seat against THAT '
-      "seat's store — the longest coded prefix wins (space-fvg)", () async {
-    final bd = _ScriptedBdRunner({
-      'query': _beadReply('No local ordering.', id: 'swift-infer-zfor'),
-      'dep': _depReply(const [], id: 'swift-infer-zfor'),
-    });
-    final h = _harness(bd, delegateFactory: _HyphenatedRosterDelegate.new);
+  test(
+    '`approve` STAMPS a bead minted by a HYPHENATED substation against '
+    "THAT substation's store — the longest coded prefix wins (space-fvg)",
+    () async {
+      final bd = _ScriptedBdRunner({
+        'query': _beadReply('No local ordering.', id: 'swift-infer-zfor'),
+        'dep': _depReply(const [], id: 'swift-infer-zfor'),
+      });
+      final h = _harness(bd, delegateFactory: _HyphenatedRosterDelegate.new);
 
-    expect(
-      await h.runner.run([
-        'approve',
-        '--json',
-        '--actor',
-        'governor',
-        'swift-infer-zfor',
-      ]),
-      0,
-      reason: '${h.out}${h.err}',
-    );
-    expect(bd.updates, hasLength(1));
-    expect(bd.updates.single.take(2), ['update', 'swift-infer-zfor']);
-    expect(h.storeRoots, contains('$_umbrella/swift-infer'));
-    expect(h.storeRoots, isNot(contains('$_umbrella/swift')));
-  });
+      expect(
+        await h.runner.run([
+          'approve',
+          '--json',
+          '--actor',
+          'governor',
+          'swift-infer-zfor',
+        ]),
+        0,
+        reason: '${h.out}${h.err}',
+      );
+      expect(bd.updates, hasLength(1));
+      expect(bd.updates.single.take(2), ['update', 'swift-infer-zfor']);
+      expect(h.storeRoots, contains('$_umbrella/swift-infer'));
+      expect(h.storeRoots, isNot(contains('$_umbrella/swift')));
+    },
+  );
 
   test('storeRootForBead matches the LONGEST coded prefix at a complete '
-      '`<prefix>-` boundary, and refuses every id no seat mints', () {
+      '`<prefix>-` boundary, and refuses every id no substation mints', () {
     String rootFor(String beadId) => storeRootForBead(
       verb: 'filing',
       beadId: beadId,
@@ -385,12 +398,12 @@ void main() {
             (error) => error.message,
             'message',
             allOf(
-              contains('no seat in the CODED roster mints'),
+              contains('no substation in the CODED roster mints'),
               contains('power_station@pow'),
             ),
           ),
         ),
-        reason: '"$unminted" is minted by no coded seat',
+        reason: '"$unminted" is minted by no coded substation',
       );
     }
   });

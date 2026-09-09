@@ -9,17 +9,18 @@
 /// `github.GitHubGridAssets` seed-stack assets. They OBSERVE collaborators via
 /// the tree (`the_grid/docs/STYLE.md` rules 3–4).
 ///
-/// **Per-seat identity is COMPOSITION, never lookup**: there is no
-/// `deliveryFor(name)`, no stringy seat registry of any kind. A seat's delivery
-/// posture is what its OWN subtree mounts. A [GitHubAppConfig] value selects
-/// App-authenticated delivery on a live seat; no value preserves the nearest
+/// **Per-substation identity is COMPOSITION, never lookup**: there is no
+/// `deliveryFor(name)`, no stringy substation registry of any kind. A
+/// substation's delivery posture is what its OWN subtree mounts. A
+/// [GitHubAppConfig] value selects App-authenticated delivery on a live
+/// substation; no value preserves the nearest
 /// ambient opener. Polling is independently and explicitly selected by the
-/// seat's reconciler config.
+/// substation's reconciler config.
 ///
 /// **The `GitServices` bundle is SPLIT** (STYLE rule 4: no provider is
 /// universal): the assets watch `StationGitService` and `GitOps` individually,
-/// so a non-git seat composes a stack without either — unavailability is a
-/// designed posture, projected into the tree, never an error.
+/// so a non-git substation composes a stack without either — unavailability is
+/// a designed posture, projected into the tree, never an error.
 ///
 /// The GitHub binding and reconciler lifecycle belong to `github_grid_assets`.
 /// This library composes those imported extensions but exports only
@@ -51,10 +52,10 @@ import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderTreeContext;
 
 /// A GitHub App DELIVERY IDENTITY — config identity ONLY, a plain value type.
 ///
-/// Carries the non-secret identifiers a live seat uses to select
+/// Carries the non-secret identifiers a live substation uses to select
 /// `github.GitHubAppPrOpener`. The injected authenticated client owns secrets
 /// and resolves them at effect time; this value deliberately has nowhere to
-/// store one. A null seat identity preserves ambient-opener behavior.
+/// store one. A null substation identity preserves ambient-opener behavior.
 class GitHubAppConfig {
   /// Creates the identity value.
   const GitHubAppConfig({
@@ -115,13 +116,14 @@ final class MountedSubstationSeed {
   /// enumeration can inspect composition without evaluating selection.
   final GridAssetRosterOverride? assetRoster;
 
-  /// The agent config RESOLVED AT THIS SEAT'S POSITION — the station's ambient
-  /// value (the `--env` rung). Null only when no `HarnessProvider` is mounted
-  /// above (a bare standalone seed mount).
+  /// The agent config RESOLVED AT THIS SUBSTATION'S POSITION — the station's
+  /// ambient value (the `--env` rung). Null only when no `HarnessProvider` is
+  /// mounted above (a bare standalone seed mount).
   final AgentConfig? agentConfig;
 
-  /// The four TYPED lookups resolved AT THIS SEAT'S POSITION — the seat's own
-  /// nested [TypedEnvironmentProvider] where it arms one, else the station's.
+  /// The four TYPED lookups resolved AT THIS SUBSTATION'S POSITION — the
+  /// substation's own nested [TypedEnvironmentProvider] resolves its four
+  /// Agent Seats where it arms them, otherwise the station's provider does.
   /// This is what makes the per-substation rung offline-PROVABLE through the
   /// existing `mountedValuesOf` walk (ADR-0002 D5, ADR-0006 D2).
   final SeatEnvironments? environments;
@@ -162,41 +164,44 @@ class SubstationSeed extends StatelessSeed {
   /// The work store's issue-id prefix; null ⇒ the name (the SDK default).
   final String? prefix;
 
-  /// The seat's delivery identity. On a live seat, non-null selects the
-  /// App-authenticated opener; null preserves ambient-opener behavior.
+  /// The substation's delivery identity. On a live substation, non-null selects
+  /// the App-authenticated opener; null preserves ambient-opener behavior.
   final GitHubAppConfig? app;
 
-  /// Explicit polling values for this seat; null keeps reconciliation absent.
+  /// Explicit polling values for this substation; null keeps reconciliation
+  /// absent.
   ///
   /// The owner and repository are consumed exactly as authored. They are never
   /// inferred from [root], a git remote, the environment, or station defaults.
   final github.GitHubReconcilerConfig? githubPoll;
 
-  /// The seat's explicitly selected GitHub landing posture.
+  /// The substation's explicitly selected GitHub landing posture.
   ///
   /// Null preserves `github.GitHubGridAssets`' default
   /// `github.PrNoMergePolicy`: open or reuse a PR and leave it unmerged.
   final github.GitHubDeliveryPolicy? landingPolicy;
 
-  /// The seat's AGENT ARMING — the PER-SUBSTATION rung of the ladder
+  /// The substation's AGENT ARMING — the PER-SUBSTATION rung of the ladder
   /// (ADR-0002 D5). Non-null nests a [TypedEnvironmentProvider] OUTERMOST in
-  /// this seat's stack whose armed seats SHADOW the station's for everything
-  /// under this substation; an unarmed seat type keeps resolving through the
-  /// station's. A VALUE on the seed, exactly like [app] / [githubPoll] /
-  /// [landingPolicy] — per-seat identity is COMPOSITION, never a name-keyed
-  /// lookup.
+  /// this substation's stack whose armed seats SHADOW the station's for
+  /// everything under this substation; an unarmed seat type keeps resolving
+  /// through the station's. A VALUE on the seed, exactly like [app],
+  /// [githubPoll], or [landingPolicy] — per-substation identity is COMPOSITION,
+  /// never a name-keyed lookup.
   final AgentArming? arming;
 
-  /// The seat's explicit exceptions to selector-derived asset selection.
+  /// The substation's explicit exceptions to selector-derived asset selection.
   ///
   /// Null means pure derived selection. This coded value is stored and
   /// projected unchanged; the seed does not inspect or resolve it.
   final GridAssetRosterOverride? assetRoster;
 
-  /// Loads this seat's App private key; injectable for deterministic tests.
+  /// Loads this substation's App private key; injectable for deterministic
+  /// tests.
   final github.GitHubAppCredentialLoader githubAppCredentialLoader;
 
-  /// Creates this seat's GitHub transport; injectable for deterministic tests.
+  /// Creates this substation's GitHub transport; injectable for deterministic
+  /// tests.
   final github.GitHubHttpTransportFactory githubTransportFactory;
 
   /// The mount gate's `bd`-runner factory, keyed by work-store root;
@@ -217,13 +222,14 @@ class SubstationSeed extends StatelessSeed {
     final landingPolicy = this.landingPolicy;
     final assetRoster = this.assetRoster;
     // The PER-SUBSTATION rung (ADR-0002 D5; ADR-0006 D2). A NESTED
-    // TypedEnvironmentProvider already shadows the station's for this seat's
-    // subtree, per TYPE: a seat that arms only `build` leaves spec/critic/
-    // gather resolving through the station's providers.
+    // TypedEnvironmentProvider already shadows the station's for this
+    // substation's subtree, per TYPE: a substation that arms only `build`
+    // leaves spec/critic/gather resolving through the station's providers.
     final arming = this.arming;
     final children = <SingleChildSeed>[
       // OUTERMOST on purpose: every asset, every work mount and the offline
-      // projection below must read the SEAT's seats, not the station's.
+      // projection below must read the substation's Agent Seats, not the
+      // station's.
       if (arming != null) TypedEnvironmentProvider(arming: arming),
       _MountedSubstationSeedAssets(
         githubPollingConfigured: githubPoll != null,
@@ -308,7 +314,7 @@ final class _MountedSubstationSeedAssets extends SingleChildStatelessSeed {
   @override
   Seed buildWithChild(TreeContext context, Seed child) {
     // WATCH the values this projection is derived from (the D-H build verb —
-    // ADR-0008 D3): a re-armed station or seat re-derives the projection.
+    // ADR-0008 D3): a re-armed station or substation re-derives the projection.
     // SeatEnvironments.of then RESOLVES with the vended effect-boundary
     // readers, which do not subscribe.
     context.dependOnInheritedSeedOfExactType<BuildAgentEnvironment>();

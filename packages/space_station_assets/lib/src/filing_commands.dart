@@ -9,7 +9,7 @@
 /// THIN Commands over both. A station COMPOSES them with ITS resident-station
 /// context. space's context is the CODED memento roster
 /// ([SpaceDelegate.substations]): these verbs take a BEAD ID, and the store
-/// that owns it is whichever seat mints that id's prefix —
+/// that owns it is whichever substation mints that id's prefix —
 /// [storeRootForBead] resolves it from the roster at run time, never from a
 /// hardcoded list (ADR-0001: "Roster-aware, read-only across foreign stores —
 /// resolves the attached/resident substations from the resident-station
@@ -59,16 +59,17 @@ typedef SpaceFilingCommands = ({FilingCommand filing, ApproveCommand approve});
 /// Resolves the WORK-STORE root that owns [beadId] from the roster
 /// [delegateFactory] authors, rooted at [gridHome].
 ///
-/// The owning seat is the one whose `prefix` matches [beadId] at a COMPLETE
+/// The owning substation is the one whose `prefix` matches [beadId] at a COMPLETE
 /// `<prefix>-` boundary with a non-empty suffix (`pow-x6k` → `pow` → the
-/// `power_station` seat); when several seats match, the LONGEST prefix wins
-/// (`swift-infer-zfor` → `swift-infer`, never the `swift` seat it extends).
+/// `power_station` substation); when several substations match, the LONGEST
+/// prefix wins (`swift-infer-zfor` → `swift-infer`, never the `swift`
+/// substation it extends).
 /// A prefix may itself contain hyphens — a store's issue prefix follows its
 /// REPO NAME, and repo names may — so the id is never split at its first
 /// hyphen. [verb] names the composing command in every refusal. Throws
 /// [ArgumentError] when [gridHome] is not absolute and [StateError] when no
-/// coded seat mints the id — both LOUD, never a silent fall back to the CWD's
-/// store.
+/// coded substation mints the id — both LOUD, never a silent fall back to the
+/// CWD's store.
 String storeRootForBead({
   required String verb,
   required String beadId,
@@ -89,8 +90,8 @@ String storeRootForBead({
   }
   if (owner != null) return owner.workStore.storeRoot;
   throw StateError(
-    'space $verb: no seat in the CODED roster mints "$beadId". The coded '
-    'seats are '
+    'space $verb: no substation in the CODED roster mints "$beadId". The '
+    'coded substations are '
     '${[for (final scope in roster) '${scope.name}@${scope.prefix}'].join(', ')}'
     ' — the roster is CODE (SpaceDelegate.substations), never a flag.',
   );

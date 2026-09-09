@@ -11,7 +11,7 @@ import 'package:test/test.dart';
 /// The LAST-MILE composition: `space search` is the VENDED `grid_assets`
 /// Command curried with space's resident-station context, so the roster it
 /// searches is the BAKED memento org ([SpaceDelegate.build]) — six coded
-/// seats at their `../<repo>` umbrella siblings, resolved against the grid
+/// substations at their `../<repo>` umbrella siblings, resolved against the grid
 /// home. The Command's own behaviour is pinned in power_station; this suite
 /// pins the WIRING. Offline: a Fake bead source + a Fake directory probe +
 /// captured sinks — no `bd`, no processes, no filesystem.
@@ -72,7 +72,7 @@ void main() {
   }
 
   test('`search --json <q>` searches the BAKED memento roster — the six coded '
-      'seats, in tree order, at their ../<repo> siblings, with the coded '
+      'substations, in tree order, at their ../<repo> siblings, with the coded '
       'prefixes', () async {
     final h = harness();
     final code = await h.runner.run(['search', '--json', 'flux']);
@@ -111,7 +111,8 @@ void main() {
     final hit = (stores.first['hits']! as List).single as Map<String, dynamic>;
     expect(hit['id'], 'genesis-1');
     expect(hit['store'], 'genesis');
-    // A seat with no store is REPORTED, never dropped (the skip-loud posture).
+    // A substation with no store is REPORTED, never dropped (the skip-loud
+    // posture).
     expect(
       [
         for (final s in stores)
@@ -133,7 +134,7 @@ void main() {
       'flux',
     ]);
 
-    expect(code, 1, reason: 'no seat under /other resolves a store');
+    expect(code, 1, reason: 'no substation under /other resolves a store');
     final json = jsonDecode(h.out.toString()) as Map<String, dynamic>;
     final stores = [
       for (final s in json['stores']! as List) s as Map<String, dynamic>,
