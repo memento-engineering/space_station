@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0-rc.12
+
+- Added: `SpaceDelegate.assetRegistry` — the station-asset-registry override
+  point. It defaults to space's own generated registrant
+  (`lib/station_asset_registry.dart`, rendered by
+  `tool/generate_station_asset_registry.dart` from the resolved package closure)
+  and is threaded as ONE object into `buildCodeRegistry` (the worktree overlay
+  every mounted session receives) and the `assets` command's install
+  resolution. A downstream station overrides it with its own generated
+  registrant so its packs' skills install and materialize (space-ot8, #92).
+
 ## 0.3.0-rc.11
 
 - Added: `memento-engineering` — the org decision register — is the seventh
