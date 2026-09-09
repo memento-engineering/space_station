@@ -32,7 +32,7 @@ You sit here as the **governor**: the *operator* of the resident station, not an
     driving nothing*; bounce to pick up a landed fix.
   - **Refine** — stamp `validation_plan` and acceptance criteria, wire deps, leave the bead UNAPPROVED until a human runs the approve verb. Do not stage with `--defer`: an unapproved bead is not in the drive set, and `deferred` is only for genuinely scheduled holds.
 - **You hold the human gates.** A live `space up --no-dry-run` station *builds, commits, and
-  opens PRs* — delivery is a per-substation BINDING now (every coded seat authors
+  opens PRs* — delivery is a per-substation BINDING now (every coded substation authors
   `GitHubGridAssets`), so a live arm delivers and there is no separate land flag; readying and
   bouncing it are consequential and outward-facing; confirm intent.
 - **When in doubt, file a bead — do not reach for the editor.**
@@ -117,8 +117,8 @@ dart run --enable-vm-service \            # ARM a LIVE station (builds + opens P
   --grid-home "$(pwd)"                    # ABSOLUTE path required (relative = loud refusal).
                                           # NO --substation flags for the memento roster: it is
                                           # CODED in SpaceDelegate.build() (space-6ds; currently
-                                          # genesis, the_grid, power_station, space_station, lenny)
-                                          # and naming a coded seat REFUSES; flags APPEND only.
+                                          # genesis, the_grid, power_station, space_station, lenny, decisions)
+                                          # and naming a coded substation REFUSES; flags APPEND only.
 dart run space:space down                 # tear down
 ```
 
@@ -168,8 +168,8 @@ type is a new rubric pack, not new machinery. The **coupled skill+command** patt
 vended deterministic Command like `space search`, instead of inferring the operation) is
 `ADR-0001, draft`.
 
-**The roster.** The coded drive set is the five memento org seats — `genesis`, `the_grid`,
-`power_station`, `space_station` (self), `lenny` — authored as literal seats in
+**The roster.** The coded drive set is the six memento org substations — `genesis`, `the_grid`,
+`power_station`, `space_station` (self), `lenny`, and `decisions` — authored as literal substations in
 `SpaceDelegate.substations()` (space-6ds; the subclass override point a downstream station
 composes). `decisions`/`expression` join when they gain bead stores. **Coexistence:** the_grid's
 work store is the shared `tg` Dolt server (gc coexists on `ga-*`); the A37 split fences session
