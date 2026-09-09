@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:args/args.dart';
+import 'package:grid_cli/grid_cli.dart' show StationDiagnosticsReporter;
 import 'package:grid_engine/grid_engine.dart' show DualReadMode;
 import 'package:grid_sdk/grid_sdk.dart'
     show
@@ -8,7 +12,8 @@ import 'package:grid_sdk/grid_sdk.dart'
         TrajectoryHarnessStatus,
         kNotWedged;
 import 'package:space_station_assets/src/trajectory_surface.dart';
-import 'package:space_station_assets/src/up_command.dart' show UpCommand;
+import 'package:space_station_assets/src/up_command.dart'
+    show UpCommand, emitDualReadBootDiagnostics;
 import 'package:test/test.dart';
 
 /// Chunk WS of stage1-wiring (`the_grid/docs/design/trajectory/`): the
@@ -132,6 +137,19 @@ void main() {
       }
     });
 
+    test(
+      'trajectory config resolution preserves invalid input while arming off',
+      () {
+        final resolution = trajectoryConfigResolutionFrom(
+          parse(const []),
+          environment: const {'GRID_DUAL_READ': '1'},
+        );
+
+        expect(resolution.config.dualRead, DualReadMode.off);
+        expect(resolution.unrecognizedDualReadValue, '1');
+      },
+    );
+
     test('an unrecognized value is off, never a boot failure', () {
       expect(
         trajectoryConfigFrom(
@@ -156,6 +174,139 @@ void main() {
           DualReadMode.observe,
         );
       }
+    });
+  });
+
+  group('dual-read boot diagnostics', () {
+    test('resolved posture emits one flare and one log for unset and every '
+        'recognized value', () {
+      for (final (environment, expected) in const [
+        (<String, String>{}, DualReadMode.off),
+        ({'GRID_DUAL_READ': 'off'}, DualReadMode.off),
+        ({'GRID_DUAL_READ': 'observe'}, DualReadMode.observe),
+        ({'GRID_DUAL_READ': 'primary'}, DualReadMode.primary),
+      ]) {
+        final reporterLines = <String>[];
+        final logLines = <String>[];
+        final reporter = StationDiagnosticsReporter(
+          writeLine: reporterLines.add,
+        );
+        try {
+          emitDualReadBootDiagnostics(
+            diagnostics: reporter,
+            writeLog: logLines.add,
+            runnerName: 'lunar',
+            resolution: trajectoryConfigResolutionFrom(
+              parse(const []),
+              environment: environment,
+            ),
+          );
+
+          expect(reporterLines, hasLength(1), reason: '$environment');
+          expect(jsonDecode(reporterLines.single), <String, Object?>{
+            'type': 'flare',
+            'name': 'trajectory.dualReadPosture',
+            'data': <String, String>{'posture': expected.name},
+          }, reason: '$environment');
+          expect(logLines, [
+            'lunar up: dual-read posture resolved to ${expected.name}.',
+          ], reason: '$environment');
+        } finally {
+          reporter.dispose();
+        }
+      }
+    });
+
+    test('unrecognized value emits its own flare and observe does not', () {
+      ({List<Map<String, dynamic>> flares, List<String> logs}) emitFor(
+        Map<String, String> environment,
+      ) {
+        final reporterLines = <String>[];
+        final logLines = <String>[];
+        final reporter = StationDiagnosticsReporter(
+          writeLine: reporterLines.add,
+        );
+        try {
+          emitDualReadBootDiagnostics(
+            diagnostics: reporter,
+            writeLog: logLines.add,
+            runnerName: 'space',
+            resolution: trajectoryConfigResolutionFrom(
+              parse(const []),
+              environment: environment,
+            ),
+          );
+        } finally {
+          reporter.dispose();
+        }
+        return (
+          flares: [
+            for (final line in reporterLines)
+              jsonDecode(line) as Map<String, dynamic>,
+          ],
+          logs: logLines,
+        );
+      }
+
+      final invalid = emitFor(const {'GRID_DUAL_READ': '1'});
+      expect(invalid.flares, hasLength(2));
+      expect(invalid.flares.first, <String, Object?>{
+        'type': 'flare',
+        'name': 'trajectory.dualReadPosture',
+        'data': <String, String>{'posture': 'off'},
+      });
+      expect(invalid.flares.last, <String, Object?>{
+        'type': 'flare',
+        'name': 'trajectory.dualReadConfigUnrecognized',
+        'data': <String, String>{'configuredValue': '1', 'armedPosture': 'off'},
+      });
+      expect(invalid.logs, ['space up: dual-read posture resolved to off.']);
+
+      for (final environment in const [
+        <String, String>{},
+        {'GRID_DUAL_READ': 'observe'},
+      ]) {
+        final recognized = emitFor(environment);
+        expect(recognized.flares, hasLength(1), reason: '$environment');
+        expect(
+          recognized.flares.single['name'],
+          'trajectory.dualReadPosture',
+          reason: '$environment',
+        );
+      }
+    });
+
+    test('production up wires dual-read boot diagnostics exactly once before '
+        'work assembly', () {
+      final source = File('lib/src/up_command.dart').readAsStringSync();
+      final reporterConstruction = source.indexOf(
+        'final diagnostics = StationDiagnosticsReporter('
+        'writeLine: stderr.writeln);',
+      );
+      final diagnosticEmission = source.indexOf(
+        'emitDualReadBootDiagnostics(',
+        reporterConstruction,
+      );
+      final workAssembly = source.indexOf(
+        'workRuntime = await assembleStationWork(',
+        reporterConstruction,
+      );
+
+      expect(reporterConstruction, greaterThanOrEqualTo(0));
+      expect(diagnosticEmission, greaterThan(reporterConstruction));
+      expect(diagnosticEmission, lessThan(workAssembly));
+      expect(
+        RegExp(
+          r'^    emitDualReadBootDiagnostics\(',
+          multiLine: true,
+        ).allMatches(source),
+        hasLength(1),
+      );
+      final wiring = source.substring(diagnosticEmission, workAssembly);
+      expect(wiring, contains('diagnostics: diagnostics'));
+      expect(wiring, contains('writeLog: err'));
+      expect(wiring, contains('runnerName: runnerName'));
+      expect(wiring, contains('resolution: trajectoryResolution'));
     });
   });
 

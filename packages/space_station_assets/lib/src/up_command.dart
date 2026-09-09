@@ -126,6 +126,32 @@ void Function(GridHookError) buildContainedGridHookErrorSink({
   };
 }
 
+/// Emits positive boot evidence for the resolved dual-read posture.
+///
+/// Every invocation emits one posture flare and one human log line. A set but
+/// unrecognized `GRID_DUAL_READ` value additionally emits a configuration
+/// flare naming both the exact input and the non-fatal posture that was armed.
+void emitDualReadBootDiagnostics({
+  required StationDiagnosticsReporter diagnostics,
+  required void Function(String message) writeLog,
+  required String runnerName,
+  required TrajectoryConfigResolution resolution,
+}) {
+  final posture = resolution.config.dualRead;
+  diagnostics.flare('trajectory.dualReadPosture', <String, String>{
+    'posture': posture.name,
+  });
+  writeLog(dualReadBootLogLine(runnerName: runnerName, posture: posture));
+
+  final unrecognizedValue = resolution.unrecognizedDualReadValue;
+  if (unrecognizedValue != null) {
+    diagnostics.flare('trajectory.dualReadConfigUnrecognized', <String, String>{
+      'configuredValue': unrecognizedValue,
+      'armedPosture': posture.name,
+    });
+  }
+}
+
 /// Resolves station-global SELF trust from the authenticated `gh` CLI login.
 ///
 /// When [githubPollingConfigured] is false no process is started. A missing
@@ -415,10 +441,11 @@ class UpCommand extends Command<int> {
     // (`config: dryRun ? trajectoryConfig.asDisabled : trajectoryConfig`), so
     // every runner that reaches the assembly gets the same physics and the
     // runner never has a second, drifting copy of the rule.
-    final trajectoryConfig = trajectoryConfigFrom(
+    final trajectoryResolution = trajectoryConfigResolutionFrom(
       results,
       environment: _environment,
     );
+    final trajectoryConfig = trajectoryResolution.config;
 
     // --- stores at roots (the discoverWorkspaces replacement). The grid state
     // store lives under `<grid-home>/.grid/`; a cwd-relative home re-imports
@@ -545,6 +572,12 @@ class UpCommand extends Command<int> {
     // authenticated /stream route. Constructed before the work assembly so
     // the flare sink exists from the first store read.
     final diagnostics = StationDiagnosticsReporter(writeLine: stderr.writeln);
+    emitDualReadBootDiagnostics(
+      diagnostics: diagnostics,
+      writeLog: err,
+      runnerName: runnerName,
+      resolution: trajectoryResolution,
+    );
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await assembleStationWork(
