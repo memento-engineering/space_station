@@ -35,9 +35,10 @@
 /// ## space-6ds — the roster is CODE: the [SpaceDelegate.substations] hook
 ///
 /// space_station IS memento's grid instance
-/// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the six
-/// org substations — genesis, the_grid, power_station, space_station, lenny,
-/// decisions — are authored as literal substations in
+/// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the
+/// seven org substations — genesis, the_grid, power_station, space_station,
+/// lenny, decisions, memento-engineering — are authored as literal substations
+/// in
 /// [SpaceDelegate.substations], the ONE
 /// definition both [SpaceDelegate.build] and `space up`'s off-tree machinery
 /// consume (the old hand-kept mirror in `up_command.dart` is gone — the
@@ -112,7 +113,7 @@ typedef NoteAppender = Future<void> Function(String beadId, String line);
 
 /// The memento org's ONE GitHub App delivery identity — the `grid-assets` App
 /// installed on `memento-engineering` (`repository_selection: all`), carried as
-/// a VALUE by each of the six org substations [SpaceDelegate.substations]
+/// a VALUE by each of the seven org substations [SpaceDelegate.substations]
 /// authors.
 ///
 /// PER SUBSTATION, never per station (pow-1rn): this is a shared value, not a
@@ -120,7 +121,8 @@ typedef NoteAppender = Future<void> Function(String beadId, String line);
 /// substation fan-out; a substation delivering under a DIFFERENT App simply
 /// passes a
 /// different [GitHubAppConfig], which is how a downstream station's private
-/// substations keep their own App while inheriting these six through `super`.
+/// substations keep their own App while inheriting these seven through
+/// `super`.
 ///
 /// ONE STATION OWNS DELIVERY FOR THESE REPOS. Whichever station runs resident
 /// carries this identity; two resident stations over the same umbrella would
@@ -577,8 +579,8 @@ class SpaceDelegate extends sdk.GridDelegate {
                   child: sdk.Substations(
                     substations: [
                       // ── The CODED roster (space-6ds): the [substations]
-                      // build hook — memento's six org substations unless a
-                      // subclass overrides. ──
+                      // build hook — memento's seven org substations unless
+                      // a subclass overrides. ──
                       ...substations(context, configuration),
                       // ── The append layer (Fork B): `--substation` values
                       // fan out AFTER the roster, in flag order. ──
@@ -598,7 +600,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// signature (the template-method idiom the substrate is built on): the
   /// station's coded drive set as authored [SubstationSeed] values, spread
   /// into [build] BEFORE the [appended] layer. Base = the
-  /// memento-engineering org, six substations at their [umbrella]-relative
+  /// memento-engineering org, seven substations at their [umbrella]-relative
   /// roots.
   ///
   /// Returns `List<Seed>` (space-47t): a seed is the COMPOSED wrapper, and
@@ -617,8 +619,9 @@ class SpaceDelegate extends sdk.GridDelegate {
   ) => [
     // ONE STATION OWNS INTAKE FOR THESE REPOS. Each substation below carries
     // its own
-    // `githubPoll` VALUE, so whichever station runs resident polls all six of
-    // them; two resident stations over the same umbrella would intake the same
+    // `githubPoll` VALUE, so whichever station runs resident polls all seven
+    // of them; two resident stations over the same umbrella would intake the
+    // same
     // issues twice. The one-grid-per-machine rule already fences that, exactly
     // as it fences the delivery identity above (kMementoOrgApp).
     //
@@ -717,6 +720,24 @@ class SpaceDelegate extends sdk.GridDelegate {
         owner: 'memento-engineering',
         repository: 'decisions',
         substation: 'decisions',
+        installationId: '152260260',
+      ),
+    ),
+    // the ORG REGISTER (memento-engineering/memento-engineering) — the
+    // decisions that govern the whole roster rather than any one repo. Distinct
+    // from `decisions` above, which is the FORMAT and its implementation
+    // (`memento-engineering#org-decisions-live-in-the-org-register`). Its store
+    // mints `org-`, so the prefix differs from the repository name; the poll
+    // `repository`/`substation` stay the SEAT NAME.
+    SubstationSeed(
+      name: 'memento-engineering',
+      root: p.join(umbrella, 'memento-engineering'),
+      prefix: 'org',
+      app: kMementoOrgApp,
+      githubPoll: const github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'memento-engineering',
+        substation: 'memento-engineering',
         installationId: '152260260',
       ),
     ),

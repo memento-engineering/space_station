@@ -2,6 +2,12 @@
 
 ## 0.3.0-rc.10
 
+- Added: `memento-engineering` — the org decision register — is the seventh
+  coded org substation, at bead prefix `org`, carrying the memento org App and
+  a live `githubPoll` like the other six. It is distinct from the `decisions`
+  substation, which holds the register FORMAT and its implementation
+  (`memento-engineering#org-decisions-live-in-the-org-register`). A downstream
+  station inherits it through `super.substations(...)`.
 - Changed: `codedRosterSnapshotOf` now exposes
   `githubPollingSubstationNames`; `githubPollingSeatNames` remains a deprecated
   compatibility getter for one minor cycle with the replacement message
