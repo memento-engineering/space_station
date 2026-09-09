@@ -13,7 +13,8 @@ register:
   obsoletes: []
   updates: []
   obsoleted-by: null
-  updated-by: []
+  updated-by:
+    - org-intake-is-armed-per-seat-under-the-org-app
   bead: space-u8q
   legacy-id: null
 ---
