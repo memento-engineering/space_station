@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0-rc.10
+
+- Added: every live boot emits the resolved dual-read posture (`off`, `observe`
+  or `primary`) as a `trajectory.dualReadPosture` flare and a log line, and a
+  SET but unrecognized `GRID_DUAL_READ` value emits its own flare naming the
+  value and the `off` posture it armed — the wave-1 soak had run with the
+  comparator silently off (space-7dz, #86).
+- Added: `up --control-bind lan` opts the StationControl door onto the LAN
+  (loopback stays the default) (#85).
+
 ## 0.3.0-rc.9
 
 - Fixed: `SpaceDelegate.maintainsStateStoreOnBoot` directly projects `live`,
