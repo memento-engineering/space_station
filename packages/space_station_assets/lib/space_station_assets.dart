@@ -43,7 +43,6 @@ import 'package:grid_assets/grid_assets.dart'
         CommandResult,
         ComputeBounds,
         DispatchCommand,
-        GridAssetsPack,
         PrimeCommand,
         SeatCommand,
         computeDispatchHandler,
@@ -56,9 +55,9 @@ import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
 import 'package:grid_cli/src/rework_command.dart' show ReworkCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/watch_command.dart' show WatchCommand;
-import 'package:grid_sdk/grid_sdk.dart'
-    show GridAssetPackDefinition, GridAssetRegistry;
+import 'package:grid_sdk/grid_sdk.dart' show GridAssetRegistry;
 
+import 'station_asset_registry.dart';
 import 'src/assets_command.dart';
 import 'src/down_command.dart';
 import 'src/filing_commands.dart';
@@ -149,9 +148,9 @@ export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 /// paired operator commands.
 ///
 /// The returned command names are derived from the same [Command] instances
-/// registered on [CommandRunner]. The asset registry composes the baseline
-/// [GridAssetsPack] once so callers can resolve the teaching side of each pair
-/// without scanning package files or constructing a parallel registry.
+/// registered on [CommandRunner]. The asset registry is the generated station
+/// closure so callers can resolve the teaching side of each pair without
+/// scanning package files or constructing a parallel registry.
 ///
 /// A downstream station extends this runner instead of forking it: [name] and
 /// [description] rebrand the banner (`buildRunner(name: 'lunar', …)`);
@@ -168,6 +167,11 @@ export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 /// threaded into the resident verbs (`up`) and the station-context
 /// compositions (`search`/`assets`/link authoring). Absent, the base
 /// [SpaceDelegate] — space's posture.
+/// [assetRegistry] is the downstream station's generated static registry.
+/// When omitted, space's own [GeneratedGridAssetRegistrant.registry] is used.
+/// A downstream composition passes the same static object here and returns it
+/// from its [SpaceDelegate.assetRegistry] override; command assembly never
+/// constructs a delegate merely to read class policy.
 /// [environment] is the PROCESS environment, handed in by the entrypoint
 /// (`bin/space.dart` reads it from `dart:io` and passes it here). The assembly
 /// never reads it ambiently — `no_watcher_no_gate_test` bans that under
@@ -183,8 +187,11 @@ buildRunnerComposition({
   String description = "memento's grid station",
   String runnerInvocation = kSpaceRunner,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+  GridAssetRegistry? assetRegistry,
   Map<String, String> environment = const <String, String>{},
 }) {
+  final resolvedAssetRegistry =
+      assetRegistry ?? GeneratedGridAssetRegistrant.registry;
   final linkCommands = buildSpaceLinkCommands(delegateFactory: delegateFactory);
   // Unlike `link`, whose endpoint list must exist at PARSE time, the
   // front-door pair resolves its store from the bead id at RUN time — so this
@@ -196,6 +203,7 @@ buildRunnerComposition({
   final assetsCommand = buildSpaceAssetsCommand(
     runnerInvocation: runnerInvocation,
     delegate: () => delegateFactory(gridRoot: assetsGridRoot),
+    registry: resolvedAssetRegistry,
   );
   final searchCommand = buildSpaceSearchCommand(
     delegateFactory: delegateFactory,
@@ -224,9 +232,6 @@ buildRunnerComposition({
   final pairedCommandNames = Set<String>.unmodifiable(
     pairedCommands.map((command) => command.name),
   );
-  final assetRegistry = GridAssetRegistry(<GridAssetPackDefinition>[
-    GridAssetsPack.definition,
-  ]);
   final runner = CommandRunner<int>(name, description)
     ..addCommand(WatchCommand())
     // memento's OWN resident verbs (RS-5b): the composed resident station
@@ -353,7 +358,7 @@ buildRunnerComposition({
   return (
     runner: runner,
     pairedCommandNames: pairedCommandNames,
-    assetRegistry: assetRegistry,
+    assetRegistry: resolvedAssetRegistry,
   );
 }
 
@@ -366,11 +371,13 @@ CommandRunner<int> buildRunner({
   String description = "memento's grid station",
   String runnerInvocation = kSpaceRunner,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+  GridAssetRegistry? assetRegistry,
   Map<String, String> environment = const <String, String>{},
 }) => buildRunnerComposition(
   name: name,
   description: description,
   runnerInvocation: runnerInvocation,
   delegateFactory: delegateFactory,
+  assetRegistry: assetRegistry,
   environment: environment,
 ).runner;
