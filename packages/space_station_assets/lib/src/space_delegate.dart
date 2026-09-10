@@ -264,7 +264,7 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 ///  * [circuitOverrideFor] — bead-scoped non-code routing; null retains the
 ///    migration-aware code policy;
 ///  * [buildWorkRegistry] — the resident capability composition, built over
-///    the station-owned note appender;
+///    the station-owned note appender and specify-authored-spec writer;
 ///  * [substations] — THE roster hook: the coded drive set as authored
 ///    [SubstationSeed] values. Compose, don't replace.
 ///
@@ -386,14 +386,18 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// Builds this station's resident work capability registry.
   ///
   /// [appendNote] is backed by the assembled runtime's ownership-checked bead
-  /// writer. OVERRIDE POINT: downstream registries pass it to capabilities that
-  /// persist operational lines; the code registry does not consume it.
-  sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) =>
-      buildCodeRegistry(
-        assetRegistry: assetRegistry,
-        overlaySourceRef: overlaySourceRef,
-        overlayArgs: {'runner': runnerInvocation},
-      );
+  /// writer. [writeSpecifyAuthoredSpec] is the same writer's extension for
+  /// stamping specify-authored prose. OVERRIDE POINT: downstream registries
+  /// accept and forward both required callbacks when composing capabilities.
+  sdk.CapabilityRegistry buildWorkRegistry(
+    NoteAppender appendNote,
+    sdk.SpecifyAuthoredSpecWriter writeSpecifyAuthoredSpec,
+  ) => buildCodeRegistry(
+    writeSpecifyAuthoredSpec: writeSpecifyAuthoredSpec,
+    assetRegistry: assetRegistry,
+    overlaySourceRef: overlaySourceRef,
+    overlayArgs: {'runner': runnerInvocation},
+  );
 
   /// The operator's `--substation` flags, parsed into ready [sdk.Substation]
   /// substations — the APPEND layer (Fork B, round 3): they spread AFTER the
