@@ -88,6 +88,59 @@ void main() {
     );
   });
 
+  test('reachable skills only teach composed commands', () {
+    final composition = buildRunnerComposition();
+    final composedCommandNames = _composedCommandNames(composition.runner);
+    final reachable = _resolve(composition.assetRegistry);
+
+    expect(
+      _commandCompositionRefusals(
+        composedCommandNames: composedCommandNames,
+        reachableDefinitions: reachable,
+      ),
+      isEmpty,
+    );
+
+    final stationOperations = GridAssetsPack.skillStationOperations;
+    final unsupportedRegistry = _registryWithStationOperations(
+      replacement: _copyStationOperations(
+        teaches: <String>[...stationOperations.teaches, 'uncomposed'],
+      ),
+    );
+    expect(
+      _commandCompositionRefusals(
+        composedCommandNames: composedCommandNames,
+        reachableDefinitions: _resolve(unsupportedRegistry),
+      ),
+      <String>[
+        'taught command "uncomposed" is not composed; declaring skill '
+            'grid_assets/skill/station-operations expects it on the runner',
+      ],
+    );
+
+    final companionRegistry = _registryWithStationOperations(
+      replacement: stationOperations,
+      additionalDefinitions: <sdk.GridAssetDefinition>[
+        _copyStationOperations(
+          assetKey: const sdk.AssetKey(
+            package: GridAssetsPack.package,
+            kind: sdk.AssetKind.skill,
+            id: 'station-operations-companion',
+          ),
+          artifacts: const <sdk.AssetArtifact>[],
+          teaches: const <String>['up'],
+        ),
+      ],
+    );
+    expect(
+      _commandCompositionRefusals(
+        composedCommandNames: composedCommandNames,
+        reachableDefinitions: _resolve(companionRegistry),
+      ),
+      isEmpty,
+    );
+  });
+
   test('coverage refuses removed, renamed, and selector-excluded teachers', () {
     final composition = buildRunnerComposition();
     final stationOperations = GridAssetsPack.skillStationOperations;
@@ -157,6 +210,29 @@ void main() {
 Set<String> _composedCommandNames(CommandRunner<int> runner) =>
     runner.commands.keys.where((name) => name != 'help').toSet();
 
+List<String> _commandCompositionRefusals({
+  required Set<String> composedCommandNames,
+  required Iterable<sdk.GridAssetDefinition> reachableDefinitions,
+}) {
+  final reachableSkills = reachableDefinitions
+      .where((definition) => definition.assetKey.kind == sdk.AssetKind.skill)
+      .toList(growable: false);
+  final taughtCommandNames = reachableSkills
+      .expand((definition) => definition.teaches)
+      .toSet();
+  final unsupportedCommandNames = taughtCommandNames.difference(
+    composedCommandNames,
+  );
+  final refusals = <String>[
+    for (final definition in reachableSkills)
+      for (final name in definition.teaches)
+        if (unsupportedCommandNames.contains(name))
+          'taught command "$name" is not composed; declaring skill '
+              '${definition.assetKey.canonical} expects it on the runner',
+  ]..sort();
+  return refusals;
+}
+
 List<String> _teachingCoverageRefusals({
   required Set<String> pairedCommandNames,
   required sdk.GridAssetRegistry baselineRegistry,
@@ -211,6 +287,8 @@ List<sdk.GridAssetDefinition> _resolve(
 
 sdk.GridAssetRegistry _registryWithStationOperations({
   sdk.GridAssetDefinition? replacement,
+  Iterable<sdk.GridAssetDefinition> additionalDefinitions =
+      const <sdk.GridAssetDefinition>[],
 }) {
   final stationOperationsKey = GridAssetsPack.skillStationOperations.assetKey;
   return sdk.GridAssetRegistry(<sdk.GridAssetPackDefinition>[
@@ -222,6 +300,7 @@ sdk.GridAssetRegistry _registryWithStationOperations({
             definition
           else if (replacement != null)
             replacement,
+        ...additionalDefinitions,
       ],
     ),
   ]);
@@ -230,13 +309,15 @@ sdk.GridAssetRegistry _registryWithStationOperations({
 sdk.GridAssetDefinition _copyStationOperations({
   sdk.AssetKey? assetKey,
   sdk.AssetSelector? selector,
+  List<sdk.AssetArtifact>? artifacts,
+  List<String>? teaches,
 }) {
   final source = GridAssetsPack.skillStationOperations;
   return sdk.GridAssetDefinition(
     assetKey: assetKey ?? source.assetKey,
     description: source.description,
-    artifacts: source.artifacts,
-    teaches: source.teaches,
+    artifacts: artifacts ?? source.artifacts,
+    teaches: teaches ?? source.teaches,
     audience: source.audience,
     visibility: source.visibility,
     selector: selector ?? source.selector,
