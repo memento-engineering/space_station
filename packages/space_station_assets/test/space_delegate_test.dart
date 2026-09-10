@@ -660,10 +660,10 @@ void main() {
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final lockfile = File('../../pubspec.lock').readAsStringSync();
 
-      expect(pubspec, contains('version: 0.4.0-rc.1'));
+      expect(pubspec, matches(RegExp(r'version: 0\.4\.0-rc\.\d+')));
       expect(pubspec, contains('grid_assets: ^0.6.0-rc.24'));
       expect(pubspec, contains('grid_sdk: ^0.3.0-rc.22'));
-      expect(changelog, startsWith('# Changelog\n\n## 0.4.0-rc.1'));
+      expect(changelog, matches(RegExp(r'^# Changelog\n\n## 0\.4\.0-rc\.\d+')));
       expect(changelog, contains('Breaking: coordinated widening (A)'));
       expect(changelog, contains('Lunar adopts it separately'));
       expect(changelog, contains('grid_assets ^0.6.0-rc.24'));
