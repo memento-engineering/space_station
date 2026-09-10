@@ -8,7 +8,7 @@
 /// asset-exported [DartCommand] from the DART domain, plus memento's OWN
 /// resident verbs (RS-5b, `the_grid/docs/SCRATCH-resident-station.md`):
 /// `up`/`down`/`status`, plus the SEARCH asset's exported `search` Command,
-/// plus the SEAT asset's exported `prime` and `seat` Commands,
+/// plus the SEAT asset's exported `prime`, `seat`, and `succession` Commands,
 /// composed with space's own resident-station context (`SpaceDelegate`) — the
 /// coupled skill+command pattern (power_station ADR-0001).
 ///
@@ -45,6 +45,7 @@ import 'package:grid_assets/grid_assets.dart'
         DispatchCommand,
         PrimeCommand,
         SeatCommand,
+        SuccessionCommand,
         computeDispatchHandler,
         kComputeKind;
 // ignore: implementation_imports
@@ -219,6 +220,7 @@ buildRunnerComposition({
   );
   final downCommand = DownCommand();
   final statusCommand = StatusCommand();
+  final successionCommand = SuccessionCommand();
   final pairedCommands = <Command<int>>[
     assetsCommand,
     searchCommand,
@@ -228,6 +230,7 @@ buildRunnerComposition({
     upCommand,
     downCommand,
     statusCommand,
+    successionCommand,
   ];
   final pairedCommandNames = Set<String>.unmodifiable(
     pairedCommands.map((command) => command.name),
@@ -263,12 +266,14 @@ buildRunnerComposition({
     // store owns it (power_station ADR-0001, the coupled skill+command pattern).
     ..addCommand(filingCommand)
     ..addCommand(approveCommand)
-    // The SEAT asset's exported CLI pair, composed BARE: PrimeCommand is the
-    // vended SessionStart hook target, and SeatCommand owns its builtin
-    // environment registry and launch/refusal behavior. No station-local
-    // command or service duplicates either implementation.
+    // The SEAT asset's exported CLI commands: PrimeCommand and SeatCommand
+    // are composed BARE as the vended SessionStart hook target and the owner
+    // of builtin environment launch/refusal behavior. SuccessionCommand is
+    // paired above with the handoff skill's existing teaching claim. No
+    // station-local command or service duplicates any implementation.
     ..addCommand(PrimeCommand())
     ..addCommand(SeatCommand())
+    ..addCommand(successionCommand)
     ..addCommand(linkCommand)
     ..addCommand(linkCommands.unlink)
     // The ASSETS domain's exported Command group, COMPOSED with space's

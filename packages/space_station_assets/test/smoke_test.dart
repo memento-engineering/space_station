@@ -4,7 +4,8 @@ import 'package:grid_assets/grid_assets.dart'
         FilingCommand,
         PrimeCommand,
         SearchCommand,
-        SeatCommand;
+        SeatCommand,
+        SuccessionCommand;
 import 'package:grid_cli/grid_cli.dart' show LinkCommand, UnlinkCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
@@ -29,6 +30,7 @@ void main() {
         'approve',
         'prime',
         'seat',
+        'succession',
         'link',
         'unlink',
         'dart',
@@ -58,11 +60,12 @@ void main() {
     expect(runner.commands['approve'], isA<ApproveCommand>());
   });
 
-  test('prime and seat are the VENDED grid_assets Commands, composed — not '
-      'space-local reimplementations', () {
+  test('prime, seat, and succession are the VENDED grid_assets Commands, '
+      'composed — not space-local reimplementations', () {
     final runner = buildRunner();
     expect(runner.commands['prime'], isA<PrimeCommand>());
     expect(runner.commands['seat'], isA<SeatCommand>());
+    expect(runner.commands['succession'], isA<SuccessionCommand>());
   });
 
   test('`reload` is the VENDED grid_cli Command, composed — the operator\'s '
