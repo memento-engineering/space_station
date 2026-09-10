@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-rc.2
+
+- Fixed: the runner composes `SuccessionCommand` (the `succession` verb the
+  vended handoff skill teaches) and lists it among the paired commands
+  (space_station#97, space-t9t).
+
 ## 0.4.0-rc.1
 
 - Breaking: coordinated widening (A) changes
