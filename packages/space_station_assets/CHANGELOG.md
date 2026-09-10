@@ -22,10 +22,10 @@
 
 ## 0.3.0-rc.11
 
-- Added: `memento-engineering` — the org decision register — is the seventh
+- Added: `memento-engineering` — the org decisions repository — is the seventh
   coded org substation, at bead prefix `org`, carrying the memento org App and
   a live `githubPoll` like the other six. It is distinct from the `decisions`
-  substation, which holds the register FORMAT and its implementation
+  substation, which holds that repository's FORMAT and its implementation
   (`memento-engineering#org-decisions-live-in-the-org-register`). A downstream
   station inherits it through `super.substations(...)`.
 - Changed: `codedRosterSnapshotOf` now exposes
