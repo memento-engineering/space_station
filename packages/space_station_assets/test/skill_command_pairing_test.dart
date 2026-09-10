@@ -30,6 +30,7 @@ void main() {
         'approve',
         'prime',
         'seat',
+        'succession',
         'link',
         'unlink',
         'assets',
@@ -62,6 +63,7 @@ void main() {
       'up',
       'down',
       'status',
+      'succession',
     });
     for (final name in composition.pairedCommandNames) {
       expect(composition.runner.commands[name], isNotNull, reason: name);
