@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:beads_dart/beads_dart.dart' show Bead;
@@ -11,13 +12,17 @@ import 'package:grid_assets/grid_assets.dart'
         GridAssetRosterOverride,
         MountEligibilityAssets,
         PackagedAssetLoader,
+        SpecifyCapability,
         SubstationFacts,
         SubstationFactsSnapshot,
         SubstationKey,
         kCodeCircuit,
         kProvenanceMarker,
+        kSpecReviewCircuit,
+        kSpecifyStep,
         kUnknownSourceRef,
-        resolveOverlaySourceRefSync;
+        resolveOverlaySourceRefSync,
+        usageReportPath;
 import 'package:grid_engine/grid_engine.dart'
     show
         CapabilityHost,
@@ -54,6 +59,18 @@ StepMount _overlayAgentMount() => StepMount(
   session: const SessionHandle('space-overlay-s'),
   node: const NodeCursor(),
   key: const ValueKey('space-overlay/agent#0.0'),
+);
+
+StepMount _specifyMount(String beadId) => StepMount(
+  step: kSpecReviewCircuit.steps.whereType<CapabilityStep>().singleWhere(
+    (step) => step.stepId == kSpecifyStep,
+  ),
+  nodePath: '$beadId/spec_review/specify',
+  circuit: kSpecReviewCircuit,
+  circuitPath: '$beadId/spec_review',
+  session: const SessionHandle('space-specify-session'),
+  node: const NodeCursor(),
+  key: ValueKey('$beadId/spec_review/specify#0.0'),
 );
 
 /// Track G-space / H2 (tg-r81), re-cut by space-47t: offline coverage for
@@ -463,7 +480,10 @@ void main() {
       final subject = delegate();
       expect(subject.circuitOverrideFor(const Bead(id: 'space-code')), isNull);
 
-      final registry = subject.buildWorkRegistry((_, _) async {});
+      final registry = subject.buildWorkRegistry(
+        (_, _) async {},
+        _ignoreSpecifyAuthoredSpec,
+      );
       for (final id in <String>{
         'code',
         'spec_review',
@@ -514,17 +534,83 @@ void main() {
       expect(body, contains('`$kSpaceRunner assets install`'));
     });
 
-    test('a downstream delegate selects only its marker bead', () {
+    test('two-parameter downstream registry override still composes', () {
       final subject = _MarkerDelegate(gridRoot: '/home/space');
+      Future<void> appendNote(String beadId, String line) async {}
+      Future<void> writeSpecifyAuthoredSpec(
+        String beadId, {
+        required String design,
+        required String acceptanceCriteria,
+      }) => _ignoreSpecifyAuthoredSpec(
+        beadId,
+        design: design,
+        acceptanceCriteria: acceptanceCriteria,
+      );
       expect(
         subject.circuitOverrideFor(const Bead(id: 'space-marker')),
         same(_MarkerDelegate.markerCircuit),
       );
       expect(subject.circuitOverrideFor(const Bead(id: 'space-code')), isNull);
 
-      final registry = subject.buildWorkRegistry((_, _) async {});
+      final registry = subject.buildWorkRegistry(
+        appendNote,
+        writeSpecifyAuthoredSpec,
+      );
       expect(registry.circuit('code'), same(kCodeCircuit));
-      expect(subject.receivedAppender, isNotNull);
+      expect(subject.receivedAppender, same(appendNote));
+      expect(subject.receivedSpecWriter, same(writeSpecifyAuthoredSpec));
+    });
+
+    test('resident registry forwards the exact specify writer', () async {
+      const beadId = 'space-spec';
+      const design =
+          '## Implementation Plan\n\n### Step 1 — thread the writer\n';
+      const acceptance =
+          '- [ ] AC-1 — preserve the design\n'
+          '- [ ] AC-2 — preserve the acceptance text';
+      const nodePath = '$beadId/spec_review/specify';
+      final workspace = Directory.systemTemp.createTempSync(
+        'space-specify-writer-',
+      );
+      addTearDown(() => workspace.deleteSync(recursive: true));
+      File(p.join(workspace.path, usageReportPath(nodePath)))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          jsonEncode({
+            'type': 'result',
+            'duration_ms': 100,
+            'num_turns': 1,
+            'usage': {'input_tokens': 8, 'output_tokens': 5},
+            'result': jsonEncode({'acceptance': acceptance, 'design': design}),
+          }),
+        );
+      final recorder = _RecordingSpecWriter();
+      final subject = delegate();
+      final registry = subject.buildWorkRegistry(
+        (_, _) async {},
+        recorder.record,
+      );
+      final capability =
+          (registry.host(_specifyMount(beadId)) as CapabilityHost).capability
+              as SpecifyCapability;
+
+      await capability.result(
+        FakeTreeContext(
+          values: {
+            Bead: const Bead(id: beadId),
+            Workspace: testWorkspace(
+              beadId,
+              workspaceDir: workspace.path,
+              branch: 'grid/$beadId',
+            ),
+          },
+        ),
+        stepArgs(nodePath),
+      );
+
+      expect(recorder.calls, [
+        (beadId: beadId, design: design, acceptanceCriteria: acceptance),
+      ]);
     });
 
     test('resident assembly owns and disposes its policy delegate', () {
@@ -541,8 +627,16 @@ void main() {
       );
       expect(
         source,
-        contains('workPolicyDelegate.buildWorkRegistry(appendNote)'),
+        contains(
+          'registryBuilderWithSpecWriter: '
+          '(appendNote, writeSpecifyAuthoredSpec) =>\n'
+          '            workPolicyDelegate.buildWorkRegistry(\n'
+          '              appendNote,\n'
+          '              writeSpecifyAuthoredSpec,\n'
+          '            ),',
+        ),
       );
+      expect(source, isNot(contains('registryBuilder:')));
       expect(source, isNot(contains('registry: buildCodeRegistry()')));
       expect(
         RegExp(r'workPolicyDelegate\.dispose\(\);').allMatches(source).length,
@@ -558,6 +652,37 @@ void main() {
         isNot(contains('live')),
         reason: 'workPolicyDelegate must be constructed without live:',
       );
+    });
+
+    test('dependency floors and breaking release note name coordinated '
+        'widening', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final changelog = File('CHANGELOG.md').readAsStringSync();
+      final lockfile = File('../../pubspec.lock').readAsStringSync();
+
+      expect(pubspec, contains('version: 0.4.0-rc.1'));
+      expect(pubspec, contains('grid_assets: ^0.6.0-rc.24'));
+      expect(pubspec, contains('grid_sdk: ^0.3.0-rc.22'));
+      expect(changelog, startsWith('# Changelog\n\n## 0.4.0-rc.1'));
+      expect(changelog, contains('Breaking: coordinated widening (A)'));
+      expect(changelog, contains('Lunar adopts it separately'));
+      expect(changelog, contains('grid_assets ^0.6.0-rc.24'));
+      expect(changelog, contains('grid_sdk ^0.3.0-rc.22'));
+
+      String lockEntry(String package) {
+        final header = '  $package:\n';
+        final start = lockfile.indexOf(header);
+        expect(start, greaterThanOrEqualTo(0));
+        final rest = lockfile.substring(start + header.length);
+        final nextPackage = RegExp(
+          r'^  [a-zA-Z0-9_]+:\n',
+          multiLine: true,
+        ).firstMatch(rest);
+        return rest.substring(0, nextPackage?.start ?? rest.length);
+      }
+
+      expect(lockEntry('grid_assets'), contains('version: "0.6.0-rc.24"'));
+      expect(lockEntry('grid_sdk'), contains('version: "0.3.0-rc.22"'));
     });
   });
 }
@@ -664,15 +789,20 @@ class _MarkerDelegate extends SpaceDelegate {
   static final sdk.Circuit markerCircuit = kCodeCircuit.copyWith(id: 'marker');
 
   NoteAppender? receivedAppender;
+  sdk.SpecifyAuthoredSpecWriter? receivedSpecWriter;
 
   @override
   sdk.Circuit? circuitOverrideFor(Bead bead) =>
       bead.id == 'space-marker' ? markerCircuit : null;
 
   @override
-  sdk.CapabilityRegistry buildWorkRegistry(NoteAppender appendNote) {
+  sdk.CapabilityRegistry buildWorkRegistry(
+    NoteAppender appendNote,
+    sdk.SpecifyAuthoredSpecWriter writeSpecifyAuthoredSpec,
+  ) {
     receivedAppender = appendNote;
-    return super.buildWorkRegistry(appendNote);
+    receivedSpecWriter = writeSpecifyAuthoredSpec;
+    return super.buildWorkRegistry(appendNote, writeSpecifyAuthoredSpec);
   }
 }
 
@@ -726,7 +856,10 @@ String _materializeDiscoverSkill(SpaceDelegate delegate) {
     if (worktree.existsSync()) worktree.deleteSync(recursive: true);
   });
 
-  final registry = delegate.buildWorkRegistry((_, _) async {});
+  final registry = delegate.buildWorkRegistry(
+    (_, _) async {},
+    _ignoreSpecifyAuthoredSpec,
+  );
   final capability =
       (registry.host(_overlayAgentMount()) as CapabilityHost).capability
           as AgentCapability;
@@ -761,6 +894,27 @@ String _materializeDiscoverSkill(SpaceDelegate delegate) {
   return File(
     p.join(worktree.path, '.claude', 'skills', 'discover', 'SKILL.md'),
   ).readAsStringSync();
+}
+
+Future<void> _ignoreSpecifyAuthoredSpec(
+  String beadId, {
+  required String design,
+  required String acceptanceCriteria,
+}) async {}
+
+final class _RecordingSpecWriter {
+  final List<({String beadId, String design, String acceptanceCriteria})>
+  calls = [];
+
+  Future<void> record(
+    String beadId, {
+    required String design,
+    required String acceptanceCriteria,
+  }) async => calls.add((
+    beadId: beadId,
+    design: design,
+    acceptanceCriteria: acceptanceCriteria,
+  ));
 }
 
 class _OverlayIdentityDelegate extends SpaceDelegate {

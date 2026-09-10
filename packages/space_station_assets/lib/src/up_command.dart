@@ -592,8 +592,11 @@ class UpCommand extends Command<int> {
           kCodeCircuit,
           overrideFor: workPolicyDelegate.circuitOverrideFor,
         ),
-        registryBuilder: (appendNote) =>
-            workPolicyDelegate.buildWorkRegistry(appendNote),
+        registryBuilderWithSpecWriter: (appendNote, writeSpecifyAuthoredSpec) =>
+            workPolicyDelegate.buildWorkRegistry(
+              appendNote,
+              writeSpecifyAuthoredSpec,
+            ),
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
         transport: diagnostics,

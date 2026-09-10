@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0-rc.1
+
+- Breaking: coordinated widening (A) changes
+  `SpaceDelegate.buildWorkRegistry` to accept `NoteAppender` and
+  `SpecifyAuthoredSpecWriter` as two required positional parameters. Downstream
+  overrides must adopt the two-parameter signature and forward the writer;
+  Lunar adopts it separately. Requires `grid_assets ^0.6.0-rc.24` and
+  `grid_sdk ^0.3.0-rc.22`.
+
 ## 0.3.0-rc.12
 
 - Added: `SpaceDelegate.assetRegistry` — the station-asset-registry override

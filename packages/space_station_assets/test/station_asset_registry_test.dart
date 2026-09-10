@@ -121,7 +121,14 @@ void main() {
       'space-registry-worktree-',
     );
     addTearDown(() => worktree.deleteSync(recursive: true));
-    final registry = delegate.buildWorkRegistry((_, _) async {});
+    final registry = delegate.buildWorkRegistry(
+      (_, _) async {},
+      (
+        _, {
+        required String design,
+        required String acceptanceCriteria,
+      }) async {},
+    );
     final capability =
         (registry.host(_agentMount()) as CapabilityHost).capability
             as AgentCapability;
