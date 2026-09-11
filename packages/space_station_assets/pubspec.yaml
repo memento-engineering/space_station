@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.4.0-rc.3
+version: 0.4.0-rc.4
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -26,7 +26,7 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  dart_grid_assets: ^0.1.1
+  dart_grid_assets: ^0.2.0-dev.1
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
@@ -44,7 +44,7 @@ dependencies:
   github_grid_assets: ^0.1.0-rc.9
   # rc.24 is the specify-provenance floor: buildCodeRegistry accepts the
   # station-owned SpecifyAuthoredSpecWriter.
-  grid_assets: ^0.6.0-rc.24
+  grid_assets: ^0.6.0-rc.25
   # rc.20 is the wave-16 CLI floor.
   grid_cli: ^0.5.0-rc.23
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
