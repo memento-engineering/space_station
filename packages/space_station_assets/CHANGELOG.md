@@ -1,3 +1,5 @@
+# Changelog
+
 ## 0.4.0-rc.3
 
 - Fixed: `status` handles `AttachResult.DeadPid`, the case grid_cli added in
@@ -9,9 +11,6 @@
   (tg-qwsx).
 - Floors `grid_cli` to `^0.5.0-rc.23`, the first grid_cli that itself resolves
   against a published grid_engine.
-
-# Changelog
-
 ## 0.4.0-rc.2
 
 - Fixed: the runner composes `SuccessionCommand` (the `succession` verb the
