@@ -26,6 +26,7 @@ import 'package:beads_dart/beads_dart.dart'
 import 'package:grid_cli/src/station_attach.dart'
     show
         AttachResult,
+        DeadPid,
         Down,
         SlowUp,
         Starting,
@@ -111,6 +112,18 @@ class StatusCommand extends Command<int> {
               ..writeln('  state store: $home')
               ..writeln('  pid: $pid');
             return 0;
+          case DeadPid(:final pid, :final record):
+            // A STALE LOCK, and it is worth its own case rather than folding
+            // into Down: the lock names a pid the probe found dead, so the
+            // store is not in use and a fresh `up` will steal it. Down would
+            // render the same word and hide the reason a boot was refused.
+            stderr.writeln(
+              'status: station.lock at $home/.grid/station.lock names pid '
+              '$pid, but no such process is alive — the lock is STALE '
+              '(record: $record). (station: down) — a fresh `up` steals a '
+              'dead lock automatically; nothing needs clearing by hand.',
+            );
+            return 1;
           case Unreachable(:final pid, :final record):
             stderr.writeln(
               'status: station.lock at $home/.grid/station.lock '

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-rc.3
+
+- Fixed: `status` handles `AttachResult.DeadPid`, the case grid_cli added in
+  0.5.0-rc.22. A sealed-type addition breaks an exhaustive switch, so the
+  package did not compile against that grid_cli at all. It renders as a STALE
+  LOCK rather than folding into `Down`: the lock names a pid no live process
+  answers to, a fresh `up` steals it automatically, and saying so is the
+  difference between an operator clearing a lock by hand and leaving it alone
+  (tg-qwsx).
+- Floors `grid_cli` to `^0.5.0-rc.23`, the first grid_cli that itself resolves
+  against a published grid_engine.
 ## 0.4.0-rc.2
 
 - Fixed: the runner composes `SuccessionCommand` (the `succession` verb the
