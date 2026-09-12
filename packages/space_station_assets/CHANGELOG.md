@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- PROMOTED from 0.4.0-rc.4. This is the stable release of the 0.4.0 line; the code is the
+  candidate's, unchanged. Every family dependency constraint is rewritten from its prerelease
+  form to the stable one, because pub refuses a stable package that depends on a prerelease.
+- Consumers on a `^0.4.0-rc.N` constraint resolve this automatically: a caret range admits the
+  release above its own prereleases, so no downstream pubspec edit is required to pick it up.
+- Floors grid_assets ^0.6.0 and grid_sdk ^0.3.0, the promoted grid core. The coordinated-widening
+  guard moves its pins to those stable floors in the same change, which is what that test exists
+  to force.
+
 ## 0.4.0-rc.4
 
 - Floors grid_assets ^0.6.0-rc.25 and dart_grid_assets ^0.2.0-dev.1.

@@ -660,14 +660,20 @@ void main() {
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final lockfile = File('../../pubspec.lock').readAsStringSync();
 
-      expect(pubspec, matches(RegExp(r'version: 0\.4\.0-rc\.\d+')));
-      expect(pubspec, contains('grid_assets: ^0.6.0-rc.25'));
-      expect(pubspec, contains('grid_sdk: ^0.3.0-rc.22'));
-      expect(changelog, matches(RegExp(r'^# Changelog\n\n## 0\.4\.0-rc\.\d+')));
+      expect(
+        pubspec,
+        matches(RegExp(r'version: 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
+      );
+      expect(pubspec, contains('grid_assets: ^0.6.0'));
+      expect(pubspec, contains('grid_sdk: ^0.3.0'));
+      expect(
+        changelog,
+        matches(RegExp(r'^# Changelog\n\n## 0\.4\.0(?:-rc\.\d+)?')),
+      );
       expect(changelog, contains('Breaking: coordinated widening (A)'));
       expect(changelog, contains('Lunar adopts it separately'));
-      expect(changelog, contains('grid_assets ^0.6.0-rc.25'));
-      expect(changelog, contains('grid_sdk ^0.3.0-rc.22'));
+      expect(changelog, contains('grid_assets ^0.6.0'));
+      expect(changelog, contains('grid_sdk ^0.3.0'));
 
       String lockEntry(String package) {
         final header = '  $package:\n';
@@ -681,8 +687,8 @@ void main() {
         return rest.substring(0, nextPackage?.start ?? rest.length);
       }
 
-      expect(lockEntry('grid_assets'), contains('version: "0.6.0-rc.25"'));
-      expect(lockEntry('grid_sdk'), contains('version: "0.3.0-rc.22"'));
+      expect(lockEntry('grid_assets'), contains('version: "0.6.0"'));
+      expect(lockEntry('grid_sdk'), contains('version: "0.3.0"'));
     });
   });
 }
