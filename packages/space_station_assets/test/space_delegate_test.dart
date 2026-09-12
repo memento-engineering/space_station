@@ -664,7 +664,7 @@ void main() {
         pubspec,
         matches(RegExp(r'version: 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
       );
-      expect(pubspec, contains('grid_assets: ^0.6.0'));
+      expect(pubspec, contains('grid_assets: ^0.7.0-dev.1'));
       expect(pubspec, contains('grid_sdk: ^0.3.0'));
       expect(
         changelog,
@@ -687,7 +687,7 @@ void main() {
         return rest.substring(0, nextPackage?.start ?? rest.length);
       }
 
-      expect(lockEntry('grid_assets'), contains('version: "0.6.0"'));
+      expect(lockEntry('grid_assets'), contains('version: "0.7.0-dev.1"'));
       expect(lockEntry('grid_sdk'), contains('version: "0.3.0"'));
     });
   });
