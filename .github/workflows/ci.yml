@@ -15,6 +15,8 @@ jobs:
           sdk: stable
       - name: Resolve committed dependencies
         run: dart pub get
+      - name: Check installed overlay freshness
+        run: dart run space:space assets install --check --no-diff
       - name: Analyze workspace
         run: dart analyze
       - name: Test space_station_assets
