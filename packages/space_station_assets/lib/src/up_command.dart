@@ -255,20 +255,16 @@ class UpCommand extends Command<int> {
       ..addOption(
         'env',
         help:
-            'The station-default NAMED environment — the AMBIENT rung of the '
-            'agent-config ladder (ADR-0002 D1): a bead overrides it via its '
-            'grid.agent envelope, a step via params, and the per-role posture '
-            'is CODED on the delegate (SpaceDelegate.arming), never a flag '
-            '(D4). Selected from the ARMED registry, resolved at run time — '
-            'armed here: $armedEnvironments. Absent: the station default '
-            '(claude).',
+            'Default named agent environment. Armed names: '
+            '$armedEnvironments. Unknown names are refused; absent uses claude. '
+            'Bead and step configuration can override it.',
       )
       ..addOption(
         'max-agents',
         defaultsTo: '4',
         help:
-            'The station-wide concurrency ceiling (tg-42f): the most work '
-            'beads mounted (agents live) at once across every substation.',
+            'Integer ceiling for live work agents across all substations; '
+            'non-integers are refused.',
       )
       // TRI-STATE on purpose (`defaultsTo: null` — see
       // [trajectoryConfigFrom]): absent is `auto`, not `--no-trajectory`.
@@ -276,17 +272,10 @@ class UpCommand extends Command<int> {
         'trajectory',
         defaultsTo: null,
         help:
-            'The Stage-1 trajectory shadow window (stage1-wiring §1.3). '
-            'ABSENT (the default) is AUTO: the harness arms iff the home is '
-            'provisioned (`.grid/trajectory/trajectory.secret`), and an '
-            'unprovisioned home boots legacy-only with a one-line notice. '
-            '--trajectory is REQUIRED: a failed connect/claim still never '
-            'blocks the boot — the trajectory can degrade, work cannot — but '
-            'the degradation is LOUD (a stderr WARNING at boot) and REPEATED '
-            '(`space status` renders the posture loud on every read). '
-            '--no-trajectory is DISABLED: no connection, no epoch claim, a '
-            'silent counting no-op. --dry-run forces DISABLED whatever this '
-            'says: a dry arm claims no epoch and writes nothing.',
+            'Trajectory mode: absent auto-arms only on a provisioned home; '
+            '--trajectory requires it; --no-trajectory disables it. Dry-run '
+            'always disables it. Required-mode connection failure degrades '
+            'loudly without blocking boot.',
       );
   }
 
@@ -312,16 +301,21 @@ class UpCommand extends Command<int> {
 
   @override
   final String description =
-      'Boot the resident station (RS-5b), authored as a SpaceDelegate and '
-      'driven with runGrid: validated harness scope, substations resolved at '
-      'their roots (v3 stores-at-roots), and the code asset\'s per-substation '
-      'git — ALWAYS resident: the ready frontier of the owned substation IS the '
-      'drive set (no --bead, ever), guarded by the ONE-supervisor-per-store '
-      'lock (RS-2) and observable over the read-only StationControl surface '
-      '(RS-4). Foreground-resident (a supervisor owns backgrounding). Defaults '
-      'to --dry-run (armed over INERT seams — no spawn, no write, no delivery '
-      'bound); a LIVE arm (--no-dry-run) also BINDS each coded substation\'s '
-      'GitHub delivery — it pushes and opens PRs — and stays the human gate.';
+      'Boot the foreground resident station; safe dry-run is the default.';
+
+  @override
+  String get usageFooter {
+    const surface =
+        'space_station/packages/space_station_assets/lib/src/up_command.dart';
+    final decisions = runner?.commands['decisions'];
+    if (decisions == null || !decisions.subcommands.containsKey('index')) {
+      return 'Withheld: design rationale and architecture history. This '
+          'runner does not vend the decision lookup; use a composing station '
+          'that provides `decisions index --surface $surface`.';
+    }
+    return 'Withheld: design rationale and architecture history. Ask for it '
+        'with `$runnerName decisions index --surface $surface`.';
+  }
 
   @override
   Future<int> run() async {
