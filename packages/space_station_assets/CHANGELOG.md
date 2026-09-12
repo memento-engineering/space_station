@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0-rc.4
+
+- Floors grid_assets ^0.6.0-rc.25 and dart_grid_assets ^0.2.0-dev.1.
+  grid_assets rc.25 adds the `{{bootRunner}}` overlay hole, so a composing
+  station can spell its resident boot — which needs the JIT run form to carry
+  `--enable-vm-service` — differently from the verbs a seat calls from a
+  substation worktree. The hole defaults to `{{runner}}`, so a station naming
+  only one runtime renders byte-identically and nothing changes for space
+  itself. dart_grid_assets 0.2.0-dev.1 is the breaking rung/semver split of the
+  release service, and this package consumes only `DartCommand` from it, so the
+  adoption is the constraint alone. Lunar adopts the bootRunner hole separately
+  (lunar_station-cu7, power_station#288/#284).
+
 ## 0.4.0-rc.3
 
 - Fixed: `status` handles `AttachResult.DeadPid`, the case grid_cli added in
