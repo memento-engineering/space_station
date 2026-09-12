@@ -7,6 +7,10 @@ import 'package:test/test.dart';
 
 const _decisionSurface =
     'space_station/packages/space_station_assets/lib/src/up_command.dart';
+// Root usage measured 3527 -> 2886 -> 2929 bytes. The 3400-byte ceiling stays
+// below the pre-#107 3527-byte usage while allowing roughly 470 bytes of
+// vended-description drift.
+const _rootHelpCeilingBytes = 3400;
 
 void main() {
   test('all composed command help is bounded recursively', () {
@@ -69,10 +73,23 @@ void main() {
   });
 
   test('root help records the byte reduction', () {
-    // Base: 3,527 → 2,886 bytes. Measured downstream lunar: 4,587 → 3,946.
-    // 2,929 since the dart_grid_assets bump on this branch lengthened the
-    // vended `dart` verb's description by 43 bytes (space-qyw rebase).
-    expect(_cliBytes(buildRunner().usage), 2929);
+    expect(
+      _cliBytes(buildRunner().usage),
+      lessThanOrEqualTo(_rootHelpCeilingBytes),
+    );
+  });
+
+  test('root help ceiling tolerates vended drift and rejects the old size', () {
+    final currentBytes = _cliBytes(buildRunner().usage);
+    final driftedBytes = _cliBytes(
+      _runnerWithUsageBytes(currentBytes + 43).usage,
+    );
+    expect(driftedBytes, currentBytes + 43);
+    expect(driftedBytes, lessThanOrEqualTo(_rootHelpCeilingBytes));
+
+    final oldSizeBytes = _cliBytes(_runnerWithUsageBytes(3527).usage);
+    expect(oldSizeBytes, 3527);
+    expect(oldSizeBytes, isNot(lessThanOrEqualTo(_rootHelpCeilingBytes)));
   });
 
   test('up help retains its operational contract', () {
@@ -131,6 +148,18 @@ void main() {
 }
 
 int _cliBytes(String output) => utf8.encode('$output\n').length;
+
+CommandRunner<int> _runnerWithUsageBytes(int targetBytes) {
+  const description = 'x';
+  final additionalDescriptionBytes =
+      targetBytes - _cliBytes(buildRunner(description: description).usage);
+  return buildRunner(
+    description: description.padRight(
+      description.length + additionalDescriptionBytes,
+      'x',
+    ),
+  );
+}
 
 Iterable<Command<int>> _allCommands(CommandRunner<int> runner) sync* {
   final seen = <Command<int>>{};
