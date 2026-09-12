@@ -48,6 +48,7 @@ import 'package:grid_assets/grid_assets.dart'
         SuccessionCommand,
         computeDispatchHandler,
         kComputeKind;
+import 'package:grid_cli/grid_cli.dart' show PauseCommand, ResumeCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/gate_command.dart' show GateCommand;
 // ignore: implementation_imports
@@ -178,6 +179,9 @@ export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
 /// never reads it ambiently — `no_watcher_no_gate_test` bans that under
 /// `lib/`, gate or not — so an unfed runner arms the default posture and a
 /// test feeds a literal map.
+/// [filingCommands] optionally supplies the already-composed roster-aware
+/// filing verbs. Tests and downstream runners use this seam to retain the
+/// production runner path while injecting vended services and sinks.
 ({
   CommandRunner<int> runner,
   Set<String> pairedCommandNames,
@@ -190,16 +194,17 @@ buildRunnerComposition({
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
   GridAssetRegistry? assetRegistry,
   Map<String, String> environment = const <String, String>{},
+  SpaceFilingCommands? filingCommands,
 }) {
   final resolvedAssetRegistry =
       assetRegistry ?? GeneratedGridAssetRegistrant.registry;
   final linkCommands = buildSpaceLinkCommands(delegateFactory: delegateFactory);
-  // Unlike `link`, whose endpoint list must exist at PARSE time, the
-  // front-door pair resolves its store from the bead id at RUN time — so this
+  // Unlike `link`, whose endpoint list must exist at PARSE time, the filing
+  // verbs resolve their store from the bead id at RUN time — so this
   // builder mounts no tree and costs nothing at assembly.
-  final filingCommands = buildSpaceFilingCommands(
-    delegateFactory: delegateFactory,
-  );
+  final resolvedFilingCommands =
+      filingCommands ??
+      buildSpaceFilingCommands(delegateFactory: delegateFactory);
   final assetsGridRoot = Directory.current.absolute.path;
   final assetsCommand = buildSpaceAssetsCommand(
     runnerInvocation: runnerInvocation,
@@ -209,8 +214,8 @@ buildRunnerComposition({
   final searchCommand = buildSpaceSearchCommand(
     delegateFactory: delegateFactory,
   );
-  final filingCommand = filingCommands.filing;
-  final approveCommand = filingCommands.approve;
+  final filingCommand = resolvedFilingCommands.filing;
+  final approveCommand = resolvedFilingCommands.approve;
   final linkCommand = linkCommands.link;
   final upCommand = UpCommand(
     delegateFactory: delegateFactory,
@@ -261,11 +266,22 @@ buildRunnerComposition({
     // resident-station context — `space filing <id>` (the deterministic
     // four-row front-door preflight the `discover` skill CALLS) and
     // `space approve --actor <name> <id>` (the operator's approval VERB: the
-    // same preflight, then ONE stamped receipt on the work bead). Both take a
-    // bead id and are curried with the roster that resolves WHICH substation's
-    // store owns it (power_station ADR-0001, the coupled skill+command pattern).
+    // same preflight, then ONE stamped receipt on the work bead), plus the
+    // vended park/unpark lifecycle pair and the station-down-safe one-bead show
+    // read. All five take a bead id and are curried with the roster that
+    // resolves WHICH substation's store owns it (power_station ADR-0001, the
+    // coupled skill+command pattern).
     ..addCommand(filingCommand)
     ..addCommand(approveCommand)
+    ..addCommand(resolvedFilingCommands.park)
+    ..addCommand(resolvedFilingCommands.unpark)
+    ..addCommand(resolvedFilingCommands.show)
+    // Resident-control verbs are one recovery pair: pause's own instruction
+    // sends the operator to resume, so a station exposing either exposes both.
+    // They carry their generic StationCommandClient and need no station asset
+    // context beyond the --grid-root argument supplied at invocation time.
+    ..addCommand(PauseCommand())
+    ..addCommand(ResumeCommand())
     // The SEAT asset's exported CLI commands: PrimeCommand and SeatCommand
     // are composed BARE as the vended SessionStart hook target and the owner
     // of builtin environment launch/refusal behavior. SuccessionCommand is
@@ -378,6 +394,7 @@ CommandRunner<int> buildRunner({
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
   GridAssetRegistry? assetRegistry,
   Map<String, String> environment = const <String, String>{},
+  SpaceFilingCommands? filingCommands,
 }) => buildRunnerComposition(
   name: name,
   description: description,
@@ -385,4 +402,5 @@ CommandRunner<int> buildRunner({
   delegateFactory: delegateFactory,
   assetRegistry: assetRegistry,
   environment: environment,
+  filingCommands: filingCommands,
 ).runner;

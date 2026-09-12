@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.4.0
+version: 0.5.0-dev.1
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -26,7 +26,7 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  dart_grid_assets: ^0.2.0
+  dart_grid_assets: ^0.2.1-dev.1
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
@@ -37,13 +37,10 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  # rc.9 is the floor: it is the release that FLOORS grid_assets ^0.6.0-rc.9,
-  # so the arming mechanism this package now consumes and the GitHub assets it
-  # composes agree on one grid_assets. Its own composed SubstationSeed is
-  # deliberately NOT adopted here — see space-ovd.
-  github_grid_assets: ^0.1.0
-  # rc.24 is the specify-provenance floor: buildCodeRegistry accepts the
-  # station-owned SpecifyAuthoredSpecWriter.
+  # 0.1.1-dev.1 is the compatible asset-pack release wave for grid_assets
+  # 0.7.0-dev.1.
+  github_grid_assets: ^0.1.1-dev.1
+  # 0.7.0-dev.1 vends the cross-store ShowCommand adopted by this runner.
   grid_assets: ^0.7.0-dev.1
   # rc.20 is the wave-16 CLI floor.
   grid_cli: ^0.5.0
@@ -85,5 +82,6 @@ dependencies:
   path: ^1.9.0
 
 dev_dependencies:
+  analyzer: ^14.3.0
   lints: ^5.1.0
   test: ^1.25.0

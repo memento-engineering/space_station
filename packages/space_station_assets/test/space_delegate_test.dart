@@ -803,7 +803,7 @@ void main() {
 
       expect(
         pubspec,
-        matches(RegExp(r'version: 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
+        matches(RegExp(r'version: 0\.5\.0-dev\.1$', multiLine: true)),
       );
       expect(pubspec, contains('grid_assets: ^0.7.0-dev.1'));
       expect(pubspec, contains('grid_sdk: ^0.3.0'));
@@ -815,8 +815,17 @@ void main() {
       expect(changelog, contains('$breakingLine\n$migrationLine\n'));
       expect(
         changelog,
+        matches(RegExp(r'^## 0\.5\.0-dev\.1$', multiLine: true)),
+      );
+      expect(
+        changelog,
         matches(RegExp(r'^## 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
       );
+      expect(changelog, contains('cross-store `show`'));
+      expect(changelog, contains('`pause` and `resume` pair'));
+      expect(changelog, contains('dependency-derived reachability guard'));
+      expect(changelog, contains('github_grid_assets` at ^0.1.1-dev.1'));
+      expect(changelog, contains('dart_grid_assets` at'));
       expect(changelog, contains('Breaking: coordinated widening (A)'));
       expect(changelog, contains('Lunar adopts it separately'));
       expect(changelog, contains('grid_assets ^0.6.0'));

@@ -5,6 +5,17 @@
 - Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.
   Migration: Extending stations replace an arming getter with seatSeeds(context, configuration), returning one seat.provider() seed per preference, and override environments(context, configuration); lunar adopts this in its separate downstream bead.
 
+## 0.5.0-dev.1
+
+- Added: the shared station runner now composes the vended `park`, `unpark`,
+  and cross-store `show` filing commands, plus the generic resident-control
+  `pause` and `resume` pair. A dependency-derived reachability guard accounts
+  for every public command vended by the runner's command-bearing direct
+  dependencies, so a newly shipped command cannot remain silently uncomposed.
+- Floors `grid_assets` at ^0.7.0-dev.1 for `ShowCommand`,
+  `github_grid_assets` at ^0.1.1-dev.1, and `dart_grid_assets` at
+  ^0.2.1-dev.1 for the compatible asset-pack release wave.
+
 ## 0.4.0
 
 - PROMOTED from 0.4.0-rc.4. This is the stable release of the 0.4.0 line; the code is the

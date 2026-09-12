@@ -7,10 +7,12 @@ import 'package:test/test.dart';
 
 const _decisionSurface =
     'space_station/packages/space_station_assets/lib/src/up_command.dart';
-// Root usage measured 3527 -> 2886 -> 2929 bytes. The 3400-byte ceiling stays
-// below the pre-#107 3527-byte usage while allowing roughly 470 bytes of
-// vended-description drift.
-const _rootHelpCeilingBytes = 3400;
+// Root usage measured 3527 -> 2886 -> 2929 -> 3537 bytes. The five newly
+// composed top-level verbs add 608 bytes. The 4007-byte ceiling keeps roughly
+// 470 bytes of vended-description drift while staying below the pre-#107 help
+// size projected over the same command surface (3527 + 608 = 4135 bytes).
+const _newCommandHelpBytes = 608;
+const _rootHelpCeilingBytes = 4007;
 
 void main() {
   test('all composed command help is bounded recursively', () {
@@ -87,8 +89,10 @@ void main() {
     expect(driftedBytes, currentBytes + 43);
     expect(driftedBytes, lessThanOrEqualTo(_rootHelpCeilingBytes));
 
-    final oldSizeBytes = _cliBytes(_runnerWithUsageBytes(3527).usage);
-    expect(oldSizeBytes, 3527);
+    final oldSizeBytes = _cliBytes(
+      _runnerWithUsageBytes(3527 + _newCommandHelpBytes).usage,
+    );
+    expect(oldSizeBytes, 4135);
     expect(oldSizeBytes, isNot(lessThanOrEqualTo(_rootHelpCeilingBytes)));
   });
 
