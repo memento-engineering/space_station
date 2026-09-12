@@ -864,57 +864,41 @@ void addSpaceStationFlags(
       'substation',
       abbr: 'r',
       help:
-          'A NEW substation to APPEND onto the coded roster '
-          '(${codedNames.join(', ')}), paired: '
-          '`--substation <name>[@<prefix>]=<root>` (repeatable, absolute '
-          'root). Append-only: a coded name is refused — the coded roster is '
-          "authored in the station delegate's substations() and changed in "
-          'code, never by flags. A substation is a name and ONE root (v3 §0) '
-          '— its '
-          '`.beads/` work store lives at `<root>/.beads/`. The optional '
-          '`@<prefix>` names the store\'s issue-id prefix when it differs '
-          'from the name (`tgdog@td=/work/tgdog`). Optional: a no-flag '
-          '`up` arms the coded roster.',
+          'Append a substation as `<name>[@<prefix>]=<root>` (repeatable). '
+          'Malformed entries, duplicate names, and coded names '
+          '(${codedNames.join(', ')}) are refused; omit to arm only the coded '
+          'roster.',
     )
     ..addOption(
       'grid-home',
       abbr: 'g',
       help:
-          "The grid's HOME (absolute): the state store and the RS-2 station "
-          'lock live under `<grid-home>/.grid/`. Required to ARM (never a '
-          'default — v3 §0). Aliased by --state-workspace for continuity with '
-          '`space down`/`space status`, which attach to the SAME lock.',
+          'Absolute grid home containing `.grid/`; required. Missing and '
+          'relative paths are refused. Alias: --state-workspace.',
     )
-    ..addOption(
-      'state-workspace',
-      help:
-          'Alias for --grid-home (the state store / RS-2 lock home). The name '
-          '`space down`/`space status` use to attach to the SAME lock.',
-    )
+    ..addOption('state-workspace', help: 'Alias for --grid-home.')
     ..addFlag(
       'dry-run',
       defaultsTo: true,
       help:
-          'Observe-only: NO writes, NO spawns (the SAFE DEFAULT). The tree '
-          'arms over inert seams; the live work-driving arm (--no-dry-run) is '
-          'the human gate (Track J).',
+          'Observe without spawns, writes, or delivery (default). '
+          '--no-dry-run arms live work and GitHub delivery.',
     )
     ..addOption(
       'for-seconds',
-      help: 'Run for a fixed number of seconds then exit (scripted / CI).',
+      help: 'Exit after this many seconds; omit to stay resident.',
     )
     ..addOption(
       'control-port',
       defaultsTo: '0',
-      help: 'The StationControl port (RS-4). 0 = ephemeral (default).',
+      help: 'StationControl port; 0 selects an ephemeral port (default).',
     )
     ..addOption(
       'bind',
       valueHelp: 'address',
       help:
-          'Bind StationControl to `lan` (0.0.0.0 / '
-          'InternetAddress.anyIPv4) or an IPv4 literal. Absent: loopback '
-          '(InternetAddress.loopbackIPv4).',
+          'StationControl bind address: `lan` or an IPv4 literal; defaults to '
+          'loopback. Other values are refused.',
     );
 }
 

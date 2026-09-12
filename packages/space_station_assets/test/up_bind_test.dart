@@ -26,10 +26,9 @@ void main() {
       allOf(
         contains('--bind=<address>'),
         contains('`lan`'),
-        contains('0.0.0.0'),
-        contains('InternetAddress.anyIPv4'),
         contains('IPv4 literal'),
-        contains('Absent: loopback (InternetAddress.loopbackIPv4)'),
+        contains('defaults to loopback'),
+        contains('Other values are refused'),
       ),
     );
 
