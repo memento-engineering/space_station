@@ -54,11 +54,10 @@ library;
 import 'dart:io' show InternetAddress, InternetAddressType;
 
 import 'package:args/args.dart';
-import 'package:beads_dart/beads_dart.dart' show Bead;
+import 'package:beads_dart/beads_dart.dart' show Bead, BdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
-        AgentArming,
         AgentConfig,
         AvailableEnvironments,
         BuildAgentEnvironment,
@@ -70,11 +69,10 @@ import 'package:grid_assets/grid_assets.dart'
         MountEligibilityAssets,
         PackagedAssetLoader,
         ProcessEnvironmentProbe,
+        SeatPreference,
         SeatEnvironments,
         SpecAgentEnvironment,
-        TypedEnvironmentProvider,
         buildCodeRegistry,
-        mountedValueOf,
         mountedValuesOf,
         resolveOverlaySourceRefSync;
 import 'package:grid_runtime/grid_runtime.dart'
@@ -200,35 +198,47 @@ List<sdk.SubstationScope> codedRosterOf(
   String gridRoot = '/',
 }) => codedRosterSnapshotOf(factory, gridRoot: gridRoot).scopes;
 
-/// The station [factory]'s CODED arming and NAMED environments, read from ONE
-/// owned instance (construct → read → dispose — a delegate is a `StateNotifier`,
-/// never a throwaway value).
-///
-/// The [codedRosterOf] precedent, at the same deterministic ABSOLUTE placeholder
-/// home (`'/'`): both are CLASS-level policy and independent of the grid home,
-/// and neither mounts a tree.
-({AgentArming arming, EnvironmentRegistry environments}) codedArmingOf(
-  SpaceDelegateFactory factory,
-) {
-  final delegate = factory(gridRoot: '/');
-  try {
-    return (arming: delegate.arming, environments: delegate.environments);
-  } finally {
-    delegate.dispose();
-  }
-}
+/// The public snapshot of the named environments and open seat preferences
+/// projected from one owned offline mount of a station build.
+typedef CodedSeatEnvironmentSnapshot = ({
+  EnvironmentRegistry registry,
+  SeatEnvironments? station,
+  List<SeatPreference> preferences,
+});
 
 /// The station [factory]'s CODED typed resolution, read from ONE owned offline
-/// mount (construct → mount → dispose — the [codedArmingOf] precedent) at the
-/// deterministic ABSOLUTE placeholder home `'/'`.
+/// mount (construct → mount → dispose) at [gridRoot].
 ///
 /// The mount is OFFLINE (`live: false`), so presence is the registry's
 /// boot-validated set rather than a live probe pass: this is the CODED
 /// resolution the banner reports, not a machine reading.
-SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
-  final delegate = factory(gridRoot: '/');
+CodedSeatEnvironmentSnapshot codedSeatEnvironmentsOf(
+  SpaceDelegateFactory factory, {
+  String gridRoot = '/',
+  sdk.GridConfiguration configuration = const sdk.GridConfiguration(),
+}) {
+  final delegate = factory(gridRoot: gridRoot);
   try {
-    return mountedValueOf<SeatEnvironments>(delegate);
+    final values = mountedValuesOf<Object>(
+      delegate,
+      configuration: configuration,
+    );
+    EnvironmentRegistry? registry;
+    SeatEnvironments? station;
+    final preferences = <SeatPreference>[];
+    for (final value in values) {
+      if (registry == null && value is EnvironmentRegistry) registry = value;
+      if (station == null && value is SeatEnvironments) station = value;
+      if (value is SeatPreference) preferences.add(value);
+    }
+    if (registry == null) {
+      throw StateError('The station build mounted no EnvironmentRegistry.');
+    }
+    return (
+      registry: registry,
+      station: station,
+      preferences: List<SeatPreference>.unmodifiable(preferences),
+    );
   } finally {
     delegate.dispose();
   }
@@ -248,10 +258,10 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 ///
 /// A downstream station (an IC's private station) extends this delegate and
 /// overrides the designed hooks — the template-method pattern the whole
-/// substrate is built on. [substations] is a BUILD METHOD (it carries the
-/// master [build]'s context, like any decomposed build), while [stationName],
-/// [stateStorePrefix], [assetRegistry], and [umbrella] are immutable class
-/// policy rather than mutable notifier state:
+/// substrate is built on. [environments], [seatSeeds], and [substations] are
+/// BUILD METHODS (they carry the master [build]'s context, like any decomposed
+/// build), while [stationName], [stateStorePrefix], [assetRegistry], and
+/// [umbrella] are immutable class policy rather than mutable notifier state:
 ///
 ///  * [stationName] — the station's identity;
 ///  * [stateStorePrefix] — the prefix of its partition in the state store;
@@ -259,8 +269,8 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 ///  * [overlaySourceRef] — the provenance ref stamped into worktree overlays;
 ///  * [assetRegistry] — the station's generated asset-pack closure;
 ///  * [umbrella] — where the coded org resolves, relative to the grid home;
-///  * [environments] — the station's named inference environments;
-///  * [arming] — the station's coded typed-environment posture;
+///  * [environments] — builds the station's named inference environments;
+///  * [seatSeeds] — builds the station's coded open-seat provider seeds;
 ///  * [circuitOverrideFor] — bead-scoped non-code routing; null retains the
 ///    migration-aware code policy;
 ///  * [buildWorkRegistry] — the resident capability composition, built over
@@ -306,7 +316,7 @@ SeatEnvironments? codedSeatEnvironmentsOf(SpaceDelegateFactory factory) {
 /// guard, help, refusal set and specs all follow.
 class SpaceDelegate extends sdk.GridDelegate {
   /// Creates the delegate over space's resolved station config.
-  /// [agentConfig] defaults to the station's coded [arming] over a claude
+  /// [agentConfig] defaults to the station's coded seat posture over a claude
   /// ambient scope (what offline mounts — `search`, `assets`, roster
   /// enumeration — need; a live `up` passes its resolved boot value).
   /// [harnesses] defaults to the station's coded [environments]. [provisioner]
@@ -322,18 +332,25 @@ class SpaceDelegate extends sdk.GridDelegate {
     AgentConfig? agentConfig,
     this.appended = const [],
     EnvironmentRegistry? harnesses,
+    BdRunner Function(String workspaceRoot)? specifyBdRunnerFor,
     this.wiring,
     this.provisioner,
     this.githubSelfTrust,
     this.live = false,
   }) : _bootAgentConfig = agentConfig,
-       _bootHarnesses = harnesses;
+       _bootHarnesses = harnesses,
+       _specifyBdRunnerFor = specifyBdRunnerFor;
 
   /// The boot's agent config, as supplied (null ⇒ the coded arming alone).
   final AgentConfig? _bootAgentConfig;
 
   /// The boot's environment registry, as supplied (null ⇒ [environments]).
   final EnvironmentRegistry? _bootHarnesses;
+
+  /// The specify step's post-exit work-bead read-back runner factory.
+  ///
+  /// Null preserves `grid_assets`' production `ProcessBdRunner` default.
+  final BdRunner Function(String workspaceRoot)? _specifyBdRunnerFor;
 
   /// The station's home (absolute): the `RawAssetGrid` root the [build] tree
   /// roots at; the grid's state store lives under `<gridRoot>/.grid/` (Q5a).
@@ -393,6 +410,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     NoteAppender appendNote,
     sdk.SpecifyAuthoredSpecWriter writeSpecifyAuthoredSpec,
   ) => buildCodeRegistry(
+    specifyBdRunnerFor: _specifyBdRunnerFor,
     writeSpecifyAuthoredSpec: writeSpecifyAuthoredSpec,
     assetRegistry: assetRegistry,
     overlaySourceRef: overlaySourceRef,
@@ -411,26 +429,28 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// (`{...kMementoEnvironments, 'house': ...}`); the NAMES and their meaning
   /// are committed Dart, the machine facts are the site binding's (ADR-0002
   /// D2/D3). No endpoint url appears here.
-  EnvironmentRegistry get environments => buildMementoEnvironmentRegistry();
+  EnvironmentRegistry environments(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => buildMementoEnvironmentRegistry();
 
-  /// The station's CODED agent arming — the DART rung of the ladder (ADR-0002
-  /// D2; ADR-0006 D1/D2): codex builds under a claude committee, expressed as
-  /// TYPED preference values. OVERRIDE POINT: a downstream station (lunar)
-  /// authors its own posture in code, never through an operator flag (ADR-0002
+  /// Builds the station's CODED open-seat provider seeds — the DART rung of
+  /// the ladder (ADR-0002 D2; ADR-0006 D1/D2). Each preference owns the seed
+  /// that mounts its exact type. OVERRIDE POINT: a downstream station authors
+  /// its own posture during build, never through an operator flag (ADR-0002
   /// D4).
-  AgentArming get arming => kMementoStationArming;
+  List<SingleChildSeed> seatSeeds(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [for (final seat in kMementoStationArming) seat.provider()];
 
   /// The station-default agent scope — the GENERIC rung of the agent-config
   /// ladder (`--env`, space-zfg). The station's posture no longer rides this
-  /// axis at all: it is expressed as the TYPED seats [arming] mounts, which
+  /// axis at all: it is expressed as the TYPED seats [seatSeeds] mounts, which
   /// out-rank the ambient environment inside `resolveAgentConfig` (ADR-0006
   /// D2/D5). An operator rung is therefore never silently ignored (A20(2)) —
   /// it is simply the LAST rung, under every armed seat.
   late final AgentConfig agentConfig = _bootAgentConfig ?? const AgentConfig();
-
-  /// The station's environment registry, mounted as `HarnessProvider.registry`:
-  /// the boot's, else the class's coded [environments].
-  late final EnvironmentRegistry harnesses = _bootHarnesses ?? environments;
 
   /// The station's shared worktree-provisioning service (leased per
   /// substation), built and OWNED by the off-tree work runtime; null ⇒
@@ -525,6 +545,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     final armedWiring = wiring;
     final git = provisioner;
     final selfTrust = githubSelfTrust;
+    final registry = _bootHarnesses ?? environments(context, configuration);
     // The availability registry (tg-1fa2.5): the substation assets OBSERVE their
     // collaborators (`watch<T>()` — nullable always, absence is a posture),
     // and a watch MISS parks a pending registration with the enclosing
@@ -551,7 +572,7 @@ class SpaceDelegate extends sdk.GridDelegate {
             root: gridRoot,
             assets: [
               HarnessProvider(
-                registry: harnesses,
+                registry: registry,
                 config: agentConfig,
                 // The availability seed (ADR-0006 D3) — LIVE arms only, the
                 // same rule the effect providers below follow: an offline
@@ -561,9 +582,9 @@ class SpaceDelegate extends sdk.GridDelegate {
                 probe: live ? const ProcessEnvironmentProbe().call : null,
                 child: Nest(
                   children: [
-                    // The TYPED seats (ADR-0006 D2), above the fan-out: every
-                    // substation inherits them and can shadow per TYPE.
-                    TypedEnvironmentProvider(arming: arming),
+                    // The open TYPED seats (ADR-0006 D2), above the fan-out:
+                    // every substation inherits them and can shadow per TYPE.
+                    ...seatSeeds(context, configuration),
                     // The station's own resolution, projected for the `up`
                     // banner and the offline suites.
                     const _StationSeatEnvironmentsAssets(),
@@ -696,7 +717,7 @@ class SpaceDelegate extends sdk.GridDelegate {
         substation: 'power_station',
         installationId: '152260260',
       ),
-      arming: const AgentArming(build: BuildAgentEnvironment(kFrontierLadder)),
+      seatSeeds: [const BuildAgentEnvironment(kFrontierLadder).provider()],
     ),
     // the runner — self-host; for space this IS the grid home. Its store
     // mints `space-` (NOT `space_station-`), so the prefix MUST be set
@@ -763,7 +784,7 @@ class SpaceDelegate extends sdk.GridDelegate {
 
 /// Projects the STATION's own typed resolution — the value `up`'s banner
 /// prints and [codedSeatEnvironmentsOf] reads off an offline mount. Mounted
-/// BELOW the station's [TypedEnvironmentProvider] and ABOVE the fan-out, so it
+/// BELOW the station's seat providers and ABOVE the fan-out, so it
 /// reports the station posture, never a substation's.
 final class _StationSeatEnvironmentsAssets extends SingleChildStatelessSeed {
   const _StationSeatEnvironmentsAssets({

@@ -2,61 +2,96 @@ import 'dart:io';
 
 import 'package:grid_assets/grid_assets.dart' as ga;
 import 'package:space_station_assets/space_station_assets.dart'
-    show AgentArming, SeatEnvironments, TypedEnvironmentProvider;
+    show CriticSeatProvider, SeatEnvironments, SeatPreference, SeatProvider;
 import 'package:test/test.dart';
 
-/// The typed-seat arming MECHANISM is the FRAMEWORK's (grid_assets
-/// 0.6.0-rc.9, `lib/src/agent/seat_environments.dart`; power_station bead
-/// `pow-lb0`) and space vends only its POSTURE.
-///
-/// Two checks fence that in both directions, and BOTH failure modes are real:
-/// this file's own `show` clause is lunar's import shape, so dropping the
-/// re-export breaks COMPILATION here; re-exporting a FORK instead compiles but
-/// fails the `isA` pair below; and re-declaring one under `lib/` fails the
-/// source scan. Nothing here asserts a tautology.
+/// The open-seat mechanism is the framework's. Space vends the upstream
+/// declarations unchanged and owns only its ordered posture values.
 void main() {
-  test('the three arming names ARE grid_assets\' declarations', () {
-    // Mutually assignable in both directions ⇒ one declaration (Dart is
-    // nominally typed, so a fork could satisfy neither).
-    expect(const AgentArming(), isA<ga.AgentArming>());
-    expect(const ga.AgentArming(), isA<AgentArming>());
+  test('the four open-seat names ARE grid_assets declarations', () {
+    const upstreamBuild = ga.BuildAgentEnvironment([]);
+    expect(upstreamBuild, isA<SeatPreference>());
+
+    const provider = SeatProvider<ga.BuildAgentEnvironment>(upstreamBuild);
+    expect(provider, isA<ga.SeatProvider<ga.BuildAgentEnvironment>>());
+    expect(
+      const ga.SeatProvider<ga.BuildAgentEnvironment>(upstreamBuild),
+      isA<SeatProvider<ga.BuildAgentEnvironment>>(),
+    );
+
+    const upstreamCritic = ga.CriticAgentEnvironment([]);
+    const criticProvider = CriticSeatProvider(upstreamCritic);
+    expect(criticProvider, isA<ga.CriticSeatProvider>());
+    expect(
+      const ga.CriticSeatProvider(upstreamCritic),
+      isA<CriticSeatProvider>(),
+    );
 
     expect(const SeatEnvironments(), isA<ga.SeatEnvironments>());
     expect(const ga.SeatEnvironments(), isA<SeatEnvironments>());
-
-    const provider = TypedEnvironmentProvider(arming: AgentArming());
-    expect(provider, isA<ga.TypedEnvironmentProvider>());
-    expect(provider.arming, const ga.AgentArming());
   });
 
-  test('space declares none of the three under lib/', () {
-    final lib = Directory('lib');
-    expect(lib.existsSync(), isTrue, reason: 'sanity: the lib dir was found');
+  test(
+    'space declares none of the open-seat or retired shim types under lib/',
+    () {
+      final lib = Directory('lib');
+      expect(lib.existsSync(), isTrue, reason: 'sanity: the lib dir was found');
 
-    final dartFiles = lib
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.dart'))
-        .toList();
-    expect(dartFiles, isNotEmpty, reason: 'sanity: the sources were found');
+      final dartFiles = lib
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .toList();
+      expect(dartFiles, isNotEmpty, reason: 'sanity: the sources were found');
 
-    const retired = <String>[
-      'class AgentArming',
-      'class TypedEnvironmentProvider',
-      'class SeatEnvironments',
-    ];
-    final hits = <String>[
-      for (final f in dartFiles)
-        for (final token in retired)
-          if (f.readAsStringSync().contains(token)) '${f.path}: $token',
-    ];
-    expect(
-      hits,
-      isEmpty,
-      reason:
-          'the arming MECHANISM is vended by grid_assets and re-exported here, '
-          'never re-declared — posture stays, mechanism does not:\n  '
-          '${hits.join('\n  ')}',
-    );
-  });
+      const declarations = <String>[
+        'class SeatPreference',
+        'class SeatProvider',
+        'class CriticSeatProvider',
+        'class SeatEnvironments',
+        'class AgentArming',
+        'class TypedEnvironmentProvider',
+      ];
+      final hits = <String>[
+        for (final file in dartFiles)
+          for (final declaration in declarations)
+            if (file.readAsStringSync().contains(declaration))
+              '${file.path}: $declaration',
+      ];
+      expect(
+        hits,
+        isEmpty,
+        reason:
+            'the open-seat mechanism is vended by grid_assets, never declared '
+            'locally:\n  ${hits.join('\n  ')}',
+      );
+    },
+  );
+
+  test(
+    'the open-seat release is hosted and compatibility exports are absent',
+    () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final barrel = File('lib/space_station_assets.dart').readAsStringSync();
+
+      expect(
+        pubspec,
+        matches(RegExp(r'^  grid_assets: \^0\.7\.0-dev\.1$', multiLine: true)),
+      );
+      expect(
+        pubspec,
+        isNot(matches(RegExp(r'grid_assets:\s*(?:\n\s+)?(?:git|path):'))),
+      );
+      expect(barrel, isNot(contains('AgentArming,')));
+      expect(barrel, isNot(contains('TypedEnvironmentProvider')));
+      for (final name in const <String>[
+        'SeatPreference',
+        'SeatProvider',
+        'CriticSeatProvider',
+        'SeatEnvironments',
+      ]) {
+        expect(barrel, contains(name), reason: name);
+      }
+    },
+  );
 }

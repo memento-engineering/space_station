@@ -2,12 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:beads_dart/beads_dart.dart' show Bead;
+import 'package:beads_dart/beads_dart.dart' show Bead, BdResult, BdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
         AgentCapability,
         AgentConfig,
+        AgentEnvironment,
+        BaseScope,
+        EnvironmentRegistry,
+        EnvBaseRef,
         GitGridAssets,
         GridAssetRosterOverride,
         MountEligibilityAssets,
@@ -21,6 +25,7 @@ import 'package:grid_assets/grid_assets.dart'
         kSpecReviewCircuit,
         kSpecifyStep,
         kUnknownSourceRef,
+        mountedValuesOf,
         resolveOverlaySourceRefSync,
         usageReportPath;
 import 'package:grid_engine/grid_engine.dart'
@@ -89,12 +94,14 @@ void main() {
     String gridRoot = '/home/memento/space_station',
     List<sdk.Substation> appended = const [],
     github.GitHubSelfTrust? githubSelfTrust,
+    BdRunner Function(String workspaceRoot)? specifyBdRunnerFor,
     bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
     appended: appended,
     agentConfig: const AgentConfig(harness: 'claude'),
     githubSelfTrust: githubSelfTrust,
+    specifyBdRunnerFor: specifyBdRunnerFor,
     live: live,
   );
 
@@ -470,8 +477,53 @@ void main() {
   });
 
   group('SpaceDelegate — the station-default agent scope', () {
-    test('harnesses defaults to the first-party claude set', () {
-      expect(delegate().harnesses.names, contains('claude'));
+    test('the mounted registry defaults to the first-party claude set', () {
+      expect(
+        codedSeatEnvironmentsOf(SpaceDelegate.new).registry.names,
+        contains('claude'),
+      );
+    });
+
+    test('environments is a build method resolved by the offline mount', () {
+      _BuildMethodProbeDelegate.reset();
+      final unmounted = _BuildMethodProbeDelegate(gridRoot: '/unmounted');
+      expect(_BuildMethodProbeDelegate.environmentBuilds, 0);
+      expect(_BuildMethodProbeDelegate.delegateBuilds, 0);
+      unmounted.dispose();
+
+      _BuildMethodProbeDelegate.reset();
+      const configuration = sdk.GridConfiguration(
+        settings: {'probe': 'configuration'},
+      );
+      final snapshot = codedSeatEnvironmentsOf(
+        _BuildMethodProbeDelegate.new,
+        gridRoot: '/mounted',
+        configuration: configuration,
+      );
+
+      expect(_BuildMethodProbeDelegate.delegateBuilds, 1);
+      expect(_BuildMethodProbeDelegate.environmentBuilds, 1);
+      expect(_BuildMethodProbeDelegate.disposals, 1);
+      expect(_BuildMethodProbeDelegate.observedContext, isNotNull);
+      expect(_BuildMethodProbeDelegate.observedConfiguration, configuration);
+      expect(snapshot.registry, same(_BuildMethodProbeDelegate.registry));
+    });
+
+    test('constructor registry injection short-circuits environments', () {
+      _BuildMethodProbeDelegate.reset();
+      final injected = station.buildMementoEnvironmentRegistry();
+      final subject = _BuildMethodProbeDelegate(
+        gridRoot: '/injected',
+        harnesses: injected,
+      );
+      try {
+        final mounted = mountedValuesOf<Object>(subject);
+        expect(mounted.whereType<EnvironmentRegistry>().first, same(injected));
+        expect(_BuildMethodProbeDelegate.delegateBuilds, 1);
+        expect(_BuildMethodProbeDelegate.environmentBuilds, 0);
+      } finally {
+        subject.dispose();
+      }
     });
   });
 
@@ -569,8 +621,8 @@ void main() {
           '- [ ] AC-1 — preserve the design\n'
           '- [ ] AC-2 — preserve the acceptance text';
       const nodePath = '$beadId/spec_review/specify';
-      final workspace = Directory.systemTemp.createTempSync(
-        'space-specify-writer-',
+      final workspace = Directory.current.createTempSync(
+        '.space-specify-writer-',
       );
       addTearDown(() => workspace.deleteSync(recursive: true));
       File(p.join(workspace.path, usageReportPath(nodePath)))
@@ -585,7 +637,8 @@ void main() {
           }),
         );
       final recorder = _RecordingSpecWriter();
-      final subject = delegate();
+      final readback = _RecordingBdRunner();
+      final subject = delegate(specifyBdRunnerFor: (_) => readback);
       final registry = subject.buildWorkRegistry(
         (_, _) async {},
         recorder.record,
@@ -610,6 +663,9 @@ void main() {
 
       expect(recorder.calls, [
         (beadId: beadId, design: design, acceptanceCriteria: acceptance),
+      ]);
+      expect(readback.argvs, [
+        ['query', 'id=space-spec', '--json', '--limit', '0'],
       ]);
     });
 
@@ -654,6 +710,91 @@ void main() {
       );
     });
 
+    test('coded seat snapshot owns the mount and includes substation '
+        'preferences', () {
+      final snapshot = codedSeatEnvironmentsOf(
+        _InvalidSubstationSeatDelegate.new,
+      );
+
+      expect(snapshot.station, isNotNull);
+      expect(snapshot.preferences, hasLength(5));
+      expect(
+        snapshot.preferences.last,
+        same(_InvalidSubstationSeatDelegate.invalidPreference),
+      );
+      expect(
+        () => snapshot.preferences.add(
+          _InvalidSubstationSeatDelegate.invalidPreference,
+        ),
+        throwsUnsupportedError,
+      );
+      final refusal = station.preferenceArmingRefusal(
+        snapshot.preferences,
+        snapshot.registry,
+      );
+      expect(refusal, contains('_InvalidSeatPreference'));
+      expect(refusal, contains('normal form'));
+    });
+
+    test('seat policy is read only through mounted build snapshots', () {
+      final delegateSource = File(
+        'lib/src/space_delegate.dart',
+      ).readAsStringSync();
+      final upSource = File('lib/src/up_command.dart').readAsStringSync();
+      final snapshotStart = delegateSource.indexOf(
+        'CodedSeatEnvironmentSnapshot codedSeatEnvironmentsOf(',
+      );
+      final snapshotEnd = delegateSource.indexOf(
+        '\n/// The delegate memento',
+        snapshotStart,
+      );
+      final snapshotSource = delegateSource.substring(
+        snapshotStart,
+        snapshotEnd,
+      );
+      final runSource = upSource.substring(
+        upSource.indexOf('Future<int> run() async'),
+      );
+
+      for (final retired in const <String>[
+        'codedArmingOf',
+        'AgentArming',
+        'TypedEnvironmentProvider',
+      ]) {
+        expect(delegateSource, isNot(contains(retired)), reason: retired);
+        expect(upSource, isNot(contains(retired)), reason: retired);
+      }
+      expect(
+        delegateSource,
+        isNot(matches(RegExp(r'EnvironmentRegistry\s+get\s+environments'))),
+      );
+      expect(
+        delegateSource,
+        isNot(matches(RegExp(r'List<SingleChildSeed>\s+get\s+seatSeeds'))),
+      );
+      expect(
+        delegateSource,
+        isNot(contains('late final EnvironmentRegistry harnesses')),
+      );
+      expect(snapshotSource, contains('mountedValuesOf<Object>('));
+      expect(
+        RegExp(r'mountedValuesOf<Object>\(').allMatches(snapshotSource),
+        hasLength(1),
+      );
+      expect(
+        RegExp(r'codedSeatEnvironmentsOf\(').allMatches(runSource),
+        hasLength(1),
+        reason: 'run owns one requested-home seat snapshot through boot',
+      );
+      expect(runSource, contains('codedSeats.registry'));
+      expect(runSource, contains('codedSeats.preferences'));
+      expect(runSource, contains('codedSeats.station'));
+      expect(
+        upSource,
+        isNot(matches(RegExp(r'delegate\.(?:arming|environments)'))),
+      );
+    });
+
     test('dependency floors and breaking release note name coordinated '
         'widening', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
@@ -664,11 +805,17 @@ void main() {
         pubspec,
         matches(RegExp(r'version: 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
       );
-      expect(pubspec, contains('grid_assets: ^0.6.0'));
+      expect(pubspec, contains('grid_assets: ^0.7.0-dev.1'));
       expect(pubspec, contains('grid_sdk: ^0.3.0'));
+      expect(changelog, matches(RegExp(r'^# Changelog\n\n## Unreleased\n')));
+      const breakingLine =
+          '- Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.';
+      const migrationLine =
+          '  Migration: Extending stations replace an arming getter with seatSeeds(context, configuration), returning one seat.provider() seed per preference, and override environments(context, configuration); lunar adopts this in its separate downstream bead.';
+      expect(changelog, contains('$breakingLine\n$migrationLine\n'));
       expect(
         changelog,
-        matches(RegExp(r'^# Changelog\n\n## 0\.4\.0(?:-rc\.\d+)?')),
+        matches(RegExp(r'^## 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
       );
       expect(changelog, contains('Breaking: coordinated widening (A)'));
       expect(changelog, contains('Lunar adopts it separately'));
@@ -687,7 +834,7 @@ void main() {
         return rest.substring(0, nextPackage?.start ?? rest.length);
       }
 
-      expect(lockEntry('grid_assets'), contains('version: "0.6.0"'));
+      expect(lockEntry('grid_assets'), contains('version: "0.7.0-dev.1"'));
       expect(lockEntry('grid_sdk'), contains('version: "0.3.0"'));
     });
   });
@@ -855,6 +1002,98 @@ class _AssetRosterDelegate extends SpaceDelegate {
   ];
 }
 
+class _BuildMethodProbeDelegate extends SpaceDelegate {
+  _BuildMethodProbeDelegate({
+    required super.gridRoot,
+    super.agentConfig,
+    super.appended,
+    super.harnesses,
+    super.wiring,
+    super.provisioner,
+    super.githubSelfTrust,
+    super.live,
+  });
+
+  static int delegateBuilds = 0;
+  static int environmentBuilds = 0;
+  static int disposals = 0;
+  static TreeContext? observedContext;
+  static sdk.GridConfiguration? observedConfiguration;
+  static EnvironmentRegistry? registry;
+
+  static void reset() {
+    delegateBuilds = 0;
+    environmentBuilds = 0;
+    disposals = 0;
+    observedContext = null;
+    observedConfiguration = null;
+    registry = null;
+  }
+
+  @override
+  EnvironmentRegistry environments(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) {
+    environmentBuilds += 1;
+    observedContext = context;
+    observedConfiguration = configuration;
+    return registry = station.buildMementoEnvironmentRegistry();
+  }
+
+  @override
+  Seed build(TreeContext context, sdk.GridConfiguration configuration) {
+    delegateBuilds += 1;
+    return super.build(context, configuration);
+  }
+
+  @override
+  void dispose() {
+    disposals += 1;
+    super.dispose();
+  }
+}
+
+class _InvalidSubstationSeatDelegate extends SpaceDelegate {
+  _InvalidSubstationSeatDelegate({
+    required super.gridRoot,
+    super.agentConfig,
+    super.appended,
+    super.harnesses,
+    super.wiring,
+    super.provisioner,
+    super.githubSelfTrust,
+    super.live,
+  });
+
+  static const invalidPreference = _InvalidSeatPreference([
+    AgentEnvironment(
+      base: EnvBaseRef('claude', scope: BaseScope.builtin),
+      model: 'opus',
+    ),
+  ]);
+
+  @override
+  List<Seed> substations(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [
+    station.SubstationSeed(
+      name: 'invalid-seat',
+      root: '../invalid-seat',
+      seatSeeds: [invalidPreference.provider()],
+    ),
+  ];
+}
+
+class _InvalidSeatPreference extends station.SeatPreference {
+  const _InvalidSeatPreference(super.entries);
+
+  @override
+  SingleChildSeed provider() =>
+      station.SeatProvider<_InvalidSeatPreference>(this);
+}
+
 String _materializeDiscoverSkill(SpaceDelegate delegate) {
   addTearDown(delegate.dispose);
   final worktree = Directory.systemTemp.createTempSync('delegate-overlay-');
@@ -921,6 +1160,24 @@ final class _RecordingSpecWriter {
     design: design,
     acceptanceCriteria: acceptanceCriteria,
   ));
+}
+
+final class _RecordingBdRunner implements BdRunner {
+  final List<List<String>> argvs = [];
+
+  @override
+  Future<BdResult> run(
+    List<String> args, {
+    Duration? timeout,
+    String? stdin,
+  }) async {
+    argvs.add(List<String>.unmodifiable(args));
+    return const BdResult(
+      exitCode: 0,
+      stdout: '{"schema_version":1,"data":[]}',
+      stderr: '',
+    );
+  }
 }
 
 class _OverlayIdentityDelegate extends SpaceDelegate {

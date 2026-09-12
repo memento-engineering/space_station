@@ -242,15 +242,14 @@ class UpCommand extends Command<int> {
       // the help. The real mounts (guard + tree) happen in [run].
       codedNames: [for (final s in codedRosterOf(delegateFactory)) s.name],
     );
-    // The allowed set of --env is the ARMED REGISTRY, read from the delegate
-    // CLASS (the codedRosterOf precedent above: construct -> read -> dispose)
-    // — never an argparse literal. A hardcoded allowlist is the exact bug
-    // ADR-0002 D4 deletes: it blocked `codex` at the operator surface while
-    // the registry had it armed. It renders into the HELP here; the LOUD
-    // legality check runs in [run] against the boot registry.
-    final armedEnvironments = codedArmingOf(
+    // The allowed set of --env is the mounted registry — never an argparse
+    // literal. A hardcoded allowlist is the exact bug ADR-0002 D4 deletes: it
+    // blocked `codex` at the operator surface while the registry had it armed.
+    // It renders into the HELP here; the LOUD legality check runs in [run]
+    // against the requested-home snapshot.
+    final armedEnvironments = codedSeatEnvironmentsOf(
       delegateFactory,
-    ).environments.names.join(', ');
+    ).registry.names.join(', ');
     argParser
       ..addOption(
         'env',
@@ -323,6 +322,18 @@ class UpCommand extends Command<int> {
     final out = _out;
     final err = _err;
 
+    // Normalize the requested home BEFORE mounting the one coded-seat
+    // snapshot. A missing or relative value uses the deterministic absolute
+    // placeholder because the config guard below will refuse it before any
+    // resolved root is consumed.
+    final homeFlag =
+        (results.option('grid-home') ?? results.option('state-workspace'))
+            ?.trim();
+    final snapshotHome =
+        (homeFlag == null || homeFlag.isEmpty || !p.isAbsolute(homeFlag))
+        ? '/'
+        : homeFlag;
+
     // --- the station-default agent scope (D-C rung 1) + boot-eager
     // validation (OQ-c moment 1: a misconfigured MACHINE fails loud before
     // any tree mounts; a misconfigured BEAD fails per-work at resolution).
@@ -330,9 +341,8 @@ class UpCommand extends Command<int> {
     // ONE knob (ADR-0002 D4). WHERE inference runs is the named environment's
     // own `target` (D1) and its endpoint is the machine-local site binding's
     // (D3) — never argv, so this line is byte-identical on every box. WHICH
-    // model each role rides is the environment's too (D2: arming in committed
-    // Dart), and the per-role posture is the delegate's coded `arming`, never
-    // an operator override.
+    // model each role rides is the environment's too (D2: seat seeds authored
+    // during build), and the per-role posture is never an operator override.
     //
     // Absent, the ambient rung stays the pack default ('claude'); the CODED
     // typed-seat arming still outranks it below.
@@ -343,9 +353,12 @@ class UpCommand extends Command<int> {
     // The station's posture is CODED on the delegate CLASS as TYPED seats; the
     // `--env` flag is the GENERIC rung UNDER all of them (ADR-0006 D2/D5), so
     // the boot config is the flag value alone.
-    final codedArming = codedArmingOf(_delegateFactory);
+    final codedSeats = codedSeatEnvironmentsOf(
+      _delegateFactory,
+      gridRoot: snapshotHome,
+    );
     final agentConfig = flagConfig;
-    final EnvironmentRegistry harnesses = codedArming.environments;
+    final EnvironmentRegistry harnesses = codedSeats.registry;
     // Boot-eager (OQ-c moment 1): the STATION-DEFAULT environment must name an
     // armed, self-consistent environment — a misconfigured MACHINE fails loud
     // before any tree mounts (a misconfigured BEAD fails per-work at
@@ -376,7 +389,7 @@ class UpCommand extends Command<int> {
     // so a delegate that arms a seat at an environment no armed name resolves
     // to fails LOUD here rather than resolving to nothing per-spawn.
     final armingRefusal = preferenceArmingRefusal(
-      codedArming.arming,
+      codedSeats.preferences,
       harnesses,
     );
     if (armingRefusal != null) {
@@ -402,15 +415,9 @@ class UpCommand extends Command<int> {
     // and
     // names are home-independent. The resolved ROOTS are only consumed after
     // those guards pass — i.e. always from a real absolute home.
-    final homeFlag =
-        (results.option('grid-home') ?? results.option('state-workspace'))
-            ?.trim();
     final codedRoster = codedRosterSnapshotOf(
       _delegateFactory,
-      gridRoot:
-          (homeFlag == null || homeFlag.isEmpty || !p.isAbsolute(homeFlag))
-          ? '/'
-          : homeFlag,
+      gridRoot: snapshotHome,
     );
     final codedScopes = codedRoster.scopes;
     final config = spaceStationConfigFrom(
@@ -753,7 +760,7 @@ class UpCommand extends Command<int> {
     // Report the station's TYPED resolution and each tier's EFFECTIVE model
     // through the SAME resolver the spawners use, so environment-native pins
     // and the availability ladder cannot drift.
-    final seats = codedSeatEnvironmentsOf(_delegateFactory);
+    final seats = codedSeats.station;
     final buildModel = resolveAgentConfig(
       tier: AgentTier.frontier,
       ambient: agentConfig,

@@ -112,41 +112,38 @@ void main() {
     });
   });
 
-  group('AgentArming', () {
-    test('the coded station posture arms all FOUR typed seats', () {
-      expect(
-        kMementoStationArming.build,
-        const BuildAgentEnvironment(kCodexLadder),
-      );
-      expect(
-        kMementoStationArming.spec,
-        const SpecAgentEnvironment(kFrontierLadder),
-      );
-      expect(
-        kMementoStationArming.critic,
-        const CriticAgentEnvironment(kMidLadder),
-      );
-      expect(
-        kMementoStationArming.gather,
-        const GatherAgentEnvironment(kCheapLadder),
-      );
-      expect(kMementoStationArming.isEmpty, isFalse);
-      expect(kMementoStationArming.seats, hasLength(4));
-      expect(kMementoStationArming.seats.first, isA<BuildAgentEnvironment>());
+  group('open seat posture', () {
+    test(
+      'the coded station posture arms all FOUR typed seats in stable order',
+      () {
+        expect(kMementoStationArming, const <SeatPreference>[
+          BuildAgentEnvironment(kCodexLadder),
+          SpecAgentEnvironment(kFrontierLadder),
+          CriticAgentEnvironment(kMidLadder),
+          GatherAgentEnvironment(kCheapLadder),
+        ]);
+        expect(
+          kMementoStationArming.map((seat) => seat.runtimeType),
+          orderedEquals(<Type>[
+            BuildAgentEnvironment,
+            SpecAgentEnvironment,
+            CriticAgentEnvironment,
+            GatherAgentEnvironment,
+          ]),
+        );
+      },
+    );
+
+    test('an empty seat list says nothing', () {
+      expect(const <SeatPreference>[], isEmpty);
     });
 
-    test('an empty arming says nothing', () {
-      expect(const AgentArming().isEmpty, isTrue);
-      expect(const AgentArming().seats, isEmpty);
-    });
-
-    test('a seat arming naming ONE type equals itself and not the station', () {
-      const seat = AgentArming(build: BuildAgentEnvironment(kFrontierLadder));
-      expect(
-        seat,
-        const AgentArming(build: BuildAgentEnvironment(kFrontierLadder)),
-      );
-      expect(seat, isNot(kMementoStationArming));
+    test('a one-seat posture equals itself and not the station posture', () {
+      const seats = <SeatPreference>[BuildAgentEnvironment(kFrontierLadder)];
+      expect(seats, const <SeatPreference>[
+        BuildAgentEnvironment(kFrontierLadder),
+      ]);
+      expect(seats, isNot(kMementoStationArming));
     });
   });
 
@@ -162,20 +159,18 @@ void main() {
         base: EnvBaseRef('claude', scope: BaseScope.builtin),
         model: 'opus',
       );
-      final refusal = preferenceArmingRefusal(
-        const AgentArming(build: BuildAgentEnvironment([layered])),
-        registry,
-      );
+      final refusal = preferenceArmingRefusal(<SeatPreference>[
+        BuildAgentEnvironment([layered]),
+      ], registry);
       expect(refusal, isNotNull);
       expect(refusal, contains('BuildAgentEnvironment'));
       expect(refusal, contains('normal form'));
     });
 
     test('an EMPTY armed preference refuses LOUD', () {
-      final refusal = preferenceArmingRefusal(
-        const AgentArming(spec: SpecAgentEnvironment([])),
-        registry,
-      );
+      final refusal = preferenceArmingRefusal(const <SeatPreference>[
+        SpecAgentEnvironment([]),
+      ], registry);
       expect(refusal, isNotNull);
       expect(refusal, contains('SpecAgentEnvironment'));
       expect(refusal, contains('EMPTY'));
@@ -186,23 +181,23 @@ void main() {
         base: EnvBaseRef('claude', scope: BaseScope.builtin),
         model: 'opus',
       );
-      final refusal = preferenceArmingRefusal(
-        AgentArming(
-          critic: CriticAgentEnvironment(
-            kMidLadder,
-            lanes: {
-              CriticLane('adr-alignment'): [layered],
-            },
-          ),
+      final refusal = preferenceArmingRefusal(<SeatPreference>[
+        CriticAgentEnvironment(
+          kMidLadder,
+          lanes: {
+            CriticLane('adr-alignment'): [layered],
+          },
         ),
-        registry,
-      );
+      ], registry);
       expect(refusal, isNotNull);
       expect(refusal, contains('CriticAgentEnvironment'));
     });
 
-    test('an arming that arms nothing passes', () {
-      expect(preferenceArmingRefusal(const AgentArming(), registry), isNull);
+    test('a posture that arms nothing passes', () {
+      expect(
+        preferenceArmingRefusal(const <SeatPreference>[], registry),
+        isNull,
+      );
     });
   });
 }
