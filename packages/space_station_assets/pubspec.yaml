@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.4.0-rc.4
+version: 0.4.0
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -21,17 +21,17 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  beads_dart: ^0.2.0-rc.5
+  beads_dart: ^0.2.0
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  dart_grid_assets: ^0.2.0-dev.1
+  dart_grid_assets: ^0.2.0
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  federated_grid_assets: ^0.3.0-rc.2
+  federated_grid_assets: ^0.3.0
   genesis_tree: ^0.3.0
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
@@ -41,12 +41,12 @@ dependencies:
   # so the arming mechanism this package now consumes and the GitHub assets it
   # composes agree on one grid_assets. Its own composed SubstationSeed is
   # deliberately NOT adopted here — see space-ovd.
-  github_grid_assets: ^0.1.0-rc.9
+  github_grid_assets: ^0.1.0
   # rc.24 is the specify-provenance floor: buildCodeRegistry accepts the
   # station-owned SpecifyAuthoredSpecWriter.
-  grid_assets: ^0.6.0-rc.25
+  grid_assets: ^0.6.0
   # rc.20 is the wave-16 CLI floor.
-  grid_cli: ^0.5.0-rc.23
+  grid_cli: ^0.5.0
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
   # dependency pins the contract version; code imports the public grid_cli
   # barrel rather than introducing a second import surface.
@@ -57,7 +57,7 @@ dependencies:
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint.
   # rc.23 is the wave-16 engine floor.
-  grid_engine: ^0.3.0-rc.23
+  grid_engine: ^0.3.0
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.
@@ -65,13 +65,13 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  grid_exploration: ^0.3.0-rc.4
+  grid_exploration: ^0.3.0
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # rc.16 is the required wave-16 runtime floor.
-  grid_runtime: ^0.2.0-rc.16
+  grid_runtime: ^0.2.0
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
   # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
@@ -81,7 +81,7 @@ dependencies:
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # rc.22 is the specify-provenance floor exposing
   # registryBuilderWithSpecWriter and SpecifyAuthoredSpecWriter.
-  grid_sdk: ^0.3.0-rc.22
+  grid_sdk: ^0.3.0
   path: ^1.9.0
 
 dev_dependencies:
