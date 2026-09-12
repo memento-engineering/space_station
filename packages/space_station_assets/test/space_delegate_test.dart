@@ -801,9 +801,15 @@ void main() {
       );
       expect(pubspec, contains('grid_assets: ^0.7.0-dev.1'));
       expect(pubspec, contains('grid_sdk: ^0.3.0'));
+      expect(changelog, matches(RegExp(r'^# Changelog\n\n## Unreleased\n')));
+      const breakingLine =
+          '- Breaking: Removes SpaceDelegate.arming, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.';
+      const migrationLine =
+          '  Migration: Extending stations replace an arming getter with seatSeeds(context, configuration), returning one seat.provider() seed per preference, and override environments(context, configuration); lunar adopts this in its separate downstream bead.';
+      expect(changelog, contains('$breakingLine\n$migrationLine\n'));
       expect(
         changelog,
-        matches(RegExp(r'^# Changelog\n\n## 0\.4\.0(?:-rc\.\d+)?')),
+        matches(RegExp(r'^## 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
       );
       expect(changelog, contains('Breaking: coordinated widening (A)'));
       expect(changelog, contains('Lunar adopts it separately'));
