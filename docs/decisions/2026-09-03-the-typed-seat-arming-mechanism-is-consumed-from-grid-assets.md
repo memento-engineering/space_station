@@ -15,7 +15,7 @@ register:
   obsoletes: []
   updates: ["memento-s-named-environments-are-complete-const-values"]
   obsoleted-by: null
-  updated-by: []
+  updated-by: ["seat-preferences-mount-as-build-seeds"]
   bead: space-9c9
   legacy-id: null
 ---
