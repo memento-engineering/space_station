@@ -32,7 +32,6 @@ import 'package:genesis_tree/genesis_tree.dart';
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_assets/grid_assets.dart'
     show
-        AgentArming,
         AgentConfig,
         AvailableEnvironments,
         BuildAgentEnvironment,
@@ -42,8 +41,7 @@ import 'package:grid_assets/grid_assets.dart'
         GridAssetRosterOverride,
         MountEligibilityAssets,
         SeatEnvironments,
-        SpecAgentEnvironment,
-        TypedEnvironmentProvider;
+        SpecAgentEnvironment;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, RootCheckout, StationGitService;
@@ -122,8 +120,8 @@ final class MountedSubstationSeed {
   final AgentConfig? agentConfig;
 
   /// The four TYPED lookups resolved AT THIS SUBSTATION'S POSITION — the
-  /// substation's own nested [TypedEnvironmentProvider] resolves its four
-  /// Agent Seats where it arms them, otherwise the station's provider does.
+  /// substation's own nested seat providers resolve the Agent Seats they arm;
+  /// every other seat continues through the station's providers.
   /// This is what makes the per-substation rung offline-PROVABLE through the
   /// existing `mountedValuesOf` walk (ADR-0002 D5, ADR-0006 D2).
   final SeatEnvironments? environments;
@@ -146,7 +144,7 @@ class SubstationSeed extends StatelessSeed {
     this.app,
     this.githubPoll,
     this.landingPolicy,
-    this.arming,
+    this.seatSeeds = const [],
     this.assetRoster,
     this.githubAppCredentialLoader = const github.GitHubAppCredentialLoader(),
     this.githubTransportFactory = github.createGitHubHttpTransport,
@@ -181,14 +179,13 @@ class SubstationSeed extends StatelessSeed {
   /// `github.PrNoMergePolicy`: open or reuse a PR and leave it unmerged.
   final github.GitHubDeliveryPolicy? landingPolicy;
 
-  /// The substation's AGENT ARMING — the PER-SUBSTATION rung of the ladder
-  /// (ADR-0002 D5). Non-null nests a [TypedEnvironmentProvider] OUTERMOST in
-  /// this substation's stack whose armed seats SHADOW the station's for
-  /// everything under this substation; an unarmed seat type keeps resolving
-  /// through the station's. A VALUE on the seed, exactly like [app],
-  /// [githubPoll], or [landingPolicy] — per-substation identity is COMPOSITION,
-  /// never a name-keyed lookup.
-  final AgentArming? arming;
+  /// The substation's AGENT SEAT provider seeds — the PER-SUBSTATION rung of
+  /// the ladder (ADR-0002 D5). These wrap the substation's stack OUTERMOST, so
+  /// each authored seat shadows the station's exact type only for this
+  /// subtree; an unmounted seat type keeps resolving through the station's.
+  /// A VALUE on the seed, exactly like [app], [githubPoll], or [landingPolicy]
+  /// — per-substation identity is COMPOSITION, never a name-keyed lookup.
+  final List<SingleChildSeed> seatSeeds;
 
   /// The substation's explicit exceptions to selector-derived asset selection.
   ///
@@ -221,16 +218,16 @@ class SubstationSeed extends StatelessSeed {
     final mountEligibilityRunnerFor = this.mountEligibilityRunnerFor;
     final landingPolicy = this.landingPolicy;
     final assetRoster = this.assetRoster;
-    // The PER-SUBSTATION rung (ADR-0002 D5; ADR-0006 D2). A NESTED
-    // TypedEnvironmentProvider already shadows the station's for this
-    // substation's subtree, per TYPE: a substation that arms only `build`
-    // leaves spec/critic/gather resolving through the station's providers.
-    final arming = this.arming;
+    // The PER-SUBSTATION rung (ADR-0002 D5; ADR-0006 D2). Nested seat
+    // providers shadow the station's for this substation's subtree, per TYPE:
+    // a substation that arms only `build` leaves spec/critic/gather resolving
+    // through the station's providers.
+    final seatSeeds = List<SingleChildSeed>.of(this.seatSeeds);
     final children = <SingleChildSeed>[
       // OUTERMOST on purpose: every asset, every work mount and the offline
       // projection below must read the substation's Agent Seats, not the
       // station's.
-      if (arming != null) TypedEnvironmentProvider(arming: arming),
+      ...seatSeeds,
       _MountedSubstationSeedAssets(
         githubPollingConfigured: githubPoll != null,
         assetRoster: assetRoster,

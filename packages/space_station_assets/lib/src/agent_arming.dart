@@ -4,12 +4,13 @@
 /// per-substation rung; `docs/adr/ADR-0006-typed-environment-lookup-selects-by-value.md`
 /// D1/D2 the VALUE-keyed typed rung).
 ///
-/// MECHANISM IS VENDED, POSTURE IS NOT. [AgentArming], `TypedEnvironmentProvider`
-/// and `SeatEnvironments` are the FRAMEWORK's — grid_assets 0.6.0-rc.9,
+/// MECHANISM IS VENDED, POSTURE IS NOT. [SeatPreference], `SeatProvider`,
+/// `CriticSeatProvider`, and `SeatEnvironments` are the FRAMEWORK's —
+/// grid_assets 0.7.0-dev.1,
 /// `lib/src/agent/seat_environments.dart` (power_station bead `pow-lb0`) — and
 /// are consumed from there, then re-exported unchanged by
-/// `lib/space_station_assets.dart` so a downstream station's `show AgentArming`
-/// keeps resolving. What this library owns is memento's POSTURE alone: the four
+/// `lib/space_station_assets.dart`. Each open seat owns the provider seed that
+/// mounts it. What this library owns is memento's POSTURE alone: the four
 /// named environments, the four canned ladders, the registry over them, the
 /// coded station arming and the boot-eager guard. Recorded at
 /// `docs/decisions/2026-09-03-the-typed-seat-arming-mechanism-is-consumed-from-grid-assets.md`.
@@ -17,7 +18,7 @@
 /// The ladder is: station default -> substation -> bead (`grid.agent`) ->
 /// step (`StepArgs.params`). This library owns the top TWO rungs as pure
 /// VALUES ("config = VALUES in the tree; impls are DI"): [kMementoStationArming]
-/// is the station's, and a `SubstationSeed`'s own [AgentArming] nests UNDER it.
+/// is the station's, and a `SubstationSeed`'s own seat seeds nest UNDER it.
 /// Selection is by TYPE and VALUE — there is no role map, no name key and no
 /// operator-flag rung (ADR-0002 D4). NO endpoint url appears in this file:
 /// WHERE an environment runs is its own `InferenceTarget`, bound on the box by
@@ -42,7 +43,6 @@ library;
 
 import 'package:grid_assets/grid_assets.dart'
     show
-        AgentArming,
         AgentEnvironment,
         AvailableEnvironments,
         BuildAgentEnvironment,
@@ -53,6 +53,7 @@ import 'package:grid_assets/grid_assets.dart'
         InferenceTarget,
         ModelPreference,
         PromptMode,
+        SeatPreference,
         SeatPrimeMode,
         SpecAgentEnvironment,
         kBuiltinEnvironments;
@@ -158,13 +159,14 @@ const List<AgentEnvironment> kCodexLadder = [
 ///
 /// Every seat is armed, so every invocation is assignable and none silently
 /// rides the ambient rung. A seat overrides ONE type by nesting its own
-/// [AgentArming]; `--env` selects only the GENERIC default below all four.
-const AgentArming kMementoStationArming = AgentArming(
-  build: BuildAgentEnvironment(kCodexLadder),
-  spec: SpecAgentEnvironment(kFrontierLadder),
-  critic: CriticAgentEnvironment(kMidLadder),
-  gather: GatherAgentEnvironment(kCheapLadder),
-);
+/// seat provider seeds; `--env` selects only the GENERIC default below all
+/// four.
+const List<SeatPreference> kMementoStationArming = [
+  BuildAgentEnvironment(kCodexLadder),
+  SpecAgentEnvironment(kFrontierLadder),
+  CriticAgentEnvironment(kMidLadder),
+  GatherAgentEnvironment(kCheapLadder),
+];
 
 /// The FIRST boot-eager refusal across [arming]'s TYPED seats, or null when
 /// every armed seat prefers only environments PRESENT in [registry]'s
@@ -182,11 +184,11 @@ const AgentArming kMementoStationArming = AgentArming(
 /// endpoint that is a site-binding machine fact, and a whole-registry validate
 /// would refuse every boot on it.
 String? preferenceArmingRefusal(
-  AgentArming arming,
+  Iterable<SeatPreference> arming,
   EnvironmentRegistry registry,
 ) {
   final present = AvailableEnvironments.fromRegistry(registry);
-  for (final seat in arming.seats) {
+  for (final seat in arming) {
     final entries = _armedEntries(seat).toList();
     if (entries.isEmpty) {
       return '${seat.runtimeType} arms an EMPTY preference — it would resolve '

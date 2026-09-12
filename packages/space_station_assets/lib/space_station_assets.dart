@@ -68,21 +68,21 @@ import 'src/space_delegate.dart';
 import 'src/status_command.dart';
 import 'src/up_command.dart';
 
-// The arming MECHANISM is the FRAMEWORK's (grid_assets 0.6.0-rc.9,
-// power_station bead pow-lb0) and is RE-EXPORTED under the same names, never
-// forked: a downstream station (lunar) imports `AgentArming` through this
-// barrel and its `show` clause is unchanged by the move.
+// The open-seat MECHANISM is the FRAMEWORK's (grid_assets 0.7.0-dev.1) and is
+// RE-EXPORTED under the same names, never forked. Each SeatPreference vends
+// the provider seed that mounts its exact static type.
 export 'package:grid_assets/grid_assets.dart'
     show
-        AgentArming,
+        CriticSeatProvider,
         GridAssetRosterOverride,
         SeatEnvironments,
-        TypedEnvironmentProvider;
+        SeatPreference,
+        SeatProvider;
 export 'package:grid_sdk/grid_sdk.dart' show AssetKey;
 // The ARMING layer: memento's POSTURE — the station's coded environments as
 // COMPLETE const values, the canned preference ladders, the coded station
-// arming and the boot-eager guard. A downstream station overrides
-// SpaceDelegate.environments/arming with these.
+// arming and the boot-eager guard. A downstream station overrides the
+// SpaceDelegate environments and seatSeeds build methods with these.
 export 'src/agent_arming.dart'
     show
         buildMementoEnvironmentRegistry,
@@ -107,10 +107,10 @@ export 'src/space_delegate.dart'
     show
         CodedRosterSnapshot,
         CodedRosterSnapshotCompatibility,
+        CodedSeatEnvironmentSnapshot,
         NoteAppender,
         SpaceDelegate,
         SpaceDelegateFactory,
-        codedArmingOf,
         codedRosterOf,
         codedRosterSnapshotOf,
         codedSeatEnvironmentsOf,
