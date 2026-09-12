@@ -54,7 +54,7 @@ library;
 import 'dart:io' show InternetAddress, InternetAddressType;
 
 import 'package:args/args.dart';
-import 'package:beads_dart/beads_dart.dart' show Bead;
+import 'package:beads_dart/beads_dart.dart' show Bead, BdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -332,18 +332,25 @@ class SpaceDelegate extends sdk.GridDelegate {
     AgentConfig? agentConfig,
     this.appended = const [],
     EnvironmentRegistry? harnesses,
+    BdRunner Function(String workspaceRoot)? specifyBdRunnerFor,
     this.wiring,
     this.provisioner,
     this.githubSelfTrust,
     this.live = false,
   }) : _bootAgentConfig = agentConfig,
-       _bootHarnesses = harnesses;
+       _bootHarnesses = harnesses,
+       _specifyBdRunnerFor = specifyBdRunnerFor;
 
   /// The boot's agent config, as supplied (null ⇒ the coded arming alone).
   final AgentConfig? _bootAgentConfig;
 
   /// The boot's environment registry, as supplied (null ⇒ [environments]).
   final EnvironmentRegistry? _bootHarnesses;
+
+  /// The specify step's post-exit work-bead read-back runner factory.
+  ///
+  /// Null preserves `grid_assets`' production `ProcessBdRunner` default.
+  final BdRunner Function(String workspaceRoot)? _specifyBdRunnerFor;
 
   /// The station's home (absolute): the `RawAssetGrid` root the [build] tree
   /// roots at; the grid's state store lives under `<gridRoot>/.grid/` (Q5a).
@@ -403,6 +410,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     NoteAppender appendNote,
     sdk.SpecifyAuthoredSpecWriter writeSpecifyAuthoredSpec,
   ) => buildCodeRegistry(
+    specifyBdRunnerFor: _specifyBdRunnerFor,
     writeSpecifyAuthoredSpec: writeSpecifyAuthoredSpec,
     assetRegistry: assetRegistry,
     overlaySourceRef: overlaySourceRef,

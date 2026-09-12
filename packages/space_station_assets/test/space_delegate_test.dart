@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:beads_dart/beads_dart.dart' show Bead;
+import 'package:beads_dart/beads_dart.dart' show Bead, BdResult, BdRunner;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -94,12 +94,14 @@ void main() {
     String gridRoot = '/home/memento/space_station',
     List<sdk.Substation> appended = const [],
     github.GitHubSelfTrust? githubSelfTrust,
+    BdRunner Function(String workspaceRoot)? specifyBdRunnerFor,
     bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
     appended: appended,
     agentConfig: const AgentConfig(harness: 'claude'),
     githubSelfTrust: githubSelfTrust,
+    specifyBdRunnerFor: specifyBdRunnerFor,
     live: live,
   );
 
@@ -635,7 +637,8 @@ void main() {
           }),
         );
       final recorder = _RecordingSpecWriter();
-      final subject = delegate();
+      final readback = _RecordingBdRunner();
+      final subject = delegate(specifyBdRunnerFor: (_) => readback);
       final registry = subject.buildWorkRegistry(
         (_, _) async {},
         recorder.record,
@@ -660,6 +663,9 @@ void main() {
 
       expect(recorder.calls, [
         (beadId: beadId, design: design, acceptanceCriteria: acceptance),
+      ]);
+      expect(readback.argvs, [
+        ['query', 'id=space-spec', '--json', '--limit', '0'],
       ]);
     });
 
@@ -803,7 +809,7 @@ void main() {
       expect(pubspec, contains('grid_sdk: ^0.3.0'));
       expect(changelog, matches(RegExp(r'^# Changelog\n\n## Unreleased\n')));
       const breakingLine =
-          '- Breaking: Removes SpaceDelegate.arming, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.';
+          '- Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.';
       const migrationLine =
           '  Migration: Extending stations replace an arming getter with seatSeeds(context, configuration), returning one seat.provider() seed per preference, and override environments(context, configuration); lunar adopts this in its separate downstream bead.';
       expect(changelog, contains('$breakingLine\n$migrationLine\n'));
@@ -1154,6 +1160,24 @@ final class _RecordingSpecWriter {
     design: design,
     acceptanceCriteria: acceptanceCriteria,
   ));
+}
+
+final class _RecordingBdRunner implements BdRunner {
+  final List<List<String>> argvs = [];
+
+  @override
+  Future<BdResult> run(
+    List<String> args, {
+    Duration? timeout,
+    String? stdin,
+  }) async {
+    argvs.add(List<String>.unmodifiable(args));
+    return const BdResult(
+      exitCode: 0,
+      stdout: '{"schema_version":1,"data":[]}',
+      stderr: '',
+    );
+  }
 }
 
 class _OverlayIdentityDelegate extends SpaceDelegate {
