@@ -70,7 +70,9 @@ void main() {
 
   test('root help records the byte reduction', () {
     // Base: 3,527 → 2,886 bytes. Measured downstream lunar: 4,587 → 3,946.
-    expect(_cliBytes(buildRunner().usage), 2886);
+    // 2,929 since the dart_grid_assets bump on this branch lengthened the
+    // vended `dart` verb's description by 43 bytes (space-qyw rebase).
+    expect(_cliBytes(buildRunner().usage), 2929);
   });
 
   test('up help retains its operational contract', () {
@@ -78,9 +80,9 @@ void main() {
     final codedNames = codedRosterOf(
       SpaceDelegate.new,
     ).map((substation) => substation.name).join(', ');
-    final armedEnvironments = codedArmingOf(
+    final armedEnvironments = codedSeatEnvironmentsOf(
       SpaceDelegate.new,
-    ).environments.names.join(', ');
+    ).registry.names.join(', ');
 
     for (final contract in [
       'safe dry-run is the default',
