@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.5.0-dev.2
 
 - Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.

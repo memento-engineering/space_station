@@ -803,7 +803,7 @@ void main() {
 
       expect(
         pubspec,
-        matches(RegExp(r'version: 0\.5\.0-dev\.1$', multiLine: true)),
+        matches(RegExp(r'version: 0\.5\.0-dev\.2$', multiLine: true)),
       );
       expect(pubspec, contains('grid_assets: ^0.7.0-dev.1'));
       expect(pubspec, contains('grid_sdk: ^0.3.0'));
@@ -815,7 +815,7 @@ void main() {
       expect(changelog, contains('$breakingLine\n$migrationLine\n'));
       expect(
         changelog,
-        matches(RegExp(r'^## 0\.5\.0-dev\.1$', multiLine: true)),
+        matches(RegExp(r'^## 0\.5\.0-dev\.2$', multiLine: true)),
       );
       expect(
         changelog,
