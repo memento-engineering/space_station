@@ -39,41 +39,16 @@ typedef TrajectoryConfigResolution = ({
   String? unrecognizedSoakWindowEpochValue,
 });
 
-/// The trajectory POSTURE keys [trajectoryConfigResolutionFrom] reads — the
-/// whole environment surface of this library, named once so a supervisor can
-/// carry it forward (space-5lh).
-///
-/// `--dual-read` is not, and is not becoming, an `up` flag: the dual-read
-/// posture is `GRID_DUAL_READ`, its discipline `GRID_TRAJECTORY_DISCIPLINE`,
-/// and its soak window `GRID_SOAK_WINDOW_EPOCH`. launchd hands a job NONE of
-/// the launching shell's environment, so a supervised boot would silently
-/// resolve the DEFAULT posture where the foreground boot the operator typed
-/// resolved theirs. An explicit allowlist — never the whole environment —
-/// keeps the plist from becoming a copy of every ambient secret.
-const kTrajectoryPostureEnvironmentKeys = <String>[
-  'GRID_DUAL_READ',
-  'GRID_TRAJECTORY_DISCIPLINE',
-  'GRID_SOAK_WINDOW_EPOCH',
-];
-
-/// The [kTrajectoryPostureEnvironmentKeys] actually SET in [environment],
-/// verbatim — what a supervised boot must inherit to be the same posture as
-/// the foreground one.
-///
-/// Unset keys are omitted rather than written empty: an empty
-/// `GRID_DUAL_READ` is an unrecognized value, not an absent one, and the two
-/// resolve differently.
-Map<String, String> trajectoryPostureEnvironment(
-  Map<String, String> environment,
-) => <String, String>{
-  for (final key in kTrajectoryPostureEnvironmentKeys)
-    if (environment[key] case final value?)
-      if (value.isNotEmpty) key: value,
-};
-
 /// Maps `up`'s tri-state `--trajectory` flag onto the assembly's
 /// [TrajectoryConfig] and preserves invalid dual-read input (stage1-wiring
 /// §1.3).
+///
+/// `--dual-read` is not, and is not becoming, an `up` flag: the dual-read
+/// posture is the ENVIRONMENT's (`GRID_DUAL_READ`), its discipline
+/// `GRID_TRAJECTORY_DISCIPLINE` and its soak window `GRID_SOAK_WINDOW_EPOCH`.
+/// A supervised boot inherits them because `up --daemon` captures every
+/// `GRID_*` key into the LaunchAgent (`supervisedEnvironment`), not because
+/// any of them is a flag.
 ///
 /// The flag is declared `defaultsTo: null` precisely so ABSENT is a third
 /// state: absent ⇒ [TrajectoryConfigMode.auto] (arm iff the home carries the

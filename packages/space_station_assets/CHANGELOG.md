@@ -42,20 +42,31 @@
   nothing: `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` would otherwise
   turn a one-shot refusal into a job launchd respawns forever and resurrects
   on every login.
-- Added: the rendered plist carries an `EnvironmentVariables` block with the
-  trajectory POSTURE keys (`kTrajectoryPostureEnvironmentKeys` /
-  `trajectoryPostureEnvironment`) that are set in the injected environment.
-  launchd hands a job none of the launching shell's environment, so
-  `GRID_DUAL_READ` and its siblings would otherwise resolve to the default
-  posture under supervision. An explicit allowlist, never the whole
-  environment; an unset key is omitted rather than written empty.
+- Added: the rendered plist carries an `EnvironmentVariables` block captured
+  at ARM time (`supervisedEnvironment`): `PATH`, `HOME`, and every `GRID_*`
+  and `BEADS_*` key set in the injected environment. launchd hands a job none
+  of the launching shell's environment, so without this capture `gh`/`git`
+  would not resolve, the App key paths would be missing, and `GRID_DUAL_READ`
+  and its siblings would silently resolve to the default posture under
+  supervision (`--dual-read` is not an `up` flag). An explicit allowlist,
+  never the whole environment; a key set empty is omitted rather than written
+  empty.
+- Added: `up --daemon` refuses an invocation that cannot START. Before a byte
+  is written it runs `<dart> run <runner> --help`
+  (`daemonStartCheckCommand`) from the grid home under exactly the environment
+  the plist will carry, through an injected `StartCheck`/`ProcessStartCheck`
+  seam, and a non-zero exit is `DaemonUnstartable` — no plist, no bootstrap,
+  a refusal naming the command, the directory, the exit code and what the
+  runner said.
 - Fixed: `down --daemon` reports the two halves of the retirement separately.
   `bootout` now runs only against a label launchd actually holds, and the
   verb no longer claims to have removed a plist that was already gone.
 - Added: `codedStationNameOf`, the owned (construct → dispose) read of a
   station factory's `stationName`, and the `launch_agent.dart` surface the
   verbs compose (`LaunchAgentSupervisor`, `Launchctl`/`ProcessLaunchctl`,
-  `renderLaunchAgentPlist`, `daemonProgramArguments`).
+  `StartCheck`/`ProcessStartCheck`, `renderLaunchAgentPlist`,
+  `daemonProgramArguments`, `daemonStartCheckCommand`,
+  `supervisedEnvironment`).
 - Added: `UpCommand`, `DownCommand`, and `StatusCommand` take injected `out`
   and `err` sinks (defaulting to the process streams) and the supervisor
   seams, so the verbs are drivable without a subprocess.

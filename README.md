@@ -119,15 +119,21 @@ What gets written:
 - **RunAtLoad** — boots the station now and on every future login.
 - **StandardOutPath / StandardErrorPath** —
   `<grid-home>/.grid/logs/<station>.{out,err}.log`.
-- **EnvironmentVariables** — the trajectory **posture** keys that are set:
-  `GRID_DUAL_READ`, `GRID_TRAJECTORY_DISCIPLINE`, `GRID_SOAK_WINDOW_EPOCH`.
-  launchd hands a job **none** of the launching shell's environment, so a
-  posture you exported before typing `up --daemon` reaches the supervised
-  resident only because it is written here. This is an explicit allowlist,
-  never a copy of your environment; an unset key is omitted, not written
-  empty. Every other environment key a supervised station needs — `PATH`
-  included — is still an open question (see the bead), not a promise this
-  verb makes.
+- **EnvironmentVariables** — the environment **captured at arm time**:
+  `PATH`, `HOME`, and every `GRID_*` and `BEADS_*` key set in the process that
+  typed the verb. launchd hands a job **none** of the launching shell's
+  environment, so this capture is why `gh`, `git` and `dolt` resolve at all
+  under supervision, why the App key paths (`GRID_GITHUB_APP_KEY_*`) are
+  found, and why the trajectory posture a supervised boot resolves is the one
+  you exported. Note `--dual-read` is **not** an `up` flag and is not becoming
+  one: the dual-read posture is `GRID_DUAL_READ`, and it rides in this block
+  like every other `GRID_*` key. This is an explicit **allowlist**, never a
+  copy of your environment — a plist under `~/Library/LaunchAgents` is a plain
+  file, and an unrelated cloud token has no business in it. A key set to the
+  empty string is omitted rather than written empty (for `GRID_DUAL_READ` an
+  empty value is an *unrecognized* value, not an absent one), and the boot
+  loader still sources the operator env file itself, so a key that lives only
+  there needs no capture.
 
 Re-running `up --daemon` while the label is loaded is a **refusal naming the
 label** — never a second resident. The verb writes nothing outside
@@ -137,6 +143,15 @@ approval of the persistence change.
 **A refusal starts nothing.** The supervisor fork sits below every arming
 refusal: the grid-home guards, the per-substation work-store guard, the
 "nothing resolved" refusal, and a read-only probe of the RS-2 station lock.
+The last refusal is the **start check**: before a byte is written, the verb
+runs `<dart> run <runner> --help` from the grid home under exactly the
+environment the plist will carry, and a non-zero exit refuses naming the
+command, the directory, the exit code and whatever the runner said. That is
+the cheapest thing which exercises the whole resolve-and-load path — pubspec
+resolution, the package config, the import closure, the runner's composition
+root — without arming a station or touching a store. (No VM flags: a one-shot
+probe must not bind the service port the resident wants.)
+
 An invocation that could not boot in the foreground installs no agent at all —
 because `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` would turn one
 refusal into a job launchd respawns forever and brings back on every login.

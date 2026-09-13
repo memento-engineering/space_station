@@ -31,6 +31,7 @@ void main() {
   late Directory substation;
   late Directory launchAgents;
   late _FakeLaunchctl launchctl;
+  late _FakeStartCheck startCheck;
   late List<String> out;
   late List<String> err;
 
@@ -40,6 +41,7 @@ void main() {
     await Directory('${substation.path}/.beads').create(recursive: true);
     launchAgents = await Directory.systemTemp.createTemp('space-5lh-agents');
     launchctl = _FakeLaunchctl();
+    startCheck = _FakeStartCheck();
     out = <String>[];
     err = <String>[];
   });
@@ -54,6 +56,7 @@ void main() {
       UpCommand(
         environment: environment,
         launchctl: launchctl,
+        startCheck: startCheck,
         launchAgentsDirectory: launchAgents.path,
         out: out.add,
         err: err.add,
@@ -191,6 +194,9 @@ void main() {
     // Nothing was started, and the installed recipe is untouched.
     expect(launchctl.bootstrapped, hasLength(1));
     expect(File(plistPath()).existsSync(), isTrue);
+    // The loaded label short-circuits BEFORE the start check: the second
+    // `up --daemon` probed nothing, so `starts nothing` is literal.
+    expect(startCheck.probes, hasLength(1));
   }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
 
   // AC-5 — the refusal ordering the supervisor fork depends on. A launchd job
@@ -419,52 +425,101 @@ void main() {
     );
   });
 
-  // AC-4, end to end through the VERB: the trajectory posture a supervised
-  // boot resolves is the one the operator just typed and exported.
+  // AC-4, end to end through the VERB, under RULING 2026-09-13 (1): the plist
+  // captures PATH, HOME and every GRID_*/BEADS_* key present at arm time.
   //
   // `--trajectory` is a flag and lands in ProgramArguments. The dual-read
   // posture is NOT a flag — it is `GRID_DUAL_READ` — and launchd hands a job
-  // none of the launching shell's environment, so it rides in the plist's
+  // none of the launching shell's environment, so it (and the App key paths
+  // `gh`/`git` need, and PATH itself) rides in the plist's
   // EnvironmentVariables or it is silently lost.
-  test('the trajectory posture rides into the supervised boot: --trajectory '
-      'in ProgramArguments, GRID_DUAL_READ in EnvironmentVariables', () async {
-    expect(
-      await runner(
-        environment: const {
-          'GRID_DUAL_READ': 'observe',
-          'GRID_TRAJECTORY_DISCIPLINE': 'required',
-          'GRID_SOAK_WINDOW_EPOCH': '7',
-          // Not a posture key: it must NOT be copied into a file under
-          // ~/Library/LaunchAgents.
-          'GRID_GITHUB_APP_KEY_MEMENTO': '/keys/memento.pem',
-        },
-      ).run(['up', '--daemon', '--trajectory', ...armable()]),
-      0,
-      reason: err.join('\n'),
-    );
-
-    final plist = await File(plistPath()).readAsString();
-    expect(programArgumentsOf(plist), contains('--trajectory'));
-    expect(environmentVariablesOf(plist), const {
-      'GRID_DUAL_READ': 'observe',
-      'GRID_SOAK_WINDOW_EPOCH': '7',
-      'GRID_TRAJECTORY_DISCIPLINE': 'required',
-    });
-  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
-
   test(
-    'an unset posture key is OMITTED, never written empty',
+    'the arm-time environment rides into the supervised boot: --trajectory '
+    'in ProgramArguments, PATH/HOME/GRID_*/BEADS_* in EnvironmentVariables',
     () async {
       expect(
-        await runner().run(['up', '--daemon', ...armable()]),
+        await runner(
+          environment: const {
+            'PATH': '/opt/homebrew/bin:/usr/bin:/bin',
+            'HOME': '/Users/operator',
+            'GRID_DUAL_READ': 'observe',
+            'GRID_TRAJECTORY_DISCIPLINE': 'required',
+            'GRID_SOAK_WINDOW_EPOCH': '7',
+            // An App key path: under launchd this is the ONLY way `gh` and the
+            // delivery identity resolve, so it must be captured (RULING (1)).
+            'GRID_GITHUB_APP_KEY_MEMENTO': '/keys/memento.pem',
+            'BEADS_DB': 'tranquility',
+            // Neither allowlisted key nor allowlisted prefix: a plist under
+            // ~/Library/LaunchAgents is a plain file, and this must not land in
+            // it.
+            'AWS_SECRET_ACCESS_KEY': 'never-copy-me',
+            // Set but EMPTY: omitted, never written empty — an empty
+            // GRID_DUAL_READ is an unrecognized value, not an absent one.
+            'GRID_SOAK_WINDOW_LABEL': '',
+          },
+        ).run(['up', '--daemon', '--trajectory', ...armable()]),
         0,
         reason: err.join('\n'),
       );
+
       final plist = await File(plistPath()).readAsString();
-      expect(plist, isNot(contains('EnvironmentVariables')));
+      expect(programArgumentsOf(plist), contains('--trajectory'));
+      expect(environmentVariablesOf(plist), const {
+        'BEADS_DB': 'tranquility',
+        'GRID_DUAL_READ': 'observe',
+        'GRID_GITHUB_APP_KEY_MEMENTO': '/keys/memento.pem',
+        'GRID_SOAK_WINDOW_EPOCH': '7',
+        'GRID_TRAJECTORY_DISCIPLINE': 'required',
+        'HOME': '/Users/operator',
+        'PATH': '/opt/homebrew/bin:/usr/bin:/bin',
+      });
+      expect(plist, isNot(contains('never-copy-me')));
+      expect(plist, isNot(contains('AWS_SECRET_ACCESS_KEY')));
+      expect(plist, isNot(contains('GRID_SOAK_WINDOW_LABEL')));
     },
     onPlatform: const {'!mac-os': Skip('launchd is macOS only')},
   );
+
+  test('an environment with nothing to capture writes no EnvironmentVariables '
+      'block at all', () async {
+    expect(
+      await runner().run(['up', '--daemon', ...armable()]),
+      0,
+      reason: err.join('\n'),
+    );
+    final plist = await File(plistPath()).readAsString();
+    expect(plist, isNot(contains('EnvironmentVariables')));
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  // The capture rule as a pure function — the allowlist, the prefixes, and
+  // the empty-value omission, without a station.
+  test('supervisedEnvironment captures PATH, HOME and every GRID_*/BEADS_* '
+      'key, verbatim, and nothing else', () {
+    expect(
+      supervisedEnvironment(const {
+        'PATH': '/usr/bin',
+        'HOME': '/Users/operator',
+        'GRID_DUAL_READ': 'observe',
+        'GRID_GITHUB_APP_KEY_NICHOLAS': '/keys/personal.pem',
+        'BEADS_DB': 'tranquility',
+        'BEADS_PROXY_PORT': '7001',
+        'PATH_TO_NOWHERE': 'not the PATH key',
+        'MY_GRID_TOKEN': 'prefix must ANCHOR, not match anywhere',
+        'OPENAI_API_KEY': 'never',
+        'GRID_EMPTY': '',
+      }),
+      const {
+        'PATH': '/usr/bin',
+        'HOME': '/Users/operator',
+        'GRID_DUAL_READ': 'observe',
+        'GRID_GITHUB_APP_KEY_NICHOLAS': '/keys/personal.pem',
+        'BEADS_DB': 'tranquility',
+        'BEADS_PROXY_PORT': '7001',
+      },
+    );
+    expect(isSupervisedEnvironmentKey('GRID_'), isTrue);
+    expect(isSupervisedEnvironmentKey('PATHS'), isFalse);
+  });
 
   test('the VM self-description flags never reach launchd; the operator ones '
       'do', () {
@@ -475,6 +530,89 @@ void main() {
         '--executable_name=/x/dart',
       ]),
       const ['--enable-vm-service'],
+    );
+  });
+
+  // RULING 2026-09-13 (3) — the LAST refusal. A LaunchAgent for an invocation
+  // that cannot start is worse than no agent: `RunAtLoad` plus
+  // `KeepAlive{SuccessfulExit: false}` turns one failure into a job launchd
+  // respawns forever and brings back on every login.
+  test('up --daemon proves the runner starts from the grid home, under the '
+      'environment the plist will carry, before it writes anything', () async {
+    expect(
+      await runner(
+        environment: const {
+          'PATH': '/opt/homebrew/bin:/usr/bin',
+          'HOME': '/Users/operator',
+          'AWS_SECRET_ACCESS_KEY': 'never-copy-me',
+        },
+      ).run(['up', '--daemon', ...armable()]),
+      0,
+      reason: err.join('\n'),
+    );
+
+    final probe = startCheck.probes.single;
+    // `<dart> run <runner> --help`: the cheapest thing that exercises the
+    // whole resolve-and-load path without arming a station or touching a
+    // store. No VM flags — a one-shot probe must not bind the service port.
+    expect(probe.command, [
+      Platform.resolvedExecutable,
+      'run',
+      'space:space',
+      '--help',
+    ]);
+    expect(probe.command, isNot(contains('--enable-vm-service')));
+    // From WHERE launchd will run it…
+    expect(probe.workingDirectory, home.path);
+    // …under exactly what the plist carries, and nothing more.
+    expect(probe.environment, const {
+      'PATH': '/opt/homebrew/bin:/usr/bin',
+      'HOME': '/Users/operator',
+    });
+    expect(
+      probe.environment,
+      environmentVariablesOf(await File(plistPath()).readAsString()),
+    );
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  test('a runner that cannot start from the grid home refuses, installs '
+      'nothing, and says what failed', () async {
+    startCheck
+      ..exitCode = 254
+      ..output =
+          "Error: Couldn't resolve the package 'space' in 'package:space/space.dart'.";
+
+    final code = await runner().run(['up', '--daemon', ...armable()]);
+
+    expect(code, 64);
+    expect(err.join('\n'), contains('cannot start'));
+    expect(err.join('\n'), contains('exited 254'));
+    expect(err.join('\n'), contains(home.path));
+    expect(err.join('\n'), contains("Couldn't resolve the package"));
+    // Nothing written, nothing loaded — not even a half-installed recipe.
+    expect(launchctl.bootstrapped, isEmpty);
+    expect(launchAgents.listSync(), isEmpty);
+    expect(File(plistPath()).existsSync(), isFalse);
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  test('a silent start-check failure still refuses, naming the exit code '
+      'alone', () async {
+    startCheck.exitCode = 1;
+
+    expect(await runner().run(['up', '--daemon', ...armable()]), 64);
+    expect(err.join('\n'), contains('exited 1'));
+    expect(launchctl.bootstrapped, isEmpty);
+    expect(launchAgents.listSync(), isEmpty);
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  test('the start-check command is the runner invocation plus --help, with '
+      'the dart WORD replaced by the resolved binary', () {
+    expect(
+      daemonStartCheckCommand(
+        dartExecutable: '/opt/dart',
+        runnerInvocation: 'dart run lunar:lunar',
+      ),
+      const ['/opt/dart', 'run', 'lunar:lunar', '--help'],
     );
   });
 
@@ -529,6 +667,36 @@ void main() {
     expect(launchctl.bootstrapped, isEmpty);
     expect(launchAgents.listSync(), isEmpty);
   });
+}
+
+/// One recorded start probe.
+typedef _Probe = ({
+  List<String> command,
+  String workingDirectory,
+  Map<String, String> environment,
+});
+
+/// A scripted [StartCheck] — a Fake, never a mock: it records what was probed
+/// and answers from plain state, so a test proves the refusal without paying
+/// for a real `dart run` compile.
+class _FakeStartCheck implements StartCheck {
+  int exitCode = 0;
+  String output = '';
+  final List<_Probe> probes = <_Probe>[];
+
+  @override
+  Future<StartCheckResult> probe({
+    required List<String> command,
+    required String workingDirectory,
+    required Map<String, String> environment,
+  }) async {
+    probes.add((
+      command: command,
+      workingDirectory: workingDirectory,
+      environment: environment,
+    ));
+    return (exitCode: exitCode, output: output);
+  }
 }
 
 /// A recording [Launchctl] — a Fake, never a mock: it holds the real state

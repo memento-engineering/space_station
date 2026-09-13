@@ -119,8 +119,9 @@ export 'src/space_delegate.dart'
         codedStationNameOf,
         kMementoOrgApp;
 // The launchd supervisor behind `up --daemon` / `down --daemon` (space-5lh):
-// the label derivation, the ProgramArguments surgery, the plist renderer, and
-// the `launchctl` seam a test binds a Fake to.
+// the label derivation, the ProgramArguments surgery, the arm-time
+// environment capture, the pre-arm start check, the plist renderer, and the
+// `launchctl` / start-check seams a test binds Fakes to.
 export 'src/launch_agent.dart'
     show
         DaemonAlreadyLoaded,
@@ -131,15 +132,25 @@ export 'src/launch_agent.dart'
         DaemonStopOutcome,
         DaemonStopRefused,
         DaemonStopped,
+        DaemonUnstartable,
         LaunchAgentSupervisor,
         Launchctl,
         LaunchctlProcess,
         LaunchctlResult,
         ProcessLaunchctl,
+        ProcessStartCheck,
+        StartCheck,
+        StartCheckProcess,
+        StartCheckResult,
         daemonProgramArguments,
+        daemonStartCheckCommand,
+        isSupervisedEnvironmentKey,
+        kSupervisedEnvironmentKeys,
+        kSupervisedEnvironmentPrefixes,
         launchAgentLabel,
         launchAgentsDirectoryFor,
         renderLaunchAgentPlist,
+        supervisedEnvironment,
         supervisedVmArguments;
 // The COMPOSED SEED (space-47t): the ONE per-substation seed class a
 // station's substations() authors (value config: name/root/prefix + an

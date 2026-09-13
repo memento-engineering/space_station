@@ -273,12 +273,14 @@ class UpCommand extends Command<int> {
     this.runnerName = 'space',
     this.runnerInvocation = kSpaceRunner,
     Launchctl launchctl = const ProcessLaunchctl(),
+    StartCheck startCheck = const ProcessStartCheck(),
     String? launchAgentsDirectory,
     void Function(String message)? out,
     void Function(String message)? err,
   }) : _delegateFactory = delegateFactory,
        _environment = environment,
        _launchctl = launchctl,
+       _startCheck = startCheck,
        _launchAgentsDirectory = launchAgentsDirectory,
        _out = out ?? stdout.writeln,
        _err = err ?? stderr.writeln {
@@ -333,9 +335,11 @@ class UpCommand extends Command<int> {
         help:
             'Hand this exact invocation (minus --daemon) to a launchd '
             'LaunchAgent so no seat session owns the resident; macOS only. '
-            'An already-loaded label is refused, never a second resident. '
-            'The supervised process gets its OWN Local Network prompt — '
-            'approve it once.',
+            'An already-loaded label is refused, never a second resident, and '
+            'an invocation whose --help does not exit 0 from the grid home '
+            'installs nothing. PATH, HOME and every GRID_*/BEADS_* key are '
+            'captured into the agent. The supervised process gets its OWN '
+            'Local Network prompt — approve it once.',
       );
   }
 
@@ -344,6 +348,10 @@ class UpCommand extends Command<int> {
   /// The `launchctl` client `--daemon` supervises through, INJECTED so a test
   /// never mutates the operator's real launchd domain.
   final Launchctl _launchctl;
+
+  /// The pre-arm start probe, INJECTED so a test never pays for a real
+  /// `dart run` compile to prove the refusal.
+  final StartCheck _startCheck;
 
   /// An explicit LaunchAgents directory; absent, it is derived from the
   /// INJECTED [_environment]'s `HOME` (this library reads no ambient
@@ -1048,6 +1056,7 @@ class UpCommand extends Command<int> {
       stationName: codedStationNameOf(_delegateFactory),
       launchAgentsDirectory: directory,
       launchctl: _launchctl,
+      startCheck: _startCheck,
     );
     final outcome = await supervisor.arm(
       gridHome: gridHome,
@@ -1058,11 +1067,19 @@ class UpCommand extends Command<int> {
         verb: name,
         arguments: arguments,
       ),
+      // The LAST refusal (RULING 2026-09-13): `<runner> --help` must exit 0
+      // from the grid home under the captured environment, or no agent is
+      // installed at all.
+      startCheckCommand: daemonStartCheckCommand(
+        dartExecutable: Platform.resolvedExecutable,
+        runnerInvocation: runnerInvocation,
+      ),
       // launchd hands a job NONE of the launching shell's environment, so the
-      // trajectory posture the operator exported is written into the recipe or
-      // it is silently lost. The allowlist is the trajectory surface's own
-      // three keys — never the whole environment.
-      environmentVariables: trajectoryPostureEnvironment(_environment),
+      // posture the operator exported is written into the recipe or it is
+      // silently lost — `PATH` and `HOME` so `gh`, `git` and `dolt` resolve at
+      // all, every `GRID_*`/`BEADS_*` key for the grid's own posture and App
+      // key paths. An allowlist, never the whole environment.
+      environmentVariables: supervisedEnvironment(_environment),
     );
     switch (outcome) {
       case DaemonArmed(
@@ -1089,6 +1106,21 @@ class UpCommand extends Command<int> {
           '— refusing to start a second resident over the same station. Run '
           '`$runnerName down --daemon` first.',
         );
+        return 64;
+      case DaemonUnstartable(
+        :final command,
+        :final workingDirectory,
+        :final exitCode,
+        :final message,
+      ):
+        err(
+          '$runnerName up: refusing to install a LaunchAgent for an '
+          'invocation that cannot start — `${command.join(' ')}` exited '
+          '$exitCode in $workingDirectory under the environment the plist '
+          'would carry. launchd would respawn a job that cannot boot forever '
+          'and bring it back on every login.',
+        );
+        if (message.isNotEmpty) err('  $message');
         return 64;
       case DaemonArmRefused(:final label, :final message):
         err('$runnerName up: launchctl refused to bootstrap $label — $message');

@@ -18,6 +18,14 @@
 /// template: the plist is derived from the invocation the operator just typed,
 /// so it cannot drift from the station it supervises.
 ///
+/// Two things the plist must carry that the operator's shell carries
+/// implicitly (RULING 2026-09-13): the ENVIRONMENT — launchd hands a job none
+/// of the launching shell's, so `PATH`, `HOME` and every `GRID_*`/`BEADS_*`
+/// key are captured at arm time ([supervisedEnvironment]) or `gh`, `git` and
+/// the App keys simply do not resolve — and a START CHECK
+/// ([daemonStartCheckCommand]) proving the invocation can run from the grid
+/// home under exactly that environment before any agent is installed.
+///
 /// Nothing here reads the ambient process environment
 /// (`no_watcher_no_gate_test` bans that under `lib/`): the LaunchAgents
 /// directory arrives as a VALUE from the composition root, and the launchd
@@ -113,6 +121,124 @@ class ProcessLaunchctl implements Launchctl {
   );
 }
 
+/// One start-probe run's outcome: the exit status and whatever the process
+/// said, collapsed to one stream.
+typedef StartCheckResult = ({int exitCode, String output});
+
+/// Runs one process on behalf of [ProcessStartCheck].
+///
+/// The named parameters are exactly the three a faithful probe needs: a
+/// working directory, an environment, and the switch that keeps the AMBIENT
+/// environment out of it.
+typedef StartCheckProcess =
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+      Map<String, String>? environment,
+      bool includeParentEnvironment,
+    });
+
+/// Proves a runner invocation can START where launchd will run it.
+///
+/// An INTERFACE for the same reason [Launchctl] is: a test must be able to
+/// drive both answers without paying for a real `dart run` compile, and a
+/// Fake (never a mock) records exactly what was probed.
+abstract interface class StartCheck {
+  /// Runs [command] in [workingDirectory] under [environment] ALONE.
+  Future<StartCheckResult> probe({
+    required List<String> command,
+    required String workingDirectory,
+    required Map<String, String> environment,
+  });
+}
+
+/// The real [StartCheck]: a subprocess under the supervised posture.
+///
+/// `includeParentEnvironment: false` is the whole point — launchd hands a job
+/// nothing but the plist's `EnvironmentVariables`, so a probe that inherited
+/// this shell's environment would pass on keys the supervised boot will never
+/// see. The probe is run with the SAME captured map the plist carries, which
+/// is what makes it evidence rather than decoration.
+class ProcessStartCheck implements StartCheck {
+  /// Creates the probe. [run] is the process seam.
+  const ProcessStartCheck({this.run = Process.run});
+
+  /// How a subprocess is started.
+  final StartCheckProcess run;
+
+  @override
+  Future<StartCheckResult> probe({
+    required List<String> command,
+    required String workingDirectory,
+    required Map<String, String> environment,
+  }) async {
+    if (command.isEmpty) {
+      throw ArgumentError.value(
+        command,
+        'command',
+        'a start check needs an executable',
+      );
+    }
+    final result = await run(
+      command.first,
+      command.sublist(1),
+      workingDirectory: workingDirectory,
+      environment: environment,
+      includeParentEnvironment: false,
+    );
+    final said = ['${result.stderr}'.trim(), '${result.stdout}'.trim()]
+        .where((line) => line.isNotEmpty)
+        .join(' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+    return (exitCode: result.exitCode, output: said);
+  }
+}
+
+/// The environment keys captured VERBATIM into the plist at arm time
+/// (space-5lh, RULING 2026-09-13).
+///
+/// `PATH` so the supervised resident can find `gh`, `git` and `dolt` —
+/// launchd's own default path is a bare system one — and `HOME` so every
+/// tool that resolves a config, a credential or a pub cache under it resolves
+/// the same one the operator did.
+const kSupervisedEnvironmentKeys = <String>['PATH', 'HOME'];
+
+/// The key PREFIXES captured wholesale at arm time.
+///
+/// `GRID_*` carries the grid's own posture and App key paths
+/// (`GRID_DUAL_READ`, `GRID_GITHUB_APP_KEY_*`, …) and `BEADS_*` the work
+/// store's. Everything else is left behind: a plist under
+/// `~/Library/LaunchAgents` is a plain file, and copying an unrelated cloud
+/// token into it is a leak the operator never asked for.
+const kSupervisedEnvironmentPrefixes = <String>['GRID_', 'BEADS_'];
+
+/// Whether [key] is carried into the supervised boot.
+bool isSupervisedEnvironmentKey(String key) =>
+    kSupervisedEnvironmentKeys.contains(key) ||
+    kSupervisedEnvironmentPrefixes.any(key.startsWith);
+
+/// The arm-time environment a supervised boot inherits: the allowlisted keys
+/// actually SET in [environment], verbatim.
+///
+/// launchd hands a job NONE of the launching shell's environment, so a key
+/// the operator exported before typing `up --daemon` reaches the supervised
+/// resident only by being written into the plist. This is the capture, and it
+/// is an ALLOWLIST — never the whole environment.
+///
+/// A key set to the empty string is OMITTED rather than written empty: for
+/// `GRID_DUAL_READ` an empty value is an *unrecognized* value, not an absent
+/// one, and the two resolve differently.
+///
+/// Note the boot loader also sources the operator's own env file, so a key
+/// that lives only in that file needs no capture here.
+Map<String, String> supervisedEnvironment(Map<String, String> environment) =>
+    <String, String>{
+      for (final entry in environment.entries)
+        if (isSupervisedEnvironmentKey(entry.key))
+          if (entry.value.isNotEmpty) entry.key: entry.value,
+    };
+
 /// The launchd label for the station named [stationName].
 ///
 /// Derived from the STATION word alone (`SpaceDelegate.stationName`), so a
@@ -168,12 +294,8 @@ List<String> daemonProgramArguments({
   required String verb,
   required List<String> arguments,
 }) {
-  final invocation = runnerInvocation
-      .split(RegExp(r'\s+'))
-      .where((token) => token.isNotEmpty)
-      .toList();
   // Token 0 is the `dart` WORD; launchd needs the resolved binary instead.
-  final tail = invocation.isEmpty ? <String>[] : invocation.sublist(1);
+  final tail = _invocationTail(runnerInvocation);
   final runIndex = tail.indexOf('run');
   final spliced = runIndex < 0
       ? [...vmArguments, ...tail]
@@ -190,6 +312,35 @@ List<String> daemonProgramArguments({
       if (argument != '--daemon') argument,
   ];
 }
+
+/// The runner invocation MINUS its leading `dart` word.
+List<String> _invocationTail(String runnerInvocation) {
+  final invocation = runnerInvocation
+      .split(RegExp(r'\s+'))
+      .where((token) => token.isNotEmpty)
+      .toList();
+  return invocation.isEmpty ? <String>[] : invocation.sublist(1);
+}
+
+/// The command that PROVES this station's runner can start from the grid home
+/// (space-5lh, RULING 2026-09-13): `<dart> run <runner> --help`.
+///
+/// A LaunchAgent for an invocation that cannot start is worse than no agent:
+/// `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` turns one failure into
+/// a job launchd respawns forever and brings back on every login. The verb
+/// therefore runs the runner's own `--help` — the cheapest thing that
+/// exercises the ENTIRE resolve-and-load path (pubspec resolution, the
+/// package config, the whole import closure, the runner's composition root)
+/// without arming a station or touching a store — from the working directory
+/// launchd will use, under the environment the plist will carry.
+///
+/// The VM arguments are deliberately NOT spliced in: `--enable-vm-service`
+/// binds a port, and a one-shot probe must not race the very resident it is
+/// clearing the way for.
+List<String> daemonStartCheckCommand({
+  required String dartExecutable,
+  required String runnerInvocation,
+}) => [dartExecutable, ..._invocationTail(runnerInvocation), '--help'];
 
 /// Renders a LaunchAgent property list.
 ///
@@ -323,6 +474,37 @@ final class DaemonAlreadyLoaded extends DaemonArmOutcome {
   const DaemonAlreadyLoaded({required super.label, required super.plistPath});
 }
 
+/// The invocation could not START from the grid home, so nothing was written
+/// and nothing was loaded.
+///
+/// The refusal that keeps launchd from adopting a broken recipe: a job that
+/// exits non-zero under `KeepAlive{SuccessfulExit: false}` is respawned
+/// (throttled) forever and comes back on every login, so an unstartable
+/// invocation must never become an agent.
+final class DaemonUnstartable extends DaemonArmOutcome {
+  /// Creates the start-check refusal.
+  const DaemonUnstartable({
+    required super.label,
+    required super.plistPath,
+    required this.command,
+    required this.workingDirectory,
+    required this.exitCode,
+    required this.message,
+  });
+
+  /// What was run.
+  final List<String> command;
+
+  /// Where it was run.
+  final String workingDirectory;
+
+  /// What it exited with.
+  final int exitCode;
+
+  /// What it said, collapsed to one line (may be empty).
+  final String message;
+}
+
 /// `launchctl bootstrap` refused; the half-written plist was removed.
 final class DaemonArmRefused extends DaemonArmOutcome {
   /// Creates the bootstrap refusal.
@@ -402,6 +584,7 @@ class LaunchAgentSupervisor {
     required this.stationName,
     required this.launchAgentsDirectory,
     this.launchctl = const ProcessLaunchctl(),
+    this.startCheck = const ProcessStartCheck(),
   });
 
   /// The STATION word (`SpaceDelegate.stationName`) the label derives from.
@@ -412,6 +595,9 @@ class LaunchAgentSupervisor {
 
   /// The `launchctl` client.
   final Launchctl launchctl;
+
+  /// The pre-arm start probe.
+  final StartCheck startCheck;
 
   /// This station's launchd label.
   String get label => launchAgentLabel(stationName);
@@ -424,15 +610,36 @@ class LaunchAgentSupervisor {
 
   /// Renders, installs, and loads the agent for [programArguments].
   ///
-  /// A LOADED label short-circuits BEFORE anything is written or started: a
-  /// second supervised boot is a refusal, never a second resident.
+  /// A LOADED label short-circuits BEFORE anything is probed, written or
+  /// started: a second supervised boot is a refusal, never a second resident.
+  ///
+  /// [startCheckCommand] is then run from [gridHome] under
+  /// [environmentVariables] alone (`daemonStartCheckCommand`), and a non-zero
+  /// exit is a refusal that writes nothing: launchd must not adopt a recipe
+  /// that cannot start, because it would respawn it forever.
   Future<DaemonArmOutcome> arm({
     required String gridHome,
     required List<String> programArguments,
+    required List<String> startCheckCommand,
     Map<String, String> environmentVariables = const <String, String>{},
   }) async {
     if (await launchctl.isLoaded(label)) {
       return DaemonAlreadyLoaded(label: label, plistPath: plistPath);
+    }
+    final started = await startCheck.probe(
+      command: startCheckCommand,
+      workingDirectory: gridHome,
+      environment: environmentVariables,
+    );
+    if (started.exitCode != 0) {
+      return DaemonUnstartable(
+        label: label,
+        plistPath: plistPath,
+        command: startCheckCommand,
+        workingDirectory: gridHome,
+        exitCode: started.exitCode,
+        message: started.output,
+      );
     }
     final logs = p.join(gridHome, '.grid', 'logs');
     await Directory(logs).create(recursive: true);
