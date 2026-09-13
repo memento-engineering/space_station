@@ -9,6 +9,12 @@
 /// Track G-space (tg-33n): the station it reports on is the one `up` boots from
 /// its `SpaceDelegate`; `status` re-seats over that station by attaching to the
 /// SAME state-store lock (`--state-workspace`).
+///
+/// space-5lh adds ONE line, on top of the same lock read: `supervised: launchd
+/// <label>` whenever launchd is holding this station's LaunchAgent. It is a
+/// supervisor fact, not a station fact, so it rides every rendering — UP,
+/// DOWN, and every stale/unreachable lock verdict — and answers the question
+/// the lock cannot: whether anything will bring this station back.
 library;
 
 import 'dart:io';
@@ -37,12 +43,30 @@ import 'package:grid_cli/src/station_attach.dart'
 import 'package:grid_runtime/grid_runtime.dart' show BeadOwnershipPredicate;
 
 import 'attach_support.dart';
+import 'launch_agent.dart';
+import 'space_delegate.dart';
 import 'trajectory_surface.dart';
 
 /// `space status`: renders the resident station's status, live when it's up.
 class StatusCommand extends Command<int> {
   /// Creates the status command.
-  StatusCommand() {
+  ///
+  /// [delegateFactory] supplies the STATION word the launchd label derives
+  /// from; [environment], [launchctl] and [launchAgentsDirectory] are the
+  /// supervisor seams the `supervised:` line reads through.
+  StatusCommand({
+    SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+    Map<String, String> environment = const <String, String>{},
+    Launchctl launchctl = const ProcessLaunchctl(),
+    String? launchAgentsDirectory,
+    void Function(String message)? out,
+    void Function(String message)? err,
+  }) : _delegateFactory = delegateFactory,
+       _environment = environment,
+       _launchctl = launchctl,
+       _launchAgentsDirectory = launchAgentsDirectory,
+       _out = out ?? stdout.writeln,
+       _err = err ?? stderr.writeln {
     argParser
       ..addOption('state-workspace', help: stateWorkspaceHelp)
       ..addOption(
@@ -66,6 +90,22 @@ class StatusCommand extends Command<int> {
       );
   }
 
+  final SpaceDelegateFactory _delegateFactory;
+
+  /// The INJECTED process environment; `HOME` locates `~/Library/LaunchAgents`.
+  final Map<String, String> _environment;
+
+  /// The `launchctl` client, INJECTED so a test never probes the operator's
+  /// real launchd domain.
+  final Launchctl _launchctl;
+
+  /// An explicit LaunchAgents directory; absent, derived from [_environment].
+  final String? _launchAgentsDirectory;
+
+  /// The verb's sinks, INJECTED; they default to the process streams.
+  final void Function(String message) _out;
+  final void Function(String message) _err;
+
   @override
   final String name = 'status';
 
@@ -85,99 +125,134 @@ class StatusCommand extends Command<int> {
     );
     switch (resolved) {
       case StateWorkspaceRefusal(:final message, :final code):
-        stderr.writeln(message);
+        _err(message);
         return code;
       case StateWorkspaceFound(:final home, :final workspace):
-        final AttachResult result = await StationAttach().status(
-          stateWorkspaceDir: home,
-        );
-        switch (result) {
-          case Up(:final payload):
-            _renderUp(payload);
-            return 0;
-          case SlowUp(:final payload, :final elapsed):
-            _renderUp(payload);
-            stdout.writeln(
-              '  door: SLOW — /status answered after ${elapsed.inSeconds} s '
-              '(alive but saturated; a status that reads DOWN under load is '
-              'this door, not the resident)',
-            );
-            return 0;
-          case Down():
-            await _renderDownFallback(results, workspace);
-            return 0;
-          case Starting(:final pid):
-            stdout
-              ..writeln('station: STARTING')
-              ..writeln('  state store: $home')
-              ..writeln('  pid: $pid');
-            return 0;
-          case DeadPid(:final pid, :final record):
-            // A STALE LOCK, and it is worth its own case rather than folding
-            // into Down: the lock names a pid the probe found dead, so the
-            // store is not in use and a fresh `up` will steal it. Down would
-            // render the same word and hide the reason a boot was refused.
-            stderr.writeln(
-              'status: station.lock at $home/.grid/station.lock names pid '
-              '$pid, but no such process is alive — the lock is STALE '
-              '(record: $record). (station: down) — a fresh `up` steals a '
-              'dead lock automatically; nothing needs clearing by hand.',
-            );
-            return 1;
-          case Unreachable(:final pid, :final record):
-            stderr.writeln(
-              'status: station.lock at $home/.grid/station.lock '
-              'names pid $pid but it is unreachable (dead, or '
-              'alive-but-not-answering — record: $record). (station: down) '
-              '— a fresh `up` steals a dead lock automatically; if $pid is '
-              'alive, investigate it directly.',
-            );
-            return 1;
-          case Unauthorized(:final record):
-            stderr.writeln(
-              'status: the station at ${record.controlUrl} rejected this '
-              'client\'s bearer token (401) — the lock may be stale or '
-              'foreign. Investigate directly; refusing to guess.',
-            );
-            return 1;
-        }
+        final code = await _render(results, home, workspace);
+        final supervised = await _supervisedLine();
+        if (supervised != null) _out(supervised);
+        return code;
     }
+  }
+
+  /// The lock-derived rendering — unchanged by space-5lh.
+  Future<int> _render(
+    ArgResults results,
+    String home,
+    BeadsWorkspace workspace,
+  ) async {
+    final AttachResult result = await StationAttach().status(
+      stateWorkspaceDir: home,
+    );
+    switch (result) {
+      case Up(:final payload):
+        _renderUp(payload);
+        return 0;
+      case SlowUp(:final payload, :final elapsed):
+        _renderUp(payload);
+        _out(
+          '  door: SLOW — /status answered after ${elapsed.inSeconds} s '
+          '(alive but saturated; a status that reads DOWN under load is '
+          'this door, not the resident)',
+        );
+        return 0;
+      case Down():
+        await _renderDownFallback(results, workspace);
+        return 0;
+      case Starting(:final pid):
+        _out('station: STARTING');
+        _out('  state store: $home');
+        _out('  pid: $pid');
+        return 0;
+      case DeadPid(:final pid, :final record):
+        // A STALE LOCK, and it is worth its own case rather than folding
+        // into Down: the lock names a pid the probe found dead, so the
+        // store is not in use and a fresh `up` will steal it. Down would
+        // render the same word and hide the reason a boot was refused.
+        _err(
+          'status: station.lock at $home/.grid/station.lock names pid '
+          '$pid, but no such process is alive — the lock is STALE '
+          '(record: $record). (station: down) — a fresh `up` steals a '
+          'dead lock automatically; nothing needs clearing by hand.',
+        );
+        return 1;
+      case Unreachable(:final pid, :final record):
+        _err(
+          'status: station.lock at $home/.grid/station.lock '
+          'names pid $pid but it is unreachable (dead, or '
+          'alive-but-not-answering — record: $record). (station: down) '
+          '— a fresh `up` steals a dead lock automatically; if $pid is '
+          'alive, investigate it directly.',
+        );
+        return 1;
+      case Unauthorized(:final record):
+        _err(
+          'status: the station at ${record.controlUrl} rejected this '
+          'client\'s bearer token (401) — the lock may be stale or '
+          'foreign. Investigate directly; refusing to guess.',
+        );
+        return 1;
+    }
+  }
+
+  /// `supervised: launchd <label>` when launchd holds this station's agent,
+  /// else null.
+  ///
+  /// A supervisor fact the lock cannot carry: a DOWN station with a loaded
+  /// agent will come back, and an UP station with none dies with its shell.
+  /// Silent — never a refusal — when launchd is not the supervisor here
+  /// (non-macOS, no HOME) or when the probe itself fails: `status` must stay
+  /// readable on a box that never installed an agent.
+  Future<String?> _supervisedLine() async {
+    if (!Platform.isMacOS) return null;
+    final directory =
+        _launchAgentsDirectory ?? launchAgentsDirectoryFor(_environment);
+    if (directory == null) return null;
+    final supervisor = LaunchAgentSupervisor(
+      stationName: codedStationNameOf(_delegateFactory),
+      launchAgentsDirectory: directory,
+      launchctl: _launchctl,
+    );
+    try {
+      if (!await supervisor.isLoaded) return null;
+    } on Object {
+      return null;
+    }
+    return '  supervised: launchd ${supervisor.label}';
   }
 
   void _renderUp(Map<String, Object?> payload) {
     final station = payload['station'] as Map<String, Object?>? ?? const {};
     final process = payload['process'] as Map<String, Object?>? ?? const {};
     final work = payload['work'] as Map<String, Object?>? ?? const {};
-    stdout
-      ..writeln('station: UP')
-      ..writeln('  substation: ${station['substation']}')
-      ..writeln('  state store: ${station['stateStore']}')
-      ..writeln('  work root: ${station['workRoot']}');
+    _out('station: UP');
+    _out('  substation: ${station['substation']}');
+    _out('  state store: ${station['stateStore']}');
+    _out('  work root: ${station['workRoot']}');
     final roster = station['roster'] as List<Object?>? ?? const [];
     if (roster.isNotEmpty) {
-      stdout.writeln('  roster:');
+      _out('  roster:');
       for (final value in roster) {
         final entry = value as Map<String, Object?>;
-        stdout.writeln(
+        _out(
           '    - name: ${entry['name']}  ·  root: ${entry['root']}  ·  '
           'prefix: ${entry['prefix']}',
         );
       }
     }
-    stdout
-      ..writeln(
-        '  mode: '
-        '${(station['dryRun'] as bool? ?? true) ? 'DRY-RUN' : 'LIVE'}',
-      )
-      ..writeln(
-        '  pid: ${process['pid']}  ·  uptime: '
-        '${process['uptimeSeconds']}s  ·  version: ${process['version']}',
-      )
-      ..writeln(
-        '  ready: ${work['ready']}  ·  mounted: ${work['mounted']}  ·  '
-        'live sessions: ${work['liveSessions']}  ·  last sync: '
-        '${work['lastSyncAt']}',
-      );
+    _out(
+      '  mode: '
+      '${(station['dryRun'] as bool? ?? true) ? 'DRY-RUN' : 'LIVE'}',
+    );
+    _out(
+      '  pid: ${process['pid']}  ·  uptime: '
+      '${process['uptimeSeconds']}s  ·  version: ${process['version']}',
+    );
+    _out(
+      '  ready: ${work['ready']}  ·  mounted: ${work['mounted']}  ·  '
+      'live sessions: ${work['liveSessions']}  ·  last sync: '
+      '${work['lastSyncAt']}',
+    );
     // The Stage-1 trajectory posture (stage1-wiring §3). `up`'s banner fires
     // ONCE, at boot; every posture that can arise afterwards — fenced out by a
     // successor, halted on belt corruption, degraded on a dead socket — is
@@ -192,22 +267,21 @@ class StatusCommand extends Command<int> {
     // past it.
     final trajectory = trajectoryStatusLine(payload);
     if (trajectory == null) return;
-    stdout.writeln(trajectory.loud ? trajectory.line : '  ${trajectory.line}');
+    _out(trajectory.loud ? trajectory.line : '  ${trajectory.line}');
   }
 
   Future<void> _renderDownFallback(
     ArgResults results,
     BeadsWorkspace stateWorkspace,
   ) async {
-    stdout
-      ..writeln('station: DOWN  (station: down)')
-      ..writeln('  state store: ${stateWorkspace.root}');
+    _out('station: DOWN  (station: down)');
+    _out('  state store: ${stateWorkspace.root}');
 
     final workspaceWs = BeadsWorkspace.discover(
       start: results.option('workspace'),
     );
     if (workspaceWs == null) {
-      stdout.writeln(
+      _out(
         '  (pass --workspace to see the owned ready count — none '
         'discoverable from '
         '${results.option('workspace') ?? Directory.current.path})',
@@ -219,7 +293,7 @@ class StatusCommand extends Command<int> {
       ...results.multiOption('owner'),
     }..removeWhere((s) => s.trim().isEmpty);
     if (substations.isEmpty) {
-      stdout.writeln(
+      _out(
         '  work root: ${workspaceWs.root}  (pass --substation to see the '
         'owned ready count)',
       );
@@ -241,11 +315,10 @@ class StatusCommand extends Command<int> {
       if (!bead.issueType.isCore) continue;
       ready++;
     }
-    stdout
-      ..writeln(
-        '  substation: ${substations.join(',')}  ·  work root: '
-        '${workspaceWs.root}',
-      )
-      ..writeln('  ready (owned): $ready');
+    _out(
+      '  substation: ${substations.join(',')}  ·  work root: '
+      '${workspaceWs.root}',
+    );
+    _out('  ready (owned): $ready');
   }
 }

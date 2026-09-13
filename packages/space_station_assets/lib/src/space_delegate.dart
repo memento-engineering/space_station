@@ -192,6 +192,26 @@ CodedRosterSnapshot codedRosterSnapshotOf(
   }
 }
 
+/// The STATION word the [factory] authors — read from ONE owned instance
+/// (construct → dispose; [SpaceDelegate.stationName] is class policy, so no
+/// mount is needed).
+///
+/// The off-tree supervisor machinery (`up --daemon`, `down --daemon`, the
+/// `status` supervised line) derives its launchd label from this, so a
+/// downstream station's label follows its `stationName` override with no
+/// second source to keep in sync.
+String codedStationNameOf(
+  SpaceDelegateFactory factory, {
+  String gridRoot = '/',
+}) {
+  final delegate = factory(gridRoot: gridRoot);
+  try {
+    return delegate.stationName;
+  } finally {
+    delegate.dispose();
+  }
+}
+
 /// Enumerates the CODED roster of the station [factory] authors.
 List<sdk.SubstationScope> codedRosterOf(
   SpaceDelegateFactory factory, {

@@ -38,8 +38,8 @@ resident — the ready frontier of the owned substation IS the drive set
 under resident arming), guarded by the ONE-supervisor-per-state-store
 station lock (RS-2), and observable over a read-only loopback
 `StationControl` surface (RS-4). Foreground-resident: no self-daemonization,
-no double-fork — a supervisor (launchd; the runbook is RS-6) owns
-backgrounding.
+no double-fork — a supervisor owns backgrounding, and `up --daemon` is how the
+station wires one (see "Resident operation" below).
 
 ```sh
 space() { dart run space:space "$@"; }     # (illustrative shorthand — always JIT)
@@ -80,55 +80,100 @@ up.
 `run` (`CodeRunCommand`) is retired (RS-8) — `up`'s composed pieces are the
 only consumer left.
 
-## Resident operation (launchd, RS-6)
+## Resident operation (launchd)
 
 `up` is **foreground-resident by design** — no self-daemonization, no
 double-fork; a supervisor owns backgrounding. On macOS that supervisor is
-**launchd**, recipe-first (D-R3): a `LaunchAgent` plist template ships at
-[`apps/space/tool/launchd/engineering.memento.space.plist`](apps/space/tool/launchd/engineering.memento.space.plist)
-plus this runbook. There is deliberately **no `space install` command yet** —
-a template earns automation only after it's been operated by hand.
+**launchd**, and `up --daemon` is how the station wires one: it renders a
+`LaunchAgent` for **this** station, writes it to `~/Library/LaunchAgents/`,
+and loads it. The hand-filled `CHANGE_ME` template that used to ship here is
+retired — a template earns automation once it has been operated by hand, and
+it has.
 
-### 1. No compile step — launchd runs JIT too
-
-launchd execs a binary path directly (no shell), and space is JIT-only — so
-the template's `ProgramArguments` exec the **`dart` binary itself** with
-`run space:space up …` args and `WorkingDirectory` set to this repo (the
-workspace root, where `space:space` resolves). Find your dart path with
-`which dart`. The VM service flag stays, so a supervised station still
-hot-reloads.
-
-### 2. Install
-
-Copy the template into `~/Library/LaunchAgents/`, fill in every `CHANGE_ME`
-placeholder (the `dart` binary path, the `--grid-home` repo path,
-`WorkingDirectory`, and both log paths — **launchd does not expand `~` or
-`$HOME`**, so the log paths need your real home directory), lint it, then
-bootstrap it into your GUI session:
+### 1. Arm it
 
 ```sh
-mkdir -p ~/Library/Logs/space_station
-cp apps/space/tool/launchd/engineering.memento.space.plist ~/Library/LaunchAgents/
-$EDITOR ~/Library/LaunchAgents/engineering.memento.space.plist   # fill in CHANGE_ME
-plutil -lint ~/Library/LaunchAgents/engineering.memento.space.plist   # must print "OK"
-launchctl bootstrap gui/$UID ~/Library/LaunchAgents/engineering.memento.space.plist
+dart run space:space up --daemon --grid-home "$(pwd)" --no-dry-run
 ```
 
-`RunAtLoad` boots the station immediately and on every future login.
+`--daemon` is the only token removed from the invocation launchd re-executes:
+every other flag — `--no-dry-run`, `--max-agents`, `--substation`,
+`--trajectory` — rides through verbatim, so a supervised boot is the same
+posture as the foreground one you just typed. The recipe cannot drift from
+the station it supervises, because it IS the invocation.
 
-### 3. Stop / uninstall
+What gets written:
+
+- **Label** — `grid.station.<station name>`, derived from the delegate's
+  `stationName`, so a downstream station gets its own agent and can never
+  bootout the station it extends.
+- **ProgramArguments** — the resolved `dart` binary (launchd execs a path,
+  never a name on `$PATH`), the VM flags this process was started with
+  (`--enable-vm-service` survives, so a supervised station still hot-reloads),
+  then `up` and your flags.
+- **WorkingDirectory** — the grid home.
+- **KeepAlive** — `SuccessfulExit: false`, **not** a bare `true`: launchd
+  relaunches only on a non-zero or signal exit, so a graceful `down`
+  (SIGTERM → exit 0) is a real stop, not an instant bounce, while a crash or
+  `kill -9` IS relaunched.
+- **RunAtLoad** — boots the station now and on every future login.
+- **StandardOutPath / StandardErrorPath** —
+  `<grid-home>/.grid/logs/<station>.{out,err}.log`.
+- **EnvironmentVariables** — the environment **captured at arm time**:
+  `PATH`, `HOME`, and every `GRID_*` and `BEADS_*` key set in the process that
+  typed the verb. launchd hands a job **none** of the launching shell's
+  environment, so this capture is why `gh`, `git` and `dolt` resolve at all
+  under supervision, why the App key paths (`GRID_GITHUB_APP_KEY_*`) are
+  found, and why the trajectory posture a supervised boot resolves is the one
+  you exported. Note `--dual-read` is **not** an `up` flag and is not becoming
+  one: the dual-read posture is `GRID_DUAL_READ`, and it rides in this block
+  like every other `GRID_*` key. This is an explicit **allowlist**, never a
+  copy of your environment — a plist under `~/Library/LaunchAgents` is a plain
+  file, and an unrelated cloud token has no business in it. A key set to the
+  empty string is omitted rather than written empty (for `GRID_DUAL_READ` an
+  empty value is an *unrecognized* value, not an absent one), and the boot
+  loader still sources the operator env file itself, so a key that lives only
+  there needs no capture.
+
+Re-running `up --daemon` while the label is loaded is a **refusal naming the
+label** — never a second resident. The verb writes nothing outside
+`~/Library/LaunchAgents` and the grid home, which is why running it IS the
+approval of the persistence change.
+
+**A refusal starts nothing.** The supervisor fork sits below every arming
+refusal: the grid-home guards, the per-substation work-store guard, the
+"nothing resolved" refusal, and a read-only probe of the RS-2 station lock.
+The last refusal is the **start check**: before a byte is written, the verb
+runs `<dart> run <runner> --help` from the grid home under exactly the
+environment the plist will carry, and a non-zero exit refuses naming the
+command, the directory, the exit code and whatever the runner said. That is
+the cheapest thing which exercises the whole resolve-and-load path — pubspec
+resolution, the package config, the import closure, the runner's composition
+root — without arming a station or touching a store. (No VM flags: a one-shot
+probe must not bind the service port the resident wants.)
+
+An invocation that could not boot in the foreground installs no agent at all —
+because `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` would turn one
+refusal into a job launchd respawns forever and brings back on every login.
+
+**Known:** a LaunchAgent's process gets its **own** Local Network grant, so
+the first supervised boot that drives mDNS work (iOS/butane) prompts once.
+
+### 2. Retire it
 
 ```sh
-launchctl bootout gui/$UID/engineering.memento.space
+dart run space:space down --daemon
 ```
 
-`bootout` unregisters the job outright — no relaunch, doesn't survive
-reboot. Prefer this for retiring the recipe; prefer `space down` (next
-section) to stop the *current* run without unregistering.
+One `bootout` — which terminates the job — and the plist is removed. The two
+halves are reported as they actually happened: `bootout` runs only against a
+label launchd is holding, and the verb never claims to have removed a plist
+that was already gone (which is how you notice a recipe someone edited or
+deleted by hand).
 
-### 4. `space status` / `space down`
+### 3. `space status` / `space down`
 
-Thin clients over the SAME `--state-workspace` the plist's `up` was given:
+Thin clients over the SAME `--state-workspace` the supervised `up` was given:
 
 ```sh
 dart run space:space status --state-workspace <path> --substation <sub> --workspace <path>
@@ -136,44 +181,40 @@ dart run space:space down --state-workspace <path>
 ```
 
 `status` attaches to the live `StationControl` surface when up, or falls
-back to a direct, read-only store view labeled `(station: down)`. `down`
-reads the station lock, SIGTERMs the holder, and waits for its own graceful
-release — it never escalates to SIGKILL, and is a clean no-op when nothing
-is up. Because the template's `KeepAlive` uses `SuccessfulExit: false`
-(not a bare `true`), launchd relaunches ONLY on a non-zero/signal exit —
-`down`'s graceful SIGTERM → exit 0 does **not** trigger an instant respawn,
-so it's a real stop, not a bounce.
+back to a direct, read-only store view labeled `(station: down)`. It adds one
+line — `supervised: launchd <label>` — whenever launchd holds this station's
+agent, which answers what the lock cannot: whether anything will bring the
+station back. `down` (without `--daemon`) reads the station lock, SIGTERMs
+the holder, and waits for its own graceful release — it never escalates to
+SIGKILL, is a clean no-op when nothing is up, and thanks to
+`SuccessfulExit: false` does not trigger a relaunch.
 
-### 5. Logs
-
-`StandardOutPath`/`StandardErrorPath` point at
-`~/Library/Logs/space_station/space.{out,err}.log`:
+### 4. Logs
 
 ```sh
-tail -f ~/Library/Logs/space_station/space.err.log
+tail -f <grid-home>/.grid/logs/space.err.log
 ```
 
-### 6. The lock
+### 5. The lock
 
 Every `up` acquires `<state-workspace>/.grid/station.lock` (RS-2, D-A1)
 before anything else — one supervisor per station state store. The file is
 `chmod 0600` and holds `pid`/`pgid`/`startedAt`, plus — once the control
 surface mounts — `controlUrl`/`token` (RS-4's per-boot bearer token).
 **The token never leaves this file**: never on argv, never logged, and the
-surface it authorizes is loopback-only (`127.0.0.1`) and read-only by
-construction. A live holder refuses a second `up` LOUD, naming the pid;
-a dead holder (crashed without releasing) is stolen automatically on the
-next `up`.
+surface it authorizes is loopback-only and read-only by construction. A live
+holder refuses a second `up` LOUD, naming the pid; a dead holder (crashed
+without releasing) is stolen automatically on the next `up`.
 
-### 7. Crash recovery
+### 6. Crash recovery
 
 The crash story is unchanged and load-bearing, whether the process dies to
 `kill -9` or an uncaught crash:
 
 ```
-kill -9 / crash → launchd relaunch (RunAtLoad)
-  → freshness barrier → RestartReconciler (respawn-or-skip; adopt once
-    tg-9fl lands) → kernel mount
+kill -9 / crash -> launchd relaunch (RunAtLoad)
+  -> freshness barrier -> RestartReconciler (respawn-or-skip; adopt once
+     tg-9fl lands) -> kernel mount
 ```
 
 launchd notices the exit and restarts the station (a signal death or
@@ -186,7 +227,7 @@ done work is skipped, still-alive orphaned process groups are killed, and
 everything else is marked respawn-pending for the kernel to re-mount.
 Nothing is ever decided on stale state.
 
-### 8. Best practice: one grid per machine
+### 7. Best practice: one grid per machine
 
 **One grid per machine** — one agentic fabric across the station's assets.
 The lock is scoped per station STATE STORE (not per substation) precisely

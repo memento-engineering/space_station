@@ -116,7 +116,42 @@ export 'src/space_delegate.dart'
         codedRosterOf,
         codedRosterSnapshotOf,
         codedSeatEnvironmentsOf,
+        codedStationNameOf,
         kMementoOrgApp;
+// The launchd supervisor behind `up --daemon` / `down --daemon` (space-5lh):
+// the label derivation, the ProgramArguments surgery, the arm-time
+// environment capture, the pre-arm start check, the plist renderer, and the
+// `launchctl` / start-check seams a test binds Fakes to.
+export 'src/launch_agent.dart'
+    show
+        DaemonAlreadyLoaded,
+        DaemonArmOutcome,
+        DaemonArmRefused,
+        DaemonArmed,
+        DaemonNotSupervised,
+        DaemonStopOutcome,
+        DaemonStopRefused,
+        DaemonStopped,
+        DaemonUnstartable,
+        LaunchAgentSupervisor,
+        Launchctl,
+        LaunchctlProcess,
+        LaunchctlResult,
+        ProcessLaunchctl,
+        ProcessStartCheck,
+        StartCheck,
+        StartCheckProcess,
+        StartCheckResult,
+        daemonProgramArguments,
+        daemonStartCheckCommand,
+        isSupervisedEnvironmentKey,
+        kSupervisedEnvironmentKeys,
+        kSupervisedEnvironmentPrefixes,
+        launchAgentLabel,
+        launchAgentsDirectoryFor,
+        renderLaunchAgentPlist,
+        supervisedEnvironment,
+        supervisedVmArguments;
 // The COMPOSED SEED (space-47t): the ONE per-substation seed class a
 // station's substations() authors (value config: name/root/prefix + an
 // optional GitHubAppConfig delivery identity). Exported so a downstream
@@ -253,8 +288,14 @@ buildRunnerComposition({
     runnerName: name,
     runnerInvocation: runnerInvocation,
   );
-  final downCommand = DownCommand();
-  final statusCommand = StatusCommand();
+  final downCommand = DownCommand(
+    delegateFactory: delegateFactory,
+    environment: environment,
+  );
+  final statusCommand = StatusCommand(
+    delegateFactory: delegateFactory,
+    environment: environment,
+  );
   final successionCommand = SuccessionCommand();
   final pairedCommands = <Command<int>>[
     assetsCommand,

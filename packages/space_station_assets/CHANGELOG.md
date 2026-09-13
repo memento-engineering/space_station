@@ -25,6 +25,54 @@
   verb over ITS delegate rather than authoring a second one.
 - Adds `yaml` and `yaml_edit` dependencies: bd's config primitive is YAML, and
   the rewrite is surgical so the operator's file survives it.
+- Added: `up --daemon` and `down --daemon`. `up --daemon` renders a launchd
+  LaunchAgent for THIS station — label `grid.station.<stationName>`,
+  `ProgramArguments` the operator's exact JIT invocation minus `--daemon`,
+  `WorkingDirectory` the grid home, `KeepAlive` on crash only, logs under
+  `<grid-home>/.grid/logs/` — writes it to `~/Library/LaunchAgents/` and loads
+  it with `launchctl bootstrap`, so the resident is launchd's child and no
+  seat session owns it. A loaded label is a refusal naming it, never a second
+  resident. `down --daemon` boots the agent out and removes the plist, and
+  `status` adds `supervised: launchd <label>` when the agent is loaded. macOS
+  only; a Linux systemd unit is a separate seam.
+- Added: the supervisor fork sits BELOW every arming refusal — the grid-home
+  guards, the per-substation work-store guard, the nothing-resolved refusal,
+  and a read-only RS-2 holder probe (`StationAttach.status`, never `acquire`,
+  which would make the calling shell a session leader). A refusal starts
+  nothing: `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` would otherwise
+  turn a one-shot refusal into a job launchd respawns forever and resurrects
+  on every login.
+- Added: the rendered plist carries an `EnvironmentVariables` block captured
+  at ARM time (`supervisedEnvironment`): `PATH`, `HOME`, and every `GRID_*`
+  and `BEADS_*` key set in the injected environment. launchd hands a job none
+  of the launching shell's environment, so without this capture `gh`/`git`
+  would not resolve, the App key paths would be missing, and `GRID_DUAL_READ`
+  and its siblings would silently resolve to the default posture under
+  supervision (`--dual-read` is not an `up` flag). An explicit allowlist,
+  never the whole environment; a key set empty is omitted rather than written
+  empty.
+- Added: `up --daemon` refuses an invocation that cannot START. Before a byte
+  is written it runs `<dart> run <runner> --help`
+  (`daemonStartCheckCommand`) from the grid home under exactly the environment
+  the plist will carry, through an injected `StartCheck`/`ProcessStartCheck`
+  seam, and a non-zero exit is `DaemonUnstartable` — no plist, no bootstrap,
+  a refusal naming the command, the directory, the exit code and what the
+  runner said.
+- Fixed: `down --daemon` reports the two halves of the retirement separately.
+  `bootout` now runs only against a label launchd actually holds, and the
+  verb no longer claims to have removed a plist that was already gone.
+- Added: `codedStationNameOf`, the owned (construct → dispose) read of a
+  station factory's `stationName`, and the `launch_agent.dart` surface the
+  verbs compose (`LaunchAgentSupervisor`, `Launchctl`/`ProcessLaunchctl`,
+  `StartCheck`/`ProcessStartCheck`, `renderLaunchAgentPlist`,
+  `daemonProgramArguments`, `daemonStartCheckCommand`,
+  `supervisedEnvironment`).
+- Added: `UpCommand`, `DownCommand`, and `StatusCommand` take injected `out`
+  and `err` sinks (defaulting to the process streams) and the supervisor
+  seams, so the verbs are drivable without a subprocess.
+- Removed: the hand-filled `CHANGE_ME` LaunchAgent template and its lint test
+  (`apps/space/tool/launchd/`) — replaced by the rendered agent, which cannot
+  drift from the invocation it supervises.
 
 ## 0.5.0-dev.2
 

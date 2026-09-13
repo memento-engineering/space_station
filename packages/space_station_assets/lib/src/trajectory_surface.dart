@@ -43,6 +43,13 @@ typedef TrajectoryConfigResolution = ({
 /// [TrajectoryConfig] and preserves invalid dual-read input (stage1-wiring
 /// §1.3).
 ///
+/// `--dual-read` is not, and is not becoming, an `up` flag: the dual-read
+/// posture is the ENVIRONMENT's (`GRID_DUAL_READ`), its discipline
+/// `GRID_TRAJECTORY_DISCIPLINE` and its soak window `GRID_SOAK_WINDOW_EPOCH`.
+/// A supervised boot inherits them because `up --daemon` captures every
+/// `GRID_*` key into the LaunchAgent (`supervisedEnvironment`), not because
+/// any of them is a flag.
+///
 /// The flag is declared `defaultsTo: null` precisely so ABSENT is a third
 /// state: absent ⇒ [TrajectoryConfigMode.auto] (arm iff the home carries the
 /// provisioning artifact), `--trajectory` ⇒ [TrajectoryConfigMode.required]
