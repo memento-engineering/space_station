@@ -80,6 +80,12 @@ dependencies:
   # registryBuilderWithSpecWriter and SpecifyAuthoredSpecWriter.
   grid_sdk: ^0.3.0
   path: ^1.9.0
+  # bd's own config primitive is YAML: `beads configure` READS the existing
+  # `.beads/config.local.yaml` (to decide written-vs-unchanged) and REWRITES
+  # only its `external_projects` key, preserving every unrelated key and the
+  # operator's formatting. `yaml` parses; `yaml_edit` does the surgical update.
+  yaml: ^3.1.2
+  yaml_edit: ^2.2.0
 
 dev_dependencies:
   analyzer: ^14.3.0
