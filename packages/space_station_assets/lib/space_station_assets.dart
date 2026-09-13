@@ -116,7 +116,31 @@ export 'src/space_delegate.dart'
         codedRosterOf,
         codedRosterSnapshotOf,
         codedSeatEnvironmentsOf,
+        codedStationNameOf,
         kMementoOrgApp;
+// The launchd supervisor behind `up --daemon` / `down --daemon` (space-5lh):
+// the label derivation, the ProgramArguments surgery, the plist renderer, and
+// the `launchctl` seam a test binds a Fake to.
+export 'src/launch_agent.dart'
+    show
+        DaemonAlreadyLoaded,
+        DaemonArmOutcome,
+        DaemonArmRefused,
+        DaemonArmed,
+        DaemonNotSupervised,
+        DaemonStopOutcome,
+        DaemonStopRefused,
+        DaemonStopped,
+        LaunchAgentSupervisor,
+        Launchctl,
+        LaunchctlProcess,
+        LaunchctlResult,
+        ProcessLaunchctl,
+        daemonProgramArguments,
+        launchAgentLabel,
+        launchAgentsDirectoryFor,
+        renderLaunchAgentPlist,
+        supervisedVmArguments;
 // The COMPOSED SEED (space-47t): the ONE per-substation seed class a
 // station's substations() authors (value config: name/root/prefix + an
 // optional GitHubAppConfig delivery identity). Exported so a downstream
@@ -253,8 +277,14 @@ buildRunnerComposition({
     runnerName: name,
     runnerInvocation: runnerInvocation,
   );
-  final downCommand = DownCommand();
-  final statusCommand = StatusCommand();
+  final downCommand = DownCommand(
+    delegateFactory: delegateFactory,
+    environment: environment,
+  );
+  final statusCommand = StatusCommand(
+    delegateFactory: delegateFactory,
+    environment: environment,
+  );
   final successionCommand = SuccessionCommand();
   final pairedCommands = <Command<int>>[
     assetsCommand,

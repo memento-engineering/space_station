@@ -33,7 +33,10 @@
 /// seam is inert — no spawn, no store write, no git — while the counts and
 /// the control surface are REAL. The first LIVE arm (`--no-dry-run`) stays
 /// the human gate. `up` stays foreground-resident: no self-daemonization, no
-/// double-fork — the supervisor (launchd, RS-6) owns backgrounding.
+/// double-fork — the supervisor owns backgrounding, and `--daemon` is how the
+/// station WIRES one (space-5lh): it hands this exact invocation to a launchd
+/// LaunchAgent it renders and loads (`launch_agent.dart`) and returns, so the
+/// resident is launchd's child and no seat session owns it.
 library;
 
 import 'dart:async';
@@ -75,6 +78,7 @@ import 'package:path/path.dart' as p;
 import 'agent_arming.dart';
 import 'assets_command.dart' show kSpaceRunner;
 import 'dev_mode.dart';
+import 'launch_agent.dart';
 import 'space_delegate.dart';
 import 'station_banner.dart';
 import 'trajectory_surface.dart';
@@ -253,8 +257,16 @@ class UpCommand extends Command<int> {
     Map<String, String> environment = const <String, String>{},
     this.runnerName = 'space',
     this.runnerInvocation = kSpaceRunner,
+    Launchctl launchctl = const ProcessLaunchctl(),
+    String? launchAgentsDirectory,
+    void Function(String message)? out,
+    void Function(String message)? err,
   }) : _delegateFactory = delegateFactory,
-       _environment = environment {
+       _environment = environment,
+       _launchctl = launchctl,
+       _launchAgentsDirectory = launchAgentsDirectory,
+       _out = out ?? stdout.writeln,
+       _err = err ?? stderr.writeln {
     addSpaceStationFlags(
       argParser,
       // One owned enumeration (constructed, mounted, DISPOSED — a delegate
@@ -296,10 +308,37 @@ class UpCommand extends Command<int> {
             '--trajectory requires it; --no-trajectory disables it. Dry-run '
             'always disables it. Required-mode connection failure degrades '
             'loudly without blocking boot.',
+      )
+      // The SUPERVISOR knob, not a posture: it hands THIS invocation to
+      // launchd instead of running it here, so no seat session owns the
+      // resident. Non-negatable — `--no-daemon` is just the default.
+      ..addFlag(
+        'daemon',
+        negatable: false,
+        help:
+            'Hand this exact invocation (minus --daemon) to a launchd '
+            'LaunchAgent so no seat session owns the resident; macOS only. '
+            'An already-loaded label is refused, never a second resident. '
+            'The supervised process gets its OWN Local Network prompt — '
+            'approve it once.',
       );
   }
 
   final SpaceDelegateFactory _delegateFactory;
+
+  /// The `launchctl` client `--daemon` supervises through, INJECTED so a test
+  /// never mutates the operator's real launchd domain.
+  final Launchctl _launchctl;
+
+  /// An explicit LaunchAgents directory; absent, it is derived from the
+  /// INJECTED [_environment]'s `HOME` (this library reads no ambient
+  /// environment).
+  final String? _launchAgentsDirectory;
+
+  /// The verb's sinks, INJECTED (the `AssetsCommand` precedent); they default
+  /// to the process streams, so the foreground path is byte-identical.
+  final void Function(String message) _out;
+  final void Function(String message) _err;
 
   /// The process environment, INJECTED at the composition root (`bin/` hands
   /// it to `buildRunner`). Nothing under `lib/` reads it ambiently — see
@@ -480,6 +519,21 @@ class UpCommand extends Command<int> {
     } on ArgumentError catch (e) {
       err('space up: ${e.message}');
       return 64;
+    }
+
+    // --- the SUPERVISOR fork (space-5lh). The grid home is validated and the
+    // machine's environments are boot-eager-checked by here, and NOTHING
+    // stateful has happened yet: no station lock, no controllers, no tree. So
+    // `--daemon` renders and loads the LaunchAgent for THIS invocation and
+    // returns — the resident that actually boots is launchd's child, not this
+    // shell's. Every line below is the unchanged foreground path.
+    if (results.flag('daemon')) {
+      return await _armDaemon(
+        arguments: results.arguments,
+        gridHome: config.gridHome,
+        out: out,
+        err: err,
+      );
     }
     // Each substation's `.beads/` work store is looked for at its EXACT root, no
     // walk-up (grid_sdk StoreLocator). Provenance splits the guard (space-6ds
@@ -900,6 +954,83 @@ class UpCommand extends Command<int> {
     return 0;
   }
 
+  /// Renders, installs, and loads this station's LaunchAgent for [arguments]
+  /// — the operator's own argv for this verb, `--daemon` included; the
+  /// renderer strips it.
+  ///
+  /// Writes nothing outside the LaunchAgents directory and `<grid-home>/.grid/`
+  /// — which is why the operator's approval of a persistence change is the run
+  /// itself, with no second confirmation.
+  Future<int> _armDaemon({
+    required List<String> arguments,
+    required String gridHome,
+    required void Function(String message) out,
+    required void Function(String message) err,
+  }) async {
+    if (!Platform.isMacOS) {
+      err(
+        '$runnerName up: --daemon supervises through launchd, which is macOS '
+        'only. A Linux systemd unit is a separate seam; run without --daemon '
+        'under your own supervisor.',
+      );
+      return 64;
+    }
+    final directory =
+        _launchAgentsDirectory ?? launchAgentsDirectoryFor(_environment);
+    if (directory == null) {
+      err(
+        '$runnerName up: --daemon needs HOME to locate '
+        '~/Library/LaunchAgents, and this process was handed no HOME.',
+      );
+      return 64;
+    }
+    final supervisor = LaunchAgentSupervisor(
+      stationName: codedStationNameOf(_delegateFactory),
+      launchAgentsDirectory: directory,
+      launchctl: _launchctl,
+    );
+    final outcome = await supervisor.arm(
+      gridHome: gridHome,
+      programArguments: daemonProgramArguments(
+        dartExecutable: Platform.resolvedExecutable,
+        vmArguments: supervisedVmArguments(Platform.executableArguments),
+        runnerInvocation: runnerInvocation,
+        verb: name,
+        arguments: arguments,
+      ),
+    );
+    switch (outcome) {
+      case DaemonArmed(
+        :final label,
+        :final plistPath,
+        :final standardOutPath,
+        :final standardErrorPath,
+      ):
+        out('$runnerName up: supervised by launchd as $label');
+        out('  plist: $plistPath');
+        out('  logs: $standardOutPath  ·  $standardErrorPath');
+        out(
+          '  note: a LaunchAgent gets its OWN Local Network grant — approve '
+          'the prompt once if this station drives mDNS work.',
+        );
+        out(
+          '  stop it with `$runnerName down --daemon`; `$runnerName down` '
+          'alone stops the current run and launchd will not relaunch it.',
+        );
+        return 0;
+      case DaemonAlreadyLoaded(:final label, :final plistPath):
+        err(
+          '$runnerName up: launchd already holds $label (plist: $plistPath) '
+          '— refusing to start a second resident over the same station. Run '
+          '`$runnerName down --daemon` first.',
+        );
+        return 64;
+      case DaemonArmRefused(:final label, :final message):
+        err('$runnerName up: launchctl refused to bootstrap $label — $message');
+        return 1;
+    }
+  }
+
   /// space's `/status` view (RS-4): the counts read the work runtime's
   /// PRODUCER-side latest join (what the bridge last pushed — never the
   /// notifier's reactive state, D-H rule 2). `mounted` reports the live
@@ -956,9 +1087,6 @@ class UpCommand extends Command<int> {
       },
     );
   }
-
-  void _out(String message) => stdout.writeln(message);
-  void _err(String message) => stderr.writeln(message);
 }
 
 // The Stage-1 trajectory runner surface (stage1-wiring §1.1 chunk WS) — the

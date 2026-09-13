@@ -38,6 +38,23 @@ void main() {
     );
   });
 
+  test('--daemon is the SUPERVISOR knob, not a posture: present, '
+      'non-negatable, and off unless typed', () {
+    // space-5lh. `up` is foreground-resident by design; `--daemon` hands THIS
+    // invocation to launchd instead of running it here. It is deliberately
+    // non-negatable — `--no-daemon` would name the default, and the operator
+    // surface must not imply a posture axis that does not exist.
+    final daemon = buildRunner().commands['up']!.argParser.options['daemon'];
+    expect(daemon, isNotNull);
+    expect(daemon!.negatable, isFalse);
+    expect(daemon.isFlag, isTrue);
+    expect(
+      buildRunner().commands['up']!.argParser.parse(const []).flag('daemon'),
+      isFalse,
+      reason: 'the foreground path is unchanged unless --daemon is typed',
+    );
+  });
+
   test('--env help renders the ARMED registry, custom names included', () {
     final env = buildRunner().commands['up']!.argParser.options['env']!;
     expect(

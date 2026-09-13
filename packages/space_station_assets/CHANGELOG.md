@@ -25,6 +25,26 @@
   verb over ITS delegate rather than authoring a second one.
 - Adds `yaml` and `yaml_edit` dependencies: bd's config primitive is YAML, and
   the rewrite is surgical so the operator's file survives it.
+- Added: `up --daemon` and `down --daemon`. `up --daemon` renders a launchd
+  LaunchAgent for THIS station — label `grid.station.<stationName>`,
+  `ProgramArguments` the operator's exact JIT invocation minus `--daemon`,
+  `WorkingDirectory` the grid home, `KeepAlive` on crash only, logs under
+  `<grid-home>/.grid/logs/` — writes it to `~/Library/LaunchAgents/` and loads
+  it with `launchctl bootstrap`, so the resident is launchd's child and no
+  seat session owns it. A loaded label is a refusal naming it, never a second
+  resident. `down --daemon` boots the agent out and removes the plist, and
+  `status` adds `supervised: launchd <label>` when the agent is loaded. macOS
+  only; a Linux systemd unit is a separate seam.
+- Added: `codedStationNameOf`, the owned (construct → dispose) read of a
+  station factory's `stationName`, and the `launch_agent.dart` surface the
+  verbs compose (`LaunchAgentSupervisor`, `Launchctl`/`ProcessLaunchctl`,
+  `renderLaunchAgentPlist`, `daemonProgramArguments`).
+- Added: `UpCommand`, `DownCommand`, and `StatusCommand` take injected `out`
+  and `err` sinks (defaulting to the process streams) and the supervisor
+  seams, so the verbs are drivable without a subprocess.
+- Removed: the hand-filled `CHANGE_ME` LaunchAgent template and its lint test
+  (`apps/space/tool/launchd/`) — replaced by the rendered agent, which cannot
+  drift from the invocation it supervises.
 
 ## 0.5.0-dev.2
 
