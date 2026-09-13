@@ -578,7 +578,7 @@ class SpaceDelegate extends sdk.GridDelegate {
                 // same rule the effect providers below follow: an offline
                 // mount (roster enumeration, the suites, a dry run) probes no
                 // machine and presence stays the boot-validated registry
-                // members (power_station ADR-0000 A35(5)).
+                // members (power_station#a35-bead-pow-n6n-1-the-mechanism-of-adr-0006-s-value-keyed-t).
                 probe: live ? const ProcessEnvironmentProbe().call : null,
                 child: Nest(
                   children: [

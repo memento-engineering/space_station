@@ -11,7 +11,7 @@
 // space is JIT-only (`CLAUDE.md`: the resident station and every `space`
 // command run under `dart run`, NEVER a `dart compile exe` binary — JIT keeps
 // the VM service open for hot-reload and guarantees current source), and the
-// station-level land arming seam is RETIRED (the_grid ADR-0000 A51 — delivery
+// station-level land arming seam is RETIRED (the_grid#a51-the-autonomous-refinements-behind-the-route-unification — delivery
 // is a per-substation `DeliveryMethod` binding, not a station-wide boolean).
 // `land_seam_retired_test.dart` fences those tokens out of `lib/`; this fences
 // them out of the INSTALLED MANUAL. Whatever `grid_assets` vends, what lands in
@@ -72,7 +72,7 @@ void main() {
           'the AOT lure — a resident station runs JIT from source',
       '--land':
           'the retired land arming flag — delivery is a per-substation '
-          'binding (the_grid ADR-0000 A51)',
+          'binding (the_grid#a51-the-autonomous-refinements-behind-the-route-unification)',
       './space':
           'the compiled-binary invocation — space runs JIT via '
           '`dart run space:space`, never a `./space` binary; the overlay '

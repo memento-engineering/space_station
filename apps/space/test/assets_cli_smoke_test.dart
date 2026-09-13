@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 /// A PROCESS-LEVEL smoke over the REAL `space` CLI: `space assets install`
 /// resolves the REAL vended `station_overlay` from the generated registry and
 /// the throwaway root's package facts, then materializes the whole operator
-/// manual there. Root-parametric by design (power_station ADR-0000 A26(1)), so
+/// manual there. Root-parametric by design (power_station#a26-bead-pow-hhs-the-station-overlay-becomes-a-root-relative), so
 /// this test never touches the repo's own installed tree —
 /// `operator_assets_retired_test.dart` guards that.
 void main() {

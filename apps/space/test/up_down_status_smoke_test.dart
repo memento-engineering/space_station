@@ -48,13 +48,13 @@ import 'package:test/test.dart';
 ///  (h) a `--dry-run` arm binds NO delivery: the banner reports
 ///      `delivery: none (commit-only)`, so the inert posture constructs no
 ///      real `git`/`gh` machinery (the retired `--land` flag's job, now a
-///      per-substation binding — the_grid ADR-0000 A51).
+///      per-substation binding — the_grid#a51-the-autonomous-refinements-behind-the-route-unification).
 ///  (i) a LIVE arm (`--no-dry-run`) BINDS delivery: the banner reports
 ///      `delivery: BOUND (GitHub PR)` (never the dry run's
 ///      `none (commit-only)`), `GET /status` reports the live posture
 ///      (`station.dryRun == false`) with NOTHING mounted, and the live
 ///      resident still drains gracefully. The live half of the per-substation
-///      delivery binding (the_grid ADR-0000 A51) — the branch that shipped
+///      delivery binding (the_grid#a51-the-autonomous-refinements-behind-the-route-unification) — the branch that shipped
 ///      with no runtime witness. Hermetic: an EMPTY store has no ready work
 ///      and `--max-agents 0` admits none, so the bound halves are constructed
 ///      but never exercised (no `git`, no `gh`, no agent).
@@ -689,7 +689,8 @@ void main() {
     'a LIVE arm (--no-dry-run) BINDS delivery: the banner reports '
     '`delivery: BOUND (GitHub PR)`, /status reports the live posture with '
     'NOTHING mounted, and the resident still drains gracefully — the live '
-    'half of the per-substation binding (the_grid ADR-0000 A51)',
+    'half of the per-substation binding '
+    '(the_grid#a51-the-autonomous-refinements-behind-the-route-unification)',
     () async {
       final gridHome = await _bdInitGridHome('space-up-live-home-');
       final subRoot = await _bdInitWorkspace('space-up-live-sub-');

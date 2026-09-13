@@ -185,7 +185,7 @@ writes to the `houston` state store so the work store stays read-only.
   `depends_on_external` column, resolved at query time via the `external_projects` config), and
   the_grid's federated engine already enforces cross-store BLOCKING across the substation union:
   `FederatedSnapshotSource._applyExternalDepGuard` keys `DependencyType.affectsBlocking` and fails
-  closed when no member observes the target (the_grid ADR-0000 **A44**, pending). What `external:` does
+  closed when no member observes the target (the_grid#a44-federated-work-sources-staleness-scope-member-removal-vs, pending). What `external:` does
   NOT give you is BEAD granularity — it says "project X shipped capability Z," not "this bead waits on
   that bead" — so homing tightly-coupled beads in ONE store stays the simplest default: a refinement
   CHOICE, not a platform limitation.
