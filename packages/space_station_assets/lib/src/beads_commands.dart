@@ -3,12 +3,22 @@
 ///
 /// **The ruling** (Nico, 2026-09-13; the_grid
 /// `docs/decisions/the-grid-is-a-beads-controller.md`): cross-store blocking
-/// rides bd's native external dependency. `bd` resolves
+/// rides bd's native external dependency. `bd` places
 /// `external:<project>:<capability>` through the per-store `external_projects`
 /// map — `{name: path}` read from a store's `.beads/config.yaml` with
 /// `.beads/config.local.yaml` merged on top. No store in this station's roster
 /// carries that map, so every `external:` row an operator writes names a
-/// project bd cannot place, and the resident REFUSES it.
+/// project nothing can place, and the resident REFUSES it.
+///
+/// **What the installed bd does with the map, MEASURED** (HEAD-a45199a, the
+/// fleet build; receipts in `test/beads_configure_bd_test.dart`): it reads the
+/// merged config and reports the projected projects (`bd config show --json`),
+/// and it accepts and stores an `external:` edge on the issue record. It does
+/// NOT yet subtract that edge as a blocker at query time — `bd dep list`,
+/// `bd blocked` and `bd ready` ignore it, configured project or not. Honouring
+/// the row in the frontier is the grid's, not this verb's (`tg-xh5d`), and the
+/// governor's ruling of 2026-09-13 scopes this bead to the projection: the map
+/// bd reads, written from the one authority on which projects exist.
 ///
 /// **The station adds nothing bd lacks.** This verb writes bd's own config key
 /// from the ONE authority on which projects exist — [SpaceDelegate.substations],
@@ -30,6 +40,18 @@
 /// survives the write — the file belongs to the operator, and this verb owns
 /// exactly one key in it.
 ///
+/// **And it makes that file IGNORED.** Machine-local is only half a promise
+/// while git can still see the file: a projected config carries THIS machine's
+/// absolute paths, and a `git add -A` in a substation repo would commit them.
+/// bd's own `.beads/.gitignore` carries no pattern for `config.local.yaml`
+/// (measured on every store in this station's roster), so the verb appends one
+/// — the exact line, under a comment naming the verb — to the store's
+/// `.beads/.gitignore`, creating that file only when the store has none. A
+/// store that already ignores the file is left byte-identical, which is what
+/// keeps a second run a no-op; and no NEGATION is ever written, because bd's
+/// own file warns that one would override the fork protection in
+/// `.git/info/exclude`.
+///
 /// **Idempotent.** The projection is compared against the map already in the
 /// file; an equal map is reported `unchanged` and NOTHING is written, so a
 /// second run leaves every file byte-identical. `--dry-run` prints the map per
@@ -50,7 +72,10 @@
 /// **Nothing here is written blind.** An existing local config that cannot be
 /// rewritten without guessing at the operator's data is REFUSED per store
 /// (stderr, exit 1) and left byte-identical, and the rest of the roster is
-/// still configured: no parse or rewrite failure aborts the run half-done.
+/// still configured: no parse or rewrite failure aborts the run half-done. A
+/// refused store keeps its `.gitignore` too — the file the verb refused to
+/// touch holds the OPERATOR's data, not this machine's projected paths, so the
+/// whole store is left exactly as it was found rather than half-acted-on.
 library;
 
 import 'dart:io';
@@ -78,6 +103,34 @@ const String kLocalConfigFileName = 'config.local.yaml';
 /// it is skipped rather than given an inert projection.
 const String kPrimaryConfigFileName = 'config.yaml';
 
+/// The store-local git ignore file bd itself ships in every `bd init` store.
+/// This verb appends exactly one pattern to it — [kLocalConfigFileName] — so
+/// the machine-local projection cannot be committed into a substation's repo.
+const String kStoreIgnoreFileName = '.gitignore';
+
+/// What the verb did about [kLocalConfigFileName] being git-ignored in ONE
+/// store. Reported per store so the operator sees the repo-visible change the
+/// verb made beyond the config itself.
+enum LocalConfigIgnore {
+  /// The store's [kStoreIgnoreFileName] already matched [kLocalConfigFileName]
+  /// as an exact line, so nothing was written and the file is byte-identical.
+  alreadyIgnored,
+
+  /// The pattern was absent and this run appended it (creating
+  /// [kStoreIgnoreFileName] only if the store had none). Under `--dry-run` it
+  /// is what the run WOULD have appended; nothing is written.
+  appended,
+}
+
+/// The stanza appended to a store's [kStoreIgnoreFileName]: the verb names
+/// itself, then the one pattern it owns. Never a negation — bd's own file
+/// warns that a negation here overrides the fork protection in
+/// `.git/info/exclude`.
+const String kLocalConfigIgnoreStanza =
+    '# Machine-local bd config, written by `beads configure`: the\n'
+    '# external_projects map holds THIS machine\'s absolute paths.\n'
+    '$kLocalConfigFileName\n';
+
 /// What `beads configure` did — or refused to do — for ONE substation store.
 sealed class BeadsConfigureOutcome {
   /// Names the substation and the root its store is expected at.
@@ -93,12 +146,14 @@ sealed class BeadsConfigureOutcome {
 /// The store's `external_projects` map differed and was rewritten — or, under
 /// `--dry-run`, WOULD be rewritten.
 final class ExternalProjectsWritten extends BeadsConfigureOutcome {
-  /// Records the [projects] projected into the local config at [configPath].
+  /// Records the [projects] projected into the local config at [configPath],
+  /// and how [ignore] left the store's git ignore.
   const ExternalProjectsWritten({
     required super.name,
     required super.root,
     required this.configPath,
     required this.projects,
+    required this.ignore,
   });
 
   /// The `.beads/config.local.yaml` path the projection lands in.
@@ -106,16 +161,23 @@ final class ExternalProjectsWritten extends BeadsConfigureOutcome {
 
   /// The projected map: every OTHER ARMED substation, name → absolute root.
   final Map<String, String> projects;
+
+  /// Whether the store already ignored the local config, or this run appended
+  /// the pattern to its `.beads/.gitignore`.
+  final LocalConfigIgnore ignore;
 }
 
 /// The store already carried exactly this map; nothing was written.
 final class ExternalProjectsUnchanged extends BeadsConfigureOutcome {
-  /// Records the already-current [projects] at [configPath].
+  /// Records the already-current [projects] at [configPath], and how [ignore]
+  /// left the store's git ignore — an unchanged projection can still need the
+  /// ignore appended, since the two are separate files.
   const ExternalProjectsUnchanged({
     required super.name,
     required super.root,
     required this.configPath,
     required this.projects,
+    required this.ignore,
   });
 
   /// The `.beads/config.local.yaml` path that already carries the projection.
@@ -123,6 +185,10 @@ final class ExternalProjectsUnchanged extends BeadsConfigureOutcome {
 
   /// The map the file already holds — identical to the projection.
   final Map<String, String> projects;
+
+  /// Whether the store already ignored the local config, or this run appended
+  /// the pattern to its `.beads/.gitignore`.
+  final LocalConfigIgnore ignore;
 }
 
 /// The substation's root holds no `.beads/` work store: it is NOT armed, so it
@@ -315,11 +381,15 @@ class BeadsConfigureService {
           '${entry.key}': '${entry.value}',
     };
     if (_sameProjects(existing, projects)) {
+      // The projection is current, but the IGNORE is a second file: a store
+      // configured before this verb owned the pattern (or one whose operator
+      // dropped it) still needs it, and appending it is not a config rewrite.
       return ExternalProjectsUnchanged(
         name: scope.name,
         root: scope.root,
         configPath: configPath,
         projects: projects,
+        ignore: _ensureIgnored(beadsDir, dryRun: dryRun),
       );
     }
     // Rendered BEFORE the dry-run branch and inside the guard: a rewrite this
@@ -340,13 +410,52 @@ class BeadsConfigureService {
         reason: 'the rewritten document would not parse (${error.message})',
       );
     }
+    // Ignored FIRST, then written: a projection of this machine's absolute
+    // paths is never on disk in a state git can see it.
+    final ignore = _ensureIgnored(beadsDir, dryRun: dryRun);
     if (!dryRun) file.writeAsStringSync(rendered);
     return ExternalProjectsWritten(
       name: scope.name,
       root: scope.root,
       configPath: configPath,
       projects: projects,
+      ignore: ignore,
     );
+  }
+
+  /// Makes [kLocalConfigFileName] git-ignored in the store at [beadsDir], and
+  /// says which of [LocalConfigIgnore] it was.
+  ///
+  /// The pattern is matched as an EXACT line (a leading `/` allowed — git reads
+  /// `/config.local.yaml` in a `.beads/.gitignore` as the same path), so an
+  /// already-ignored store is never appended to twice and a second run leaves
+  /// the file byte-identical. Nothing else in the file is read, reordered or
+  /// rewritten: the verb owns one line in it. A store with no
+  /// [kStoreIgnoreFileName] gets one holding just this verb's stanza.
+  LocalConfigIgnore _ensureIgnored(String beadsDir, {required bool dryRun}) {
+    final ignoreFile = File(p.join(beadsDir, kStoreIgnoreFileName));
+    final existing = ignoreFile.existsSync()
+        ? ignoreFile.readAsStringSync()
+        : '';
+    final ignored = existing
+        .split('\n')
+        .map((line) => line.trim())
+        .any(
+          (line) =>
+              line == kLocalConfigFileName || line == '/$kLocalConfigFileName',
+        );
+    if (ignored) return LocalConfigIgnore.alreadyIgnored;
+    if (!dryRun) {
+      final separator = switch (existing) {
+        '' => '',
+        final text when text.endsWith('\n') => '\n',
+        _ => '\n\n',
+      };
+      ignoreFile.writeAsStringSync(
+        '$existing$separator$kLocalConfigIgnoreStanza',
+      );
+    }
+    return LocalConfigIgnore.appended;
   }
 
   /// Rewrites ONLY [kExternalProjectsKey], preserving every other key, the
@@ -447,10 +556,12 @@ class BeadsConfigureCommand extends Command<int> {
   @override
   final String description =
       "Project the ARMED roster into every armed substation store's bd "
-      'external_projects map (.beads/config.local.yaml), so '
-      'external:<substation>:<capability> dependencies resolve. Offline and '
-      'idempotent: config.yaml is never touched, unrelated local keys survive, '
-      'and a substation root with no .beads store is skipped, never created.';
+      'external_projects map (.beads/config.local.yaml), so an '
+      'external:<substation>:<capability> dependency names a project bd can '
+      'place. Offline and idempotent: config.yaml is never touched, unrelated '
+      'local keys survive, the local config is added to the store\'s '
+      '.beads/.gitignore, and a substation root with no .beads store is '
+      'skipped, never created.';
 
   @override
   Future<int> run() async {
@@ -474,14 +585,26 @@ class BeadsConfigureCommand extends Command<int> {
     var refused = false;
     for (final outcome in outcomes) {
       switch (outcome) {
-        case ExternalProjectsWritten(:final name, :final projects):
+        case ExternalProjectsWritten(
+          :final name,
+          :final projects,
+          :final ignore,
+        ):
           _out.writeln(
             '$name -> ${projects.length} projects '
-            '${dryRun ? 'to write' : 'written'}',
+            '${dryRun ? 'to write' : 'written'}'
+            '${_ignoreSuffix(ignore, dryRun: dryRun)}',
           );
           if (dryRun) _writeMap(projects);
-        case ExternalProjectsUnchanged(:final name, :final projects):
-          _out.writeln('$name -> ${projects.length} projects unchanged');
+        case ExternalProjectsUnchanged(
+          :final name,
+          :final projects,
+          :final ignore,
+        ):
+          _out.writeln(
+            '$name -> ${projects.length} projects unchanged'
+            '${_ignoreSuffix(ignore, dryRun: dryRun)}',
+          );
           if (dryRun) _writeMap(projects);
         case WorkStoreMissing(:final name, :final reason):
           _out.writeln('$name -> skipped ($reason)');
@@ -494,6 +617,17 @@ class BeadsConfigureCommand extends Command<int> {
     }
     return refused ? 1 : 0;
   }
+
+  /// Names the repo-visible half of the write, and only when there is one: an
+  /// already-ignored store says nothing, so the common re-run stays quiet.
+  String _ignoreSuffix(LocalConfigIgnore ignore, {required bool dryRun}) =>
+      switch (ignore) {
+        LocalConfigIgnore.alreadyIgnored => '',
+        LocalConfigIgnore.appended =>
+          dryRun
+              ? ', $kLocalConfigFileName to ignore'
+              : ', $kLocalConfigFileName ignored',
+      };
 
   void _writeMap(Map<String, String> projects) {
     for (final entry in projects.entries) {

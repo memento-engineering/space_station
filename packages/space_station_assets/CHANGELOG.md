@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- Added: `BeadsCommand` / `BeadsConfigureCommand` and `buildSpaceBeadsCommand`
+  vend the offline `beads configure` verb, composed on the shared station
+  runner. It projects the station's ARMED coded roster into every armed
+  substation store's bd `external_projects` map — `.beads/config.local.yaml`
+  only, since the projected roots are one machine's absolute paths — so an
+  `external:<substation>:<capability>` dependency names a project bd can place.
+  The tracked `config.yaml` is never touched, unrelated local keys, comments
+  and formatting survive, an equal map is reported `unchanged` and nothing is
+  written, `--dry-run` writes nothing at all, and a substation root with no
+  `.beads` store (or no tracked `config.yaml`) is reported and skipped, never
+  created. The verb also appends `config.local.yaml` to the store's
+  `.beads/.gitignore` when absent, so the machine-local projection cannot be
+  committed into a substation's repo.
+- Added: `BeadsConfigureService` and `externalProjectsFor` are the projection
+  itself, plus the sealed `BeadsConfigureOutcome` family
+  (`ExternalProjectsWritten`, `ExternalProjectsUnchanged`, `WorkStoreMissing`,
+  `PrimaryConfigMissing`, `LocalConfigRefused`), the `LocalConfigIgnore` report,
+  and the `kExternalProjectsKey`, `kLocalConfigFileName`,
+  `kPrimaryConfigFileName`, `kStoreIgnoreFileName` and
+  `kLocalConfigIgnoreStanza` constants — a downstream station composes the SAME
+  verb over ITS delegate rather than authoring a second one.
+- Adds `yaml` and `yaml_edit` dependencies: bd's config primitive is YAML, and
+  the rewrite is surgical so the operator's file survives it.
+
 ## 0.5.0-dev.2
 
 - Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.

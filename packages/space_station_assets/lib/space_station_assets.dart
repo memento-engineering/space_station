@@ -149,6 +149,7 @@ export 'src/beads_commands.dart'
         BeadsConfigureService,
         ExternalProjectsUnchanged,
         ExternalProjectsWritten,
+        LocalConfigIgnore,
         LocalConfigRefused,
         PrimaryConfigMissing,
         WorkStoreMissing,
@@ -156,7 +157,9 @@ export 'src/beads_commands.dart'
         externalProjectsFor,
         kExternalProjectsKey,
         kLocalConfigFileName,
-        kPrimaryConfigFileName;
+        kLocalConfigIgnoreStanza,
+        kPrimaryConfigFileName,
+        kStoreIgnoreFileName;
 // The composition site of the VENDED `search` Command — exported so a test
 // (or a Flutter app) can build the seat with its seams injected.
 export 'src/search_command.dart' show buildSpaceSearchCommand;

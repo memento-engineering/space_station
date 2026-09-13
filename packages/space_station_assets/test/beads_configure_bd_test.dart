@@ -11,14 +11,20 @@
 /// projection exists to serve, and `bd list --json` is bd's own read-back of
 /// the stored edge.
 ///
+/// **The AC this suite answers** (governor ruling, 2026-09-13): after the
+/// write, `bd config show` reports the `external_projects` map, and
+/// `bd dep add <bead> external:<other>:<id>` is ACCEPTED and STORED. Resolution
+/// is the station's, not bd's — `tg-xh5d`.
+///
 /// **What this suite MEASURED about the installed bd** (HEAD-a45199a, the
-/// fleet build): bd stores an `external:` edge as-is and surfaces it on the
-/// issue record, and it resolves the PROJECT through `external_projects` — but
-/// it does not yet subtract that edge as a blocker at query time. A configured
-/// project and an unconfigured one are stored identically, and `bd dep list`,
-/// `bd blocked` and `bd ready` ignore both. The last test pins that
-/// measurement: it going red is the signal that bd grew query-time external
-/// resolution and the frontier work (`tg-xh5d`) has a blocker to honour.
+/// fleet build, and the measurement the ruling re-scoped AC-6 on): bd reports
+/// the projected projects from the merged config, and it stores an `external:`
+/// edge as-is and surfaces it on the issue record — but it does not subtract
+/// that edge as a blocker at query time. A configured project and an
+/// unconfigured one are stored identically, and `bd dep list`, `bd blocked`
+/// and `bd ready` ignore both. The last test pins that measurement: it going
+/// red is the signal that bd grew query-time external resolution and the
+/// frontier work (`tg-xh5d`) has a blocker to honour.
 ///
 /// Tagged `bd-e2e`: it spawns the real `bd` binary and initialises real Dolt
 /// stores, so it is excluded from the station's validation lane
@@ -190,7 +196,8 @@ void main() {
     });
   });
 
-  // AC-6 — the literal leg, on real stores.
+  // AC-6 — the literal leg, on real stores: bd reports the map, and bd accepts
+  // and stores the external reference against the projected project.
   test('bd dep add with an external: reference to another CONFIGURED store is '
       'accepted and stored against the projected project', () async {
     await initStore('alpha');
@@ -232,11 +239,21 @@ void main() {
       contains('external:beta:widget'),
       reason: 'bd carries the edge against the projected project name',
     );
+
+    // AC-7, against the .gitignore `bd init` ITSELF ships (not a fixture):
+    // bd's own patterns survive and the machine-local config gains exactly
+    // one, so the projected absolute paths cannot be committed.
+    final shipped = File(
+      '${rootOf('alpha')}/.beads/.gitignore',
+    ).readAsStringSync();
+    expect(shipped, contains('dolt/'), reason: "bd's own patterns survive");
+    expect('config.local.yaml\n'.allMatches(shipped).length, 1);
+    expect(shipped, isNot(contains('!config.local.yaml')));
   }, timeout: const Timeout(Duration(minutes: 5)));
 
   // The MEASURED limit of the installed bd, pinned so it cannot be assumed
-  // away. AC-6 asks for a BLOCKER; bd HEAD-a45199a does not produce one, and
-  // this is the receipt. Red here means bd gained query-time external
+  // away — and the receipt AC-6 was re-scoped on. bd HEAD-a45199a stores the
+  // edge but produces no blocker. Red here means bd gained query-time external
   // resolution — read it as news, not as a regression in this station.
   test(
     'bd HEAD-a45199a does NOT yet subtract an external edge as a blocker, and '
@@ -287,8 +304,8 @@ void main() {
         jsonDecode(blocked.stdout as String),
         isEmpty,
         reason:
-            'the AC asks for a blocker; the installed bd reports none, so the '
-            'blocker belongs to the frontier work (tg-xh5d), not to this verb',
+            'the installed bd reports no blocker, which is why the blocker '
+            'belongs to the frontier work (tg-xh5d) and not to this verb',
       );
     },
     timeout: const Timeout(Duration(minutes: 5)),
