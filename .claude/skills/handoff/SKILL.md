@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@2210f5a — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@43cc1ae — do not edit; run `dart run space:space assets install`
 name: handoff
 description: >
   Write the seat's own handoff onto its Agent Disc, bank the durable learnings,
@@ -82,6 +82,14 @@ successor's wasted hour:
    next to the slug. Read it, never remember it:
    `dart run space:space status --state-workspace <grid home>`, then
    `bd -C <store root> list --status=in_progress`.
+
+   Before writing `empty by design`, repeat the Sweep enumeration for every
+   stamped-but-unmounted bead across both blocker sources and inspect each
+   open blocker's type and notes. The board is empty by design only when that
+   OPEN-blocker enumeration is empty; otherwise record every blocker, putting
+   each release node or explicit agent-executes blocker in a **GOVERNOR WORK**
+   row with its id, title, owning store, and next executable action, and only
+   genuine human blockers in human-gate rows.
 4. **In flight** — what is hot and why, plus the resources SETTLE named: the
    resident, locks, worktrees, PRs waiting on a queue.
 5. **Tried and failed — do not retry** — each with the reason it failed.
