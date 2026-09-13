@@ -20,3 +20,6 @@ jobs:
       - name: Test space_station_assets
         working-directory: packages/space_station_assets
         run: dart test -x bd-e2e
+      - name: Test space
+        working-directory: apps/space
+        run: dart test -x bd-e2e -x live-arm

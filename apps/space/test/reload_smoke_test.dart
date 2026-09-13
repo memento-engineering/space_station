@@ -1,3 +1,6 @@
+@Tags(['bd-e2e'])
+library;
+
 import 'dart:io';
 
 // ignore: implementation_imports

@@ -1,3 +1,6 @@
+@Tags(['bd-e2e'])
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -119,6 +122,7 @@ void main() {
       expect(up.exitCode, 0, reason: '${up.stderr}');
       expect('${up.stdout}', contains('station: UP'));
     },
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 
   test(
@@ -193,29 +197,39 @@ void main() {
       expect(stationLock.record.phase, StationLifecyclePhase.releasing);
       expect(await File(lockPath).exists(), isFalse);
     },
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('starting status is named non-error output', () async {
-    final gridHome = await _bdInitGridHome('space-status-starting-');
-    addTearDown(() => gridHome.delete(recursive: true));
-    final stationLock = await StationLockService(
-      prepareProcessGroup: (stationPid) async => stationPid,
-    ).acquire(stateWorkspaceDir: gridHome.path, pid: pid, now: DateTime.now());
-    addTearDown(() => stationLock.release());
+  test(
+    'starting status is named non-error output',
+    () async {
+      final gridHome = await _bdInitGridHome('space-status-starting-');
+      addTearDown(() => gridHome.delete(recursive: true));
+      final stationLock =
+          await StationLockService(
+            prepareProcessGroup: (stationPid) async => stationPid,
+          ).acquire(
+            stateWorkspaceDir: gridHome.path,
+            pid: pid,
+            now: DateTime.now(),
+          );
+      addTearDown(() => stationLock.release());
 
-    final status = await _runStatus(gridHome.path);
-    expect(status.exitCode, 0);
-    expect(
-      '${status.stdout}',
-      'station: STARTING\n'
-          '  state store: ${gridHome.path}\n'
-          '  pid: $pid\n',
-    );
-    expect('${status.stderr}', isEmpty);
-  });
+      final status = await _runStatus(gridHome.path);
+      expect(status.exitCode, 0);
+      expect(
+        '${status.stdout}',
+        'station: STARTING\n'
+            '  state store: ${gridHome.path}\n'
+            '  pid: $pid\n',
+      );
+      expect('${status.stderr}', isEmpty);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test(
-    'dead lock holder retains unreachable crash wording and exit 1',
+    'dead lock holder reports STALE DeadPid wording and exit 1',
     () async {
       final gridHome = await _bdInitGridHome('space-status-unreachable-');
       addTearDown(() => gridHome.delete(recursive: true));
@@ -253,14 +267,16 @@ void main() {
         '${status.stderr}',
         allOf(
           contains(
-            'names pid $deadPid but it is unreachable '
-            '(dead, or alive-but-not-answering',
+            'names pid $deadPid, but no such process is alive — the lock is '
+            'STALE',
           ),
+          contains('(station: down)'),
           contains('a fresh `up` steals a dead lock automatically'),
-          contains('if $deadPid is alive, investigate it directly'),
+          contains('nothing needs clearing by hand'),
         ),
       );
     },
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 
   test(
@@ -668,117 +684,123 @@ void main() {
     }
   }, timeout: const Timeout(Duration(minutes: 2)));
 
-  test('a LIVE arm (--no-dry-run) BINDS delivery: the banner reports '
-      '`delivery: BOUND (GitHub PR)`, /status reports the live posture with '
-      'NOTHING mounted, and the resident still drains gracefully — the live '
-      'half of the per-substation binding (the_grid ADR-0000 A51)', () async {
-    final gridHome = await _bdInitGridHome('space-up-live-home-');
-    final subRoot = await _bdInitWorkspace('space-up-live-sub-');
-    addTearDown(() async {
-      await gridHome.delete(recursive: true);
-      await subRoot.delete(recursive: true);
-    });
-    final lockPath = StationLockService.lockPath(gridHome.path);
+  // Excluded from default CI: live root registration needs Git before control advertises.
+  test(
+    'a LIVE arm (--no-dry-run) BINDS delivery: the banner reports '
+    '`delivery: BOUND (GitHub PR)`, /status reports the live posture with '
+    'NOTHING mounted, and the resident still drains gracefully — the live '
+    'half of the per-substation binding (the_grid ADR-0000 A51)',
+    () async {
+      final gridHome = await _bdInitGridHome('space-up-live-home-');
+      final subRoot = await _bdInitWorkspace('space-up-live-sub-');
+      addTearDown(() async {
+        await gridHome.delete(recursive: true);
+        await subRoot.delete(recursive: true);
+      });
+      final lockPath = StationLockService.lockPath(gridHome.path);
 
-    // The ONE branch that constructs real delivery halves — hermetic on three
-    // independent fences, so a LIVE arm here spawns no agent and runs no
-    // `git`/`gh`:
-    //   1. the freshly bd-init'd substation has NO ready work (asserted on
-    //      /status below), so the reconcile mounts nothing;
-    //   2. `--max-agents 0` is a ZERO admission ceiling — a non-null station
-    //      cap floors `slotsAvailable` at `max(0, 0 - live)` — so nothing can
-    //      mount even if a later fixture seeded a ready bead;
-    //   3. BINDING execs nothing: `GitOps`/`GhPrOpener` are const ctors and
-    //      `SystemGitRunner` only copies the environment.
-    // The coded roster resolves `../<repo>` against this temp grid home, so
-    // every coded seat is skipped LOUD and only `smoketest` arms.
-    final up = await _spawnSpace([
-      'up',
-      '--no-dry-run',
-      '--max-agents',
-      '0',
-      '--substation',
-      'smoketest=${subRoot.path}',
-      '--grid-home',
-      gridHome.path,
-      '--control-port',
-      '0',
-    ]);
-    final upIo = _CapturedIo(up);
-    addTearDown(() async {
-      if (await _isAlive(up.pid)) {
-        up.kill(ProcessSignal.sigkill);
-      }
-    });
+      // The ONE branch that constructs real delivery halves — hermetic on three
+      // independent fences, so a LIVE arm here spawns no agent and runs no
+      // `git`/`gh`:
+      //   1. the freshly bd-init'd substation has NO ready work (asserted on
+      //      /status below), so the reconcile mounts nothing;
+      //   2. `--max-agents 0` is a ZERO admission ceiling — a non-null station
+      //      cap floors `slotsAvailable` at `max(0, 0 - live)` — so nothing can
+      //      mount even if a later fixture seeded a ready bead;
+      //   3. BINDING execs nothing: `GitOps`/`GhPrOpener` are const ctors and
+      //      `SystemGitRunner` only copies the environment.
+      // The coded roster resolves `../<repo>` against this temp grid home, so
+      // every coded seat is skipped LOUD and only `smoketest` arms.
+      final up = await _spawnSpace([
+        'up',
+        '--no-dry-run',
+        '--max-agents',
+        '0',
+        '--substation',
+        'smoketest=${subRoot.path}',
+        '--grid-home',
+        gridHome.path,
+        '--control-port',
+        '0',
+      ]);
+      final upIo = _CapturedIo(up);
+      addTearDown(() async {
+        if (await _isAlive(up.pid)) {
+          up.kill(ProcessSignal.sigkill);
+        }
+      });
 
-    final lock = await _untilLockAdvertised(lockPath);
-    final status = await _getJson(
-      Uri.parse('${lock['controlUrl']! as String}/status'),
-      token: lock['token']! as String,
-    );
+      final lock = await _untilLockAdvertised(lockPath);
+      final status = await _getJson(
+        Uri.parse('${lock['controlUrl']! as String}/status'),
+        token: lock['token']! as String,
+      );
 
-    // The live posture at the CONTROL surface — a witness independent of the
-    // banner — plus the proof the arm mounted NOTHING, so the bound halves
-    // were constructed and never called.
-    final station = status['station']! as Map<String, Object?>;
-    expect(
-      station['dryRun'],
-      isFalse,
-      reason: 'the live arm reports the LIVE posture\nfull payload: $status',
-    );
-    final work = status['work']! as Map<String, Object?>;
-    expect(
-      work['ready'],
-      0,
-      reason: 'the empty store has no ready work\nfull payload: $status',
-    );
-    expect(
-      work['mounted'],
-      0,
-      reason:
-          'a live arm with no ready work mounts NOTHING — no agent, no git, '
-          'no gh\nfull payload: $status',
-    );
+      // The live posture at the CONTROL surface — a witness independent of the
+      // banner — plus the proof the arm mounted NOTHING, so the bound halves
+      // were constructed and never called.
+      final station = status['station']! as Map<String, Object?>;
+      expect(
+        station['dryRun'],
+        isFalse,
+        reason: 'the live arm reports the LIVE posture\nfull payload: $status',
+      );
+      final work = status['work']! as Map<String, Object?>;
+      expect(
+        work['ready'],
+        0,
+        reason: 'the empty store has no ready work\nfull payload: $status',
+      );
+      expect(
+        work['mounted'],
+        0,
+        reason:
+            'a live arm with no ready work mounts NOTHING — no agent, no git, '
+            'no gh\nfull payload: $status',
+      );
 
-    // A LIVE arm BINDS delivery. `live` (== !dryRun) gates BOTH the constructed
-    // halves (`GitOps` + `GhPrOpener`) and this banner, so the banner IS the
-    // posture: wired backwards, a `--no-dry-run` arm would print the dry run's
-    // `none (commit-only)` and both matchers below would fail.
-    final banner = upIo.out.toString();
-    expect(
-      banner,
-      allOf(
-        contains('delivery: BOUND (GitHub PR)'),
-        isNot(contains('delivery: none (commit-only)')),
-        contains('mode: LIVE'),
-        contains('work-driving: ARMED (live)'),
-      ),
-      reason: 'stdout: $banner\nstderr: ${upIo.err}',
-    );
+      // A LIVE arm BINDS delivery. `live` (== !dryRun) gates BOTH the constructed
+      // halves (`GitOps` + `GhPrOpener`) and this banner, so the banner IS the
+      // posture: wired backwards, a `--no-dry-run` arm would print the dry run's
+      // `none (commit-only)` and both matchers below would fail.
+      final banner = upIo.out.toString();
+      expect(
+        banner,
+        allOf(
+          contains('delivery: BOUND (GitHub PR)'),
+          isNot(contains('delivery: none (commit-only)')),
+          contains('mode: LIVE'),
+          contains('work-driving: ARMED (live)'),
+        ),
+        reason: 'stdout: $banner\nstderr: ${upIo.err}',
+      );
 
-    // The live resident drains on the same graceful path the dry-run one does
-    // (a settle margin past the signal-listener attach, as the SIGTERM case
-    // above). The lock's absence afterwards is the observable consequence of
-    // `shutdown()` releasing it LAST, after tearing the tree down.
-    await Future<void>.delayed(const Duration(seconds: 2));
-    expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
-    final exitCode = await up.exitCode.timeout(
-      const Duration(seconds: 20),
-      onTimeout: () {
-        up.kill(ProcessSignal.sigkill);
-        fail(
-          'the LIVE up did not exit after SIGTERM.\n'
-          'stdout: ${upIo.out}\nstderr: ${upIo.err}',
-        );
-      },
-    );
-    expect(exitCode, 0, reason: 'graceful drain.\nstderr: ${upIo.err}');
-    expect(
-      await File(lockPath).exists(),
-      isFalse,
-      reason: 'the live resident released the lock on the graceful path',
-    );
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      // The live resident drains on the same graceful path the dry-run one does
+      // (a settle margin past the signal-listener attach, as the SIGTERM case
+      // above). The lock's absence afterwards is the observable consequence of
+      // `shutdown()` releasing it LAST, after tearing the tree down.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      expect(Process.killPid(up.pid, ProcessSignal.sigterm), isTrue);
+      final exitCode = await up.exitCode.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          up.kill(ProcessSignal.sigkill);
+          fail(
+            'the LIVE up did not exit after SIGTERM.\n'
+            'stdout: ${upIo.out}\nstderr: ${upIo.err}',
+          );
+        },
+      );
+      expect(exitCode, 0, reason: 'graceful drain.\nstderr: ${upIo.err}');
+      expect(
+        await File(lockPath).exists(),
+        isFalse,
+        reason: 'the live resident released the lock on the graceful path',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+    tags: 'live-arm',
+  );
 }
 
 /// `bd init`s a fresh, hermetic temp workspace (embedded Dolt — no server, no
