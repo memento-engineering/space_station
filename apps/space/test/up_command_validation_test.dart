@@ -161,25 +161,28 @@ void main() {
       expect('${result.stderr}', contains('has an empty prefix after "@"'));
     });
 
-    test('--land is GONE — the retired arming flag is refused by the PARSER '
-        '(exit 64), never silently accepted: delivery is a per-substation '
-        'BINDING now, not a station boolean (the_grid ADR-0000 A51)', () async {
-      final result = await _runUp([
-        '--dry-run',
-        '--land',
-        '--grid-home',
-        '/tmp/space-up-land-retired',
-        '--substation',
-        'foo=/tmp/a',
-      ]);
-      expect(result.exitCode, 64);
-      // Split rather than one literal: args 2.7 renders `Could not find an
-      // option named "--land".` while older args omits the dashes.
-      expect(
-        '${result.stderr}',
-        allOf(contains('Could not find an option named'), contains('land')),
-      );
-    });
+    test(
+      '--land is GONE — the retired arming flag is refused by the PARSER '
+      '(exit 64), never silently accepted: delivery is a per-substation '
+      'BINDING now, not a station boolean (the_grid#a51-the-autonomous-refinements-behind-the-route-unification)',
+      () async {
+        final result = await _runUp([
+          '--dry-run',
+          '--land',
+          '--grid-home',
+          '/tmp/space-up-land-retired',
+          '--substation',
+          'foo=/tmp/a',
+        ]);
+        expect(result.exitCode, 64);
+        // Split rather than one literal: args 2.7 renders `Could not find an
+        // option named "--land".` while older args omits the dashes.
+        expect(
+          '${result.stderr}',
+          allOf(contains('Could not find an option named'), contains('land')),
+        );
+      },
+    );
 
     test(
       'a --substation naming a CODED substation is a LOUD FormatException '

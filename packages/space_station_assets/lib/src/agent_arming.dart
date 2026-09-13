@@ -176,7 +176,7 @@ const List<SeatPreference> kMementoStationArming = [
 /// normal-form fence: a preference entry that is not its own normal form —
 /// a layer that inherits its transport from a builtin — is not in the presence
 /// set and would silently resolve to NOTHING. It refuses LOUD instead, naming
-/// the SEAT TYPE, the value and the fix (ADR-0000 A8, guards LOUD or GONE). An
+/// the SEAT TYPE, the value and the fix (power_station#a8-bead-tg-kx1-the-d-h-doctrine-rides-the-coding-agent-worki, guards LOUD or GONE). An
 /// EMPTY armed preference is refused for the same reason.
 ///
 /// It deliberately does NOT run `EnvironmentRegistry.validate` over the whole

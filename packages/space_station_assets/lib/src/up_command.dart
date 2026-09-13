@@ -649,7 +649,7 @@ class UpCommand extends Command<int> {
     // wiring. The coded org is hardcoded in its build; only the operator's
     // appended substations ride in.
     //
-    // DELIVERY IS A BINDING, NOT AN ARM (the_grid ADR-0000 A51). A substation
+    // DELIVERY IS A BINDING, NOT AN ARM (the_grid#a51-the-autonomous-refinements-behind-the-route-unification). A substation
     // BINDS a `DeliveryMethod` on its `ServiceBundle`, and binding NONE is the
     // commit-only posture — a real posture, not an unarmed one. space's coded
     // substations compose github_grid_assets' `GitHubGridAssets`, which binds

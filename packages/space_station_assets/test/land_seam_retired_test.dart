@@ -1,6 +1,6 @@
 // The station-level land ARMING SEAM is retired in space too.
 //
-// the_grid's route unification (ADR-0000 A51 / M5 D-4a) DELETED grid_sdk's
+// the_grid's route unification (the_grid#a51-the-autonomous-refinements-behind-the-route-unification / M5 D-4a) DELETED grid_sdk's
 // `buildLandOps(armed:)`: landing is no longer a station-wide boolean threaded
 // into every substation — a substation BINDS a `DeliveryMethod` on its
 // `ServiceBundle`, and binding NONE is the commit-only posture. space's runner
@@ -40,7 +40,7 @@ void main() {
       reason:
           'the station-level land arming seam is retired: delivery is a '
           'per-substation binding on the ServiceBundle, not a boolean flag '
-          '(the_grid ADR-0000 A51):\n  ${hits.join('\n  ')}',
+          '(the_grid#a51-the-autonomous-refinements-behind-the-route-unification):\n  ${hits.join('\n  ')}',
     );
   });
 }
