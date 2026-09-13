@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0-dev.2
 
 - Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.
   Migration: Extending stations replace an arming getter with seatSeeds(context, configuration), returning one seat.provider() seed per preference, and override environments(context, configuration); lunar adopts this in its separate downstream bead.
