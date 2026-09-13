@@ -140,14 +140,32 @@ class DownCommand extends Command<int> {
     );
     final outcome = await supervisor.stop();
     switch (outcome) {
-      case DaemonStopped(:final label, :final plistPath, :final wasLoaded):
-        _out(
-          wasLoaded
-              ? 'down: booted out $label and removed $plistPath — launchd no '
-                    'longer supervises this station.'
-              : 'down: $label was not loaded; removed the stale recipe at '
-                    '$plistPath.',
-        );
+      // The two halves are reported as they actually happened. They can
+      // disagree — a plist hand-deleted under a loaded job, a job booted out
+      // by hand leaving its recipe — and a line claiming a deletion that did
+      // not happen is precisely what hides that tampering.
+      case DaemonStopped(
+        :final label,
+        :final plistPath,
+        :final wasLoaded,
+        :final removedPlist,
+      ):
+        _out(switch ((wasLoaded, removedPlist)) {
+          (true, true) =>
+            'down: booted out $label and removed $plistPath — launchd no '
+                'longer supervises this station.',
+          (true, false) =>
+            'down: booted out $label — launchd no longer supervises this '
+                'station. There was no plist at $plistPath to remove; the '
+                'recipe had already been deleted by hand.',
+          (false, true) =>
+            'down: $label was not loaded; removed the stale recipe at '
+                '$plistPath.',
+          // Unreachable: neither half is DaemonNotSupervised, above.
+          (false, false) =>
+            'down: nothing to retire — launchd does not hold $label and there '
+                'is no plist at $plistPath.',
+        });
         return 0;
       case DaemonNotSupervised(:final label, :final plistPath):
         _out(

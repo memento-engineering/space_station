@@ -198,20 +198,32 @@ List<String> daemonProgramArguments({
 /// (SIGTERM → exit 0) is a real stop rather than an instant bounce, while a
 /// `kill -9` or a crash IS relaunched.
 ///
+/// [environmentVariables] is the POSTURE the supervised resident inherits.
+/// launchd does NOT hand a job the launching shell's environment, so a key
+/// the operator exported before typing `up --daemon` reaches the supervised
+/// boot only by being written here. The map arrives as a VALUE (this library
+/// reads no ambient environment) and the caller keeps it to an explicit
+/// allowlist — never the whole environment, which would copy every ambient
+/// secret into a file under `~/Library/LaunchAgents`.
+///
 /// The conventional Apple DOCTYPE is deliberately OMITTED. Its system
 /// identifier is a url, and `no_endpoint_url_test` bans every url token from
 /// this package's committed Dart (ADR-0002 D3: an endpoint is a machine fact,
 /// never committed source). That guard is blunt on purpose and this file is
 /// not the place to blunt it back — and nothing needs the DOCTYPE: launchd
 /// reads the plist through CFPropertyList, which parses the document without
-/// fetching a DTD, and `plutil -lint` accepts it (the test proves exactly
-/// that).
+/// fetching a DTD. That is not reasoning from the spec: a DOCTYPE-less
+/// rendering of this exact shape was bootstrapped into, and booted out of, a
+/// real `gui/<uid>` domain under a throwaway label during space-5lh review
+/// (`launchctl bootstrap` exit 0, `launchctl print` showing the job), and
+/// `plutil -lint` accepts it (the test proves that half on every run).
 String renderLaunchAgentPlist({
   required String label,
   required List<String> programArguments,
   required String workingDirectory,
   required String standardOutPath,
   required String standardErrorPath,
+  Map<String, String> environmentVariables = const <String, String>{},
 }) {
   final buffer = StringBuffer()
     ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
@@ -224,8 +236,24 @@ String renderLaunchAgentPlist({
   for (final argument in programArguments) {
     buffer.writeln('\t\t<string>${_escaped(argument)}</string>');
   }
+  buffer.writeln('\t</array>');
+  if (environmentVariables.isNotEmpty) {
+    // Sorted so the rendered recipe is byte-stable across runs: a plist that
+    // re-orders itself reads as a change to anything diffing it.
+    final keys = environmentVariables.keys.toList()..sort();
+    buffer
+      ..writeln('\t<key>EnvironmentVariables</key>')
+      ..writeln('\t<dict>');
+    for (final key in keys) {
+      buffer
+        ..writeln('\t\t<key>${_escaped(key)}</key>')
+        ..writeln(
+          '\t\t<string>${_escaped(environmentVariables[key]!)}</string>',
+        );
+    }
+    buffer.writeln('\t</dict>');
+  }
   buffer
-    ..writeln('\t</array>')
     ..writeln('\t<key>WorkingDirectory</key>')
     ..writeln('\t<string>${_escaped(workingDirectory)}</string>')
     ..writeln('\t<key>KeepAlive</key>')
@@ -319,17 +347,28 @@ sealed class DaemonStopOutcome {
   final String plistPath;
 }
 
-/// The agent was booted out and its plist removed.
+/// The supervision was retired: the label booted out if launchd held it, the
+/// plist removed if one was on disk.
+///
+/// Both halves are reported SEPARATELY because they can disagree — a plist
+/// hand-deleted under a loaded job, or a recipe left behind by a job that was
+/// booted out by hand — and a verb that claims it removed a file that was
+/// already gone hides exactly that tampering.
 final class DaemonStopped extends DaemonStopOutcome {
   /// Creates the stopped outcome.
   const DaemonStopped({
     required super.label,
     required super.plistPath,
     required this.wasLoaded,
+    required this.removedPlist,
   });
 
-  /// Whether launchd was actually holding the label when `bootout` ran.
+  /// Whether launchd was actually holding the label, i.e. whether a `bootout`
+  /// ran at all.
   final bool wasLoaded;
+
+  /// Whether a plist was actually on disk, i.e. whether a file was deleted.
+  final bool removedPlist;
 }
 
 /// Nothing to stop: no loaded label and no plist. A clean no-op.
@@ -390,6 +429,7 @@ class LaunchAgentSupervisor {
   Future<DaemonArmOutcome> arm({
     required String gridHome,
     required List<String> programArguments,
+    Map<String, String> environmentVariables = const <String, String>{},
   }) async {
     if (await launchctl.isLoaded(label)) {
       return DaemonAlreadyLoaded(label: label, plistPath: plistPath);
@@ -407,6 +447,7 @@ class LaunchAgentSupervisor {
         workingDirectory: gridHome,
         standardOutPath: standardOutPath,
         standardErrorPath: standardErrorPath,
+        environmentVariables: environmentVariables,
       ),
     );
     final result = await launchctl.bootstrap(plistPath: plistPath);
@@ -430,8 +471,13 @@ class LaunchAgentSupervisor {
 
   /// Boots the agent out and removes its plist.
   ///
-  /// Exactly one `bootout` runs, and only when there is something to stop — a
-  /// label launchd holds, a plist on disk, or both.
+  /// `bootout` runs ONLY against a label launchd actually holds: issuing one
+  /// against an unheld label is a guaranteed non-zero exit whose failure would
+  /// have to be swallowed to stay useful, and a swallowed failure is
+  /// indistinguishable from a real one. A plist with no loaded job is still
+  /// removed — the recipe is the thing `up --daemon` installed — and the
+  /// outcome reports the two halves separately, so `down` never claims a
+  /// deletion that did not happen.
   Future<DaemonStopOutcome> stop() async {
     final plist = File(plistPath);
     final loaded = await launchctl.isLoaded(label);
@@ -439,15 +485,22 @@ class LaunchAgentSupervisor {
     if (!loaded && !installed) {
       return DaemonNotSupervised(label: label, plistPath: plistPath);
     }
-    final result = await launchctl.bootout(label: label);
-    if (loaded && result.exitCode != 0) {
-      return DaemonStopRefused(
-        label: label,
-        plistPath: plistPath,
-        message: _refusalMessage(result),
-      );
+    if (loaded) {
+      final result = await launchctl.bootout(label: label);
+      if (result.exitCode != 0) {
+        return DaemonStopRefused(
+          label: label,
+          plistPath: plistPath,
+          message: _refusalMessage(result),
+        );
+      }
     }
     if (installed) await plist.delete();
-    return DaemonStopped(label: label, plistPath: plistPath, wasLoaded: loaded);
+    return DaemonStopped(
+      label: label,
+      plistPath: plistPath,
+      wasLoaded: loaded,
+      removedPlist: installed,
+    );
   }
 }

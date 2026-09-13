@@ -119,11 +119,27 @@ What gets written:
 - **RunAtLoad** — boots the station now and on every future login.
 - **StandardOutPath / StandardErrorPath** —
   `<grid-home>/.grid/logs/<station>.{out,err}.log`.
+- **EnvironmentVariables** — the trajectory **posture** keys that are set:
+  `GRID_DUAL_READ`, `GRID_TRAJECTORY_DISCIPLINE`, `GRID_SOAK_WINDOW_EPOCH`.
+  launchd hands a job **none** of the launching shell's environment, so a
+  posture you exported before typing `up --daemon` reaches the supervised
+  resident only because it is written here. This is an explicit allowlist,
+  never a copy of your environment; an unset key is omitted, not written
+  empty. Every other environment key a supervised station needs — `PATH`
+  included — is still an open question (see the bead), not a promise this
+  verb makes.
 
 Re-running `up --daemon` while the label is loaded is a **refusal naming the
 label** — never a second resident. The verb writes nothing outside
 `~/Library/LaunchAgents` and the grid home, which is why running it IS the
 approval of the persistence change.
+
+**A refusal starts nothing.** The supervisor fork sits below every arming
+refusal: the grid-home guards, the per-substation work-store guard, the
+"nothing resolved" refusal, and a read-only probe of the RS-2 station lock.
+An invocation that could not boot in the foreground installs no agent at all —
+because `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` would turn one
+refusal into a job launchd respawns forever and brings back on every login.
 
 **Known:** a LaunchAgent's process gets its **own** Local Network grant, so
 the first supervised boot that drives mDNS work (iOS/butane) prompts once.
@@ -134,7 +150,11 @@ the first supervised boot that drives mDNS work (iOS/butane) prompts once.
 dart run space:space down --daemon
 ```
 
-One `bootout` — which terminates the job — and the plist is removed.
+One `bootout` — which terminates the job — and the plist is removed. The two
+halves are reported as they actually happened: `bootout` runs only against a
+label launchd is holding, and the verb never claims to have removed a plist
+that was already gone (which is how you notice a recipe someone edited or
+deleted by hand).
 
 ### 3. `space status` / `space down`
 

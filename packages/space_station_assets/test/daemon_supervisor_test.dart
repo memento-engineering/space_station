@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -18,8 +19,16 @@ import 'package:test/test.dart';
 /// verbs hand the resident to launchd instead. Every `launchctl` call rides a
 /// FAKE — the operator's real GUI domain is never touched by a test run — and
 /// the plist lands in a temp directory, never `~/Library/LaunchAgents`.
+///
+/// The fixture gives the grid home ONE substation that really resolves a work
+/// store (`--substation demo=<root>` over a directory carrying `.beads/`),
+/// because the supervisor fork sits BELOW every arming refusal: an invocation
+/// that could not boot in the foreground must never become a launchd job.
+/// `RunAtLoad` + `KeepAlive{SuccessfulExit: false}` would respawn it forever
+/// and resurrect it on every login.
 void main() {
   late Directory home;
+  late Directory substation;
   late Directory launchAgents;
   late _FakeLaunchctl launchctl;
   late List<String> out;
@@ -27,6 +36,8 @@ void main() {
 
   setUp(() async {
     home = await Directory.systemTemp.createTemp('space-5lh-home');
+    substation = await Directory.systemTemp.createTemp('space-5lh-sub');
+    await Directory('${substation.path}/.beads').create(recursive: true);
     launchAgents = await Directory.systemTemp.createTemp('space-5lh-agents');
     launchctl = _FakeLaunchctl();
     out = <String>[];
@@ -35,18 +46,23 @@ void main() {
 
   tearDown(() async {
     await home.delete(recursive: true);
+    await substation.delete(recursive: true);
     await launchAgents.delete(recursive: true);
   });
 
-  UpCommand up() => UpCommand(
-    launchctl: launchctl,
-    launchAgentsDirectory: launchAgents.path,
-    out: out.add,
-    err: err.add,
-  );
+  UpCommand up({Map<String, String> environment = const <String, String>{}}) =>
+      UpCommand(
+        environment: environment,
+        launchctl: launchctl,
+        launchAgentsDirectory: launchAgents.path,
+        out: out.add,
+        err: err.add,
+      );
 
-  CommandRunner<int> runner() => CommandRunner<int>('space', 'test')
-    ..addCommand(up())
+  CommandRunner<int> runner({
+    Map<String, String> environment = const <String, String>{},
+  }) => CommandRunner<int>('space', 'test')
+    ..addCommand(up(environment: environment))
     ..addCommand(
       DownCommand(
         launchctl: launchctl,
@@ -64,6 +80,15 @@ void main() {
       ),
     );
 
+  /// The minimum argv that ARMS: a grid home plus one substation whose root
+  /// really carries a work store.
+  List<String> armable() => [
+    '--substation',
+    'demo=${substation.path}',
+    '--grid-home',
+    home.path,
+  ];
+
   String plistPath() =>
       '${launchAgents.path}/${launchAgentLabel('space')}.plist';
 
@@ -78,6 +103,21 @@ void main() {
     ];
   }
 
+  Map<String, String> environmentVariablesOf(String plist) {
+    final dict = RegExp(
+      r'<key>EnvironmentVariables</key>\s*<dict>(.*?)</dict>',
+      dotAll: true,
+    ).firstMatch(plist);
+    if (dict == null) return const <String, String>{};
+    return {
+      for (final match in RegExp(
+        r'<key>(.*?)</key>\s*<string>(.*?)</string>',
+        dotAll: true,
+      ).allMatches(dict.group(1)!))
+        match.group(1)!: match.group(2)!,
+    };
+  }
+
   String? valueOf(String plist, String key) => RegExp(
     '<key>$key</key>\\s*<string>(.*?)</string>',
   ).firstMatch(plist)?.group(1);
@@ -90,8 +130,7 @@ void main() {
       '--no-dry-run',
       '--max-agents',
       '6',
-      '--grid-home',
-      home.path,
+      ...armable(),
     ];
     expect(
       await runner().run(['up', ...invocation]),
@@ -138,14 +177,15 @@ void main() {
   // AC-2.
   test('a second up --daemon on a loaded label refuses naming it and starts '
       'nothing', () async {
-    expect(await runner().run(['up', '--daemon', '--grid-home', home.path]), 0);
+    expect(
+      await runner().run(['up', '--daemon', ...armable()]),
+      0,
+      reason: err.join('\n'),
+    );
     expect(launchctl.bootstrapped, hasLength(1));
     err.clear();
 
-    expect(
-      await runner().run(['up', '--daemon', '--grid-home', home.path]),
-      64,
-    );
+    expect(await runner().run(['up', '--daemon', ...armable()]), 64);
     expect(err.join('\n'), contains('grid.station.space'));
     expect(err.join('\n'), contains('refusing to start a second resident'));
     // Nothing was started, and the installed recipe is untouched.
@@ -153,13 +193,90 @@ void main() {
     expect(File(plistPath()).existsSync(), isTrue);
   }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
 
+  // AC-5 — the refusal ordering the supervisor fork depends on. A launchd job
+  // that exits non-zero is RESPAWNED (throttled) forever and comes back on
+  // every login, so an invocation that could not boot in the foreground must
+  // install no agent at all.
+  test('up --daemon over a grid home where no substation resolves a work '
+      'store refuses exactly as the foreground path does, and installs '
+      'nothing', () async {
+    // No --substation: the coded roster resolves siblings of a temp home, and
+    // none of them exist.
+    final code = await runner().run([
+      'up',
+      '--daemon',
+      '--grid-home',
+      home.path,
+    ]);
+
+    expect(code, 1);
+    expect(
+      err.join('\n'),
+      contains('no substation resolved a work store at its root'),
+    );
+    expect('${out.join('\n')}${err.join('\n')}', isNot(contains('launchd as')));
+    expect(launchctl.bootstrapped, isEmpty);
+    expect(launchctl.isLoadedCalls, isEmpty);
+    expect(launchAgents.listSync(), isEmpty);
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  // AC-5 — the appended-substation store guard is a refusal too.
+  test('up --daemon whose appended substation has no work store refuses '
+      'before any agent is installed', () async {
+    final empty = await Directory.systemTemp.createTemp('space-5lh-empty');
+    addTearDown(() async => empty.delete(recursive: true));
+
+    final code = await runner().run([
+      'up',
+      '--daemon',
+      '--substation',
+      'ghost=${empty.path}',
+      '--grid-home',
+      home.path,
+    ]);
+
+    expect(code, 1);
+    expect(err.join('\n'), contains('has no work store'));
+    expect(launchctl.bootstrapped, isEmpty);
+    expect(launchAgents.listSync(), isEmpty);
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  // AC-5 — RS-2 through the supervisor. The foreground path REFUSES (exit 64)
+  // when a live resident holds the store; the supervised path must refuse too
+  // rather than install an agent that loses that race on every respawn.
+  test('up --daemon over a store a live resident already holds refuses and '
+      'installs nothing', () async {
+    await File('${home.path}/.grid/station.lock').create(recursive: true);
+    await File('${home.path}/.grid/station.lock').writeAsString(
+      jsonEncode(<String, Object?>{
+        // This very process: alive by construction, so the probe cannot
+        // classify it as a stale lock.
+        'pid': pid,
+        'pgid': pid,
+        'startedAt': DateTime.now().toUtc().toIso8601String(),
+        // `acquired`, not `live`: a live record makes the probe dial the
+        // advertised control url, and this test must touch no socket.
+        'phase': 'acquired',
+      }),
+    );
+
+    final code = await runner().run(['up', '--daemon', ...armable()]);
+
+    expect(code, 64);
+    expect(err.join('\n'), contains('station lock'));
+    expect(err.join('\n'), contains('pid $pid'));
+    expect(launchctl.bootstrapped, isEmpty);
+    expect(launchAgents.listSync(), isEmpty);
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
   // AC-3.
   test(
     'down --daemon boots out once and removes the plist',
     () async {
       expect(
-        await runner().run(['up', '--daemon', '--grid-home', home.path]),
+        await runner().run(['up', '--daemon', ...armable()]),
         0,
+        reason: err.join('\n'),
       );
       expect(File(plistPath()).existsSync(), isTrue);
 
@@ -167,6 +284,7 @@ void main() {
       expect(launchctl.bootedOut, ['grid.station.space']);
       expect(File(plistPath()).existsSync(), isFalse);
       expect(launchctl.loaded, isEmpty);
+      expect(out.join('\n'), contains('booted out grid.station.space'));
 
       // A second retire is a clean no-op — nothing loaded, nothing on disk, no
       // second bootout.
@@ -175,6 +293,46 @@ void main() {
     },
     onPlatform: const {'!mac-os': Skip('launchd is macOS only')},
   );
+
+  // AC-3 — the two halves can disagree, and `down` must report what actually
+  // happened rather than a sentence that assumes they agree.
+  test('down --daemon over a recipe launchd does NOT hold removes it without '
+      'a bootout', () async {
+    expect(
+      await runner().run(['up', '--daemon', ...armable()]),
+      0,
+      reason: err.join('\n'),
+    );
+    // The job died / was booted out by hand; the recipe outlived it.
+    launchctl.loaded.clear();
+    out.clear();
+
+    expect(await runner().run(['down', '--daemon']), 0);
+    // No bootout against an unheld label: it would fail, and its failure would
+    // have to be swallowed to stay useful.
+    expect(launchctl.bootedOut, isEmpty);
+    expect(File(plistPath()).existsSync(), isFalse);
+    expect(out.join('\n'), contains('was not loaded'));
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  // AC-3 — the mirror case: a plist hand-deleted under a loaded job. `down`
+  // must not claim it removed a file that was already gone.
+  test('down --daemon over a loaded label whose plist was hand-deleted boots '
+      'out and says the recipe was already gone', () async {
+    expect(
+      await runner().run(['up', '--daemon', ...armable()]),
+      0,
+      reason: err.join('\n'),
+    );
+    await File(plistPath()).delete();
+    out.clear();
+
+    expect(await runner().run(['down', '--daemon']), 0);
+    expect(launchctl.bootedOut, ['grid.station.space']);
+    expect(out.join('\n'), contains('booted out grid.station.space'));
+    expect(out.join('\n'), contains('already been deleted by hand'));
+    expect(out.join('\n'), isNot(contains('and removed')));
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
 
   // AC-4.
   test('the rendered plist parses as a property list', () async {
@@ -200,6 +358,10 @@ void main() {
         workingDirectory: '/tmp/a & b',
         standardOutPath: '/tmp/a & b/.grid/logs/lunar.out.log',
         standardErrorPath: '/tmp/a & b/.grid/logs/lunar.err.log',
+        environmentVariables: const {
+          'GRID_DUAL_READ': 'observe',
+          'GRID_TRAJECTORY_DISCIPLINE': 'strict & loud',
+        },
       ),
     );
     final lint = await Process.run('plutil', ['-lint', file.path]);
@@ -208,17 +370,29 @@ void main() {
       0,
       reason: 'plutil -lint failed:\n${lint.stdout}\n${lint.stderr}',
     );
+    // The escaped value survives the round trip byte-for-byte.
+    final read = await Process.run('plutil', [
+      '-extract',
+      'EnvironmentVariables.GRID_TRAJECTORY_DISCIPLINE',
+      'raw',
+      '-o',
+      '-',
+      file.path,
+    ]);
+    expect(read.exitCode, 0, reason: '${read.stderr}');
+    expect('${read.stdout}'.trim(), 'strict & loud');
   });
 
-  // AC-4.
-  test('--trajectory and --dual-read ride through verbatim; --daemon is the '
-      'only token removed', () {
+  // AC-4 — the flag surgery itself: `--daemon` is the ONLY token removed, so
+  // any `--<knob>=<value>` the verb grows rides through untouched.
+  test('every token but --daemon rides through verbatim', () {
     const arguments = [
       '--daemon',
       '--grid-home',
       '/tmp/grid',
       '--trajectory',
-      '--dual-read=observe',
+      '--max-agents',
+      '6',
       '--no-dry-run',
     ];
     expect(
@@ -238,11 +412,59 @@ void main() {
         '--grid-home',
         '/tmp/grid',
         '--trajectory',
-        '--dual-read=observe',
+        '--max-agents',
+        '6',
         '--no-dry-run',
       ],
     );
   });
+
+  // AC-4, end to end through the VERB: the trajectory posture a supervised
+  // boot resolves is the one the operator just typed and exported.
+  //
+  // `--trajectory` is a flag and lands in ProgramArguments. The dual-read
+  // posture is NOT a flag — it is `GRID_DUAL_READ` — and launchd hands a job
+  // none of the launching shell's environment, so it rides in the plist's
+  // EnvironmentVariables or it is silently lost.
+  test('the trajectory posture rides into the supervised boot: --trajectory '
+      'in ProgramArguments, GRID_DUAL_READ in EnvironmentVariables', () async {
+    expect(
+      await runner(
+        environment: const {
+          'GRID_DUAL_READ': 'observe',
+          'GRID_TRAJECTORY_DISCIPLINE': 'required',
+          'GRID_SOAK_WINDOW_EPOCH': '7',
+          // Not a posture key: it must NOT be copied into a file under
+          // ~/Library/LaunchAgents.
+          'GRID_GITHUB_APP_KEY_MEMENTO': '/keys/memento.pem',
+        },
+      ).run(['up', '--daemon', '--trajectory', ...armable()]),
+      0,
+      reason: err.join('\n'),
+    );
+
+    final plist = await File(plistPath()).readAsString();
+    expect(programArgumentsOf(plist), contains('--trajectory'));
+    expect(environmentVariablesOf(plist), const {
+      'GRID_DUAL_READ': 'observe',
+      'GRID_SOAK_WINDOW_EPOCH': '7',
+      'GRID_TRAJECTORY_DISCIPLINE': 'required',
+    });
+  }, onPlatform: const {'!mac-os': Skip('launchd is macOS only')});
+
+  test(
+    'an unset posture key is OMITTED, never written empty',
+    () async {
+      expect(
+        await runner().run(['up', '--daemon', ...armable()]),
+        0,
+        reason: err.join('\n'),
+      );
+      final plist = await File(plistPath()).readAsString();
+      expect(plist, isNot(contains('EnvironmentVariables')));
+    },
+    onPlatform: const {'!mac-os': Skip('launchd is macOS only')},
+  );
 
   test('the VM self-description flags never reach launchd; the operator ones '
       'do', () {
@@ -313,11 +535,15 @@ void main() {
 /// (which labels are loaded) and answers every verb from it.
 class _FakeLaunchctl implements Launchctl {
   final Set<String> loaded = <String>{};
+  final List<String> isLoadedCalls = <String>[];
   final List<String> bootstrapped = <String>[];
   final List<String> bootedOut = <String>[];
 
   @override
-  Future<bool> isLoaded(String label) async => loaded.contains(label);
+  Future<bool> isLoaded(String label) async {
+    isLoadedCalls.add(label);
+    return loaded.contains(label);
+  }
 
   @override
   Future<LaunchctlResult> bootstrap({required String plistPath}) async {

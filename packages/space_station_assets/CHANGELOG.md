@@ -35,6 +35,23 @@
   resident. `down --daemon` boots the agent out and removes the plist, and
   `status` adds `supervised: launchd <label>` when the agent is loaded. macOS
   only; a Linux systemd unit is a separate seam.
+- Added: the supervisor fork sits BELOW every arming refusal — the grid-home
+  guards, the per-substation work-store guard, the nothing-resolved refusal,
+  and a read-only RS-2 holder probe (`StationAttach.status`, never `acquire`,
+  which would make the calling shell a session leader). A refusal starts
+  nothing: `RunAtLoad` plus `KeepAlive{SuccessfulExit: false}` would otherwise
+  turn a one-shot refusal into a job launchd respawns forever and resurrects
+  on every login.
+- Added: the rendered plist carries an `EnvironmentVariables` block with the
+  trajectory POSTURE keys (`kTrajectoryPostureEnvironmentKeys` /
+  `trajectoryPostureEnvironment`) that are set in the injected environment.
+  launchd hands a job none of the launching shell's environment, so
+  `GRID_DUAL_READ` and its siblings would otherwise resolve to the default
+  posture under supervision. An explicit allowlist, never the whole
+  environment; an unset key is omitted rather than written empty.
+- Fixed: `down --daemon` reports the two halves of the retirement separately.
+  `bootout` now runs only against a label launchd actually holds, and the
+  verb no longer claims to have removed a plist that was already gone.
 - Added: `codedStationNameOf`, the owned (construct → dispose) read of a
   station factory's `stationName`, and the `launch_agent.dart` surface the
   verbs compose (`LaunchAgentSupervisor`, `Launchctl`/`ProcessLaunchctl`,

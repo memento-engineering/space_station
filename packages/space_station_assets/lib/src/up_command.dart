@@ -36,7 +36,11 @@
 /// double-fork — the supervisor owns backgrounding, and `--daemon` is how the
 /// station WIRES one (space-5lh): it hands this exact invocation to a launchd
 /// LaunchAgent it renders and loads (`launch_agent.dart`) and returns, so the
-/// resident is launchd's child and no seat session owns it.
+/// resident is launchd's child and no seat session owns it. The supervisor
+/// fork sits BELOW every arming refusal (the home guards, the store guard, the
+/// nothing-resolved refusal, and a read-only RS-2 holder probe): a refusal
+/// starts nothing, because a launchd job that exits non-zero is respawned
+/// forever.
 library;
 
 import 'dart:async';
@@ -52,6 +56,17 @@ import 'package:grid_cli/grid_cli.dart' show StationDiagnosticsReporter;
 // ignore: implementation_imports
 import 'package:grid_cli/src/station_control.dart'
     show StationControl, StationStatus, mintControlToken;
+// ignore: implementation_imports
+import 'package:grid_cli/src/station_attach.dart'
+    show
+        DeadPid,
+        Down,
+        SlowUp,
+        StationAttach,
+        Starting,
+        Unauthorized,
+        Unreachable,
+        Up;
 // ignore: implementation_imports
 import 'package:grid_cli/src/station_lock.dart'
     show StationLockHandle, StationLockService;
@@ -521,20 +536,6 @@ class UpCommand extends Command<int> {
       return 64;
     }
 
-    // --- the SUPERVISOR fork (space-5lh). The grid home is validated and the
-    // machine's environments are boot-eager-checked by here, and NOTHING
-    // stateful has happened yet: no station lock, no controllers, no tree. So
-    // `--daemon` renders and loads the LaunchAgent for THIS invocation and
-    // returns — the resident that actually boots is launchd's child, not this
-    // shell's. Every line below is the unchanged foreground path.
-    if (results.flag('daemon')) {
-      return await _armDaemon(
-        arguments: results.arguments,
-        gridHome: config.gridHome,
-        out: out,
-        err: err,
-      );
-    }
     // Each substation's `.beads/` work store is looked for at its EXACT root, no
     // walk-up (grid_sdk StoreLocator). Provenance splits the guard (space-6ds
     // Fork A/B): an APPENDED substation (a `--substation` flag) whose store is
@@ -589,6 +590,26 @@ class UpCommand extends Command<int> {
       (substation) =>
           codedRoster.githubPollingSubstationNames.contains(substation.name),
     );
+
+    // --- the SUPERVISOR fork (space-5lh). Sited HERE, below every arming
+    // refusal, because a refusal must start NOTHING: the plist launchd loads
+    // carries `RunAtLoad` and `KeepAlive{SuccessfulExit: false}`, so an
+    // invocation that could not have booted in the foreground becomes a job
+    // launchd respawns forever and resurrects on every login — the exact
+    // zombie-resident class this verb exists to kill. By this line the
+    // grid-home guards, the boot-eager environment checks, the per-substation
+    // store guard and the nothing-resolved refusal have all passed; the RS-2
+    // holder is probed read-only inside [_armDaemon]. Nothing stateful has
+    // happened: no station lock, no controllers, no tree. Every line below is
+    // the unchanged foreground path.
+    if (results.flag('daemon')) {
+      return await _armDaemon(
+        arguments: results.arguments,
+        gridHome: config.gridHome,
+        out: out,
+        err: err,
+      );
+    }
 
     // --- RS-2 the station lock (D-A1): ONE supervisor per station state store.
     // Acquire atomically publishes the declared `acquired` lifecycle before
@@ -958,6 +979,13 @@ class UpCommand extends Command<int> {
   /// — the operator's own argv for this verb, `--daemon` included; the
   /// renderer strips it.
   ///
+  /// Called only AFTER every arming refusal in [run] has passed, and it adds
+  /// the last one itself: the RS-2 holder is classified read-only before a
+  /// byte is written. A LaunchAgent for an invocation that cannot boot is
+  /// worse than no agent at all — `RunAtLoad` plus
+  /// `KeepAlive{SuccessfulExit: false}` turns a one-shot refusal into an
+  /// endless respawn that survives reboots.
+  ///
   /// Writes nothing outside the LaunchAgents directory and `<grid-home>/.grid/`
   /// — which is why the operator's approval of a persistence change is the run
   /// itself, with no second confirmation.
@@ -984,6 +1012,38 @@ class UpCommand extends Command<int> {
       );
       return 64;
     }
+    // --- RS-2, read-only. The foreground path ACQUIRES the station lock; this
+    // path must not: `acquire` makes the caller a session leader (`setsid`),
+    // which is right for a resident and wrong for a shell that is about to
+    // return. So the holder is CLASSIFIED instead, through the same
+    // `StationAttach` `down` and `status` read — and a store some resident
+    // already holds is a refusal, not an agent that would respawn against the
+    // lock forever.
+    final holder = await StationAttach(
+      log: out,
+    ).status(stateWorkspaceDir: gridHome);
+    final String? heldBy = switch (holder) {
+      Down() => null,
+      // A lock naming a DEAD pid is not a holder: a fresh `up` steals it, so
+      // the supervised boot this installs will too.
+      DeadPid() => null,
+      Up(:final payload) =>
+        'pid ${(payload['process'] as Map<String, Object?>?)?['pid'] ?? '?'}',
+      SlowUp(:final payload) =>
+        'pid ${(payload['process'] as Map<String, Object?>?)?['pid'] ?? '?'}',
+      Starting(:final pid) => 'pid $pid (starting)',
+      Unreachable(:final pid) => 'pid $pid (alive but not answering)',
+      Unauthorized(:final record) => 'pid ${record.pid} (foreign token)',
+    };
+    if (heldBy != null) {
+      err(
+        '$runnerName up: the station lock at ${StationLockService.lockPath(gridHome)} '
+        'is held by $heldBy — refusing to install a LaunchAgent over a live '
+        'resident. ONE supervisor per station state store (RS-2): stop it '
+        'with `$runnerName down` first, then arm the agent.',
+      );
+      return 64;
+    }
     final supervisor = LaunchAgentSupervisor(
       stationName: codedStationNameOf(_delegateFactory),
       launchAgentsDirectory: directory,
@@ -998,6 +1058,11 @@ class UpCommand extends Command<int> {
         verb: name,
         arguments: arguments,
       ),
+      // launchd hands a job NONE of the launching shell's environment, so the
+      // trajectory posture the operator exported is written into the recipe or
+      // it is silently lost. The allowlist is the trajectory surface's own
+      // three keys — never the whole environment.
+      environmentVariables: trajectoryPostureEnvironment(_environment),
     );
     switch (outcome) {
       case DaemonArmed(
