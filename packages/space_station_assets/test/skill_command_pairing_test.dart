@@ -38,6 +38,7 @@ void main() {
         'succession',
         'link',
         'unlink',
+        'beads',
         'assets',
         'dart',
         'gate',

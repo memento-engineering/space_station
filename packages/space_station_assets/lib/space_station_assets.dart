@@ -61,6 +61,7 @@ import 'package:grid_sdk/grid_sdk.dart' show GridAssetRegistry;
 
 import 'station_asset_registry.dart';
 import 'src/assets_command.dart';
+import 'src/beads_commands.dart';
 import 'src/down_command.dart';
 import 'src/filing_commands.dart';
 import 'src/link_commands.dart';
@@ -134,6 +135,31 @@ export 'src/substation_seed.dart'
 // kSpaceRunner rides along so a downstream runner can reference the canonical
 // JIT invocation it is overriding.
 export 'src/assets_command.dart' show buildSpaceAssetsCommand, kSpaceRunner;
+// The composition site of the OFFLINE bd-store verb (`beads configure`) —
+// exported so a test (or a downstream station) can build it over a fixture
+// roster and drive the projection without a resident station. The projection
+// itself (`externalProjectsFor` / [BeadsConfigureService]) rides along: it is
+// the station's answer to "which projects exist", and a downstream station
+// composes the SAME verb over ITS delegate rather than writing a second one.
+export 'src/beads_commands.dart'
+    show
+        BeadsCommand,
+        BeadsConfigureCommand,
+        BeadsConfigureOutcome,
+        BeadsConfigureService,
+        ExternalProjectsUnchanged,
+        ExternalProjectsWritten,
+        LocalConfigIgnore,
+        LocalConfigRefused,
+        PrimaryConfigMissing,
+        WorkStoreMissing,
+        buildSpaceBeadsCommand,
+        externalProjectsFor,
+        kExternalProjectsKey,
+        kLocalConfigFileName,
+        kLocalConfigIgnoreStanza,
+        kPrimaryConfigFileName,
+        kStoreIgnoreFileName;
 // The composition site of the VENDED `search` Command — exported so a test
 // (or a Flutter app) can build the seat with its seams injected.
 export 'src/search_command.dart' show buildSpaceSearchCommand;
@@ -214,6 +240,10 @@ buildRunnerComposition({
   final searchCommand = buildSpaceSearchCommand(
     delegateFactory: delegateFactory,
   );
+  // The OFFLINE bd-store verb. Like `link`, its authority is the coded roster;
+  // unlike `link`, it mounts nothing at assembly — the roster is read inside
+  // run(), against the home the operator names.
+  final beadsCommand = buildSpaceBeadsCommand(delegateFactory: delegateFactory);
   final filingCommand = resolvedFilingCommands.filing;
   final approveCommand = resolvedFilingCommands.approve;
   final linkCommand = linkCommands.link;
@@ -292,6 +322,14 @@ buildRunnerComposition({
     ..addCommand(successionCommand)
     ..addCommand(linkCommand)
     ..addCommand(linkCommands.unlink)
+    // The station's OWN offline bd-store verb: `beads configure` projects the
+    // coded roster into bd's native `external_projects` map so an
+    // `external:<substation>:<capability>` dependency RESOLVES (the ruling,
+    // 2026-09-13 — cross-store blocking rides bd's own primitive). Deliberately
+    // NOT paired with a skill: it is an operator setup act, run once per
+    // machine and again when the roster changes, not a step in a taught
+    // workflow.
+    ..addCommand(beadsCommand)
     // The ASSETS domain's exported Command group, COMPOSED with space's
     // resident-station context — `space assets install`: the operator leg of
     // overlay delivery. It overlays the vended `station_overlay` onto THIS

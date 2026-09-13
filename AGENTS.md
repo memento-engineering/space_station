@@ -182,8 +182,14 @@ writes to the `houston` state store so the work store stays read-only.
   driveable bead needs a `validation_plan`, a driveable type (`task/bug/feature/chore`), and a
   description an agent can act on alone. **Cross-store deps DO exist** — each substation is its own Dolt
   DB, but bd ships a native cross-store edge (`bd dep add <id> external:<project>:<capability>` → the
-  `depends_on_external` column, resolved at query time via the `external_projects` config), and
-  the_grid's federated engine already enforces cross-store BLOCKING across the substation union:
+  `depends_on_external` column). The PROJECT half of that reference is placed through the per-store
+  `external_projects` config, which `space beads configure` writes into every armed substation's
+  `.beads/config.local.yaml` from the coded roster (space-2xl) — without it the reference names a
+  project nothing can place. **bd does not subtract the edge as a blocker itself**: MEASURED on the
+  fleet build (`HEAD-a45199a`, receipts in `space_station_assets`
+  `test/beads_configure_bd_test.dart`), `bd dep add` accepts and stores an `external:` row and `bd
+  config show` reports the projected projects, while `bd dep list`, `bd blocked` and `bd ready`
+  ignore the row. The blocking is the grid's:
   `FederatedSnapshotSource._applyExternalDepGuard` keys `DependencyType.affectsBlocking` and fails
   closed when no member observes the target (the_grid#a44-federated-work-sources-staleness-scope-member-removal-vs, pending). What `external:` does
   NOT give you is BEAD granularity — it says "project X shipped capability Z," not "this bead waits on
