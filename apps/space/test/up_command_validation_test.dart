@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import 'station_fixtures.dart';
+
 /// RS-5b / H2 (tg-r81): offline coverage for `UpCommand`'s boot-eager
 /// validation + v3 arming branches (`up_command.dart`'s `run()`) — that the
 /// DELETED machine-fact endpoint flags (`--openai-base`/`--swift-base`) are
@@ -260,12 +262,59 @@ void main() {
       },
     );
   });
+
+  test(
+    'a contradictory cut posture reaches the SDK boot refusal',
+    () async {
+      final gridHome = await bdInitGridHome('space-cut-refusal-home-');
+      final subRoot = await bdInitWorkspace('space-cut-refusal-sub-');
+      addTearDown(() async {
+        await gridHome.delete(recursive: true);
+        await subRoot.delete(recursive: true);
+      });
+
+      final result = await _runUp(
+        [
+          '--grid-home',
+          gridHome.path,
+          '--substation',
+          'smoketest=${subRoot.path}',
+          '--control-port',
+          '0',
+          '--for-seconds',
+          '1',
+        ],
+        environment: const {
+          'GRID_DUAL_READ': 'observe',
+          'GRID_TRAJECTORY_DISCIPLINE': 'cut',
+        },
+      );
+
+      expect(result.exitCode, 1);
+      expect(
+        '${result.stderr}',
+        contains(
+          'space up: CutPostureRefused(requested dualRead=observe, resolved '
+          'dualRead=primary)',
+        ),
+      );
+    },
+    tags: const ['bd-e2e'],
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }
 
 /// Runs `space up` with [args] from THIS package's root, directly over `dart`
 /// (no `dart run` wrapper — mirrors `up_down_status_smoke_test.dart`).
-Future<ProcessResult> _runUp(List<String> args) => Process.run(
+Future<ProcessResult> _runUp(
+  List<String> args, {
+  Map<String, String>? environment,
+}) => Process.run(
   Platform.resolvedExecutable,
   ['bin/space.dart', 'up', ...args],
   workingDirectory: Directory.current.path,
+  environment: environment == null
+      ? null
+      : <String, String>{...Platform.environment, ...environment},
+  includeParentEnvironment: environment == null,
 );

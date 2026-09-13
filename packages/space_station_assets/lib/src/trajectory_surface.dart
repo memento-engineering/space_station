@@ -23,18 +23,20 @@ import 'package:grid_sdk/grid_sdk.dart'
     show
         TrajectoryConfig,
         TrajectoryConfigMode,
+        TrajectoryDiscipline,
         TrajectoryHarnessMode,
         TrajectoryHarnessStatus;
 
-/// A resolved trajectory configuration together with invalid dual-read input.
+/// A resolved trajectory configuration together with invalid environment input.
 ///
-/// [unrecognizedDualReadValue] is the exact set value that could not be
-/// resolved, or null when `GRID_DUAL_READ` was unset or recognized. Invalid
-/// input remains non-fatal and resolves [config]'s posture to
-/// [DualReadMode.off].
+/// Each nullable value is the exact set value that could not be resolved, or
+/// null when its environment key was unset or recognized. Invalid input
+/// remains non-fatal and resolves [config] to the key's safe fallback.
 typedef TrajectoryConfigResolution = ({
   TrajectoryConfig config,
   String? unrecognizedDualReadValue,
+  String? unrecognizedDisciplineValue,
+  String? unrecognizedSoakWindowEpochValue,
 });
 
 /// Maps `up`'s tri-state `--trajectory` flag onto the assembly's
@@ -61,47 +63,87 @@ TrajectoryConfigResolution trajectoryConfigResolutionFrom(
   Map<String, String> environment = const <String, String>{},
 }) {
   // The dual-read posture is the RUNNER's to feed (TrajectoryConfig.dualRead
-  // docs): `GRID_DUAL_READ=<off|observe|primary>`, defaulting to `off` when
-  // absent or unrecognized — a station that arms nothing arms `off`.
+  // docs): `GRID_DUAL_READ=<off|observe|primary>`. An absent value remains an
+  // OMITTED constructor request so the SDK's cut implication cannot mistake
+  // the default posture for an explicit `off` disagreement. An unrecognized
+  // value is an explicit `off` fallback and stays available for diagnostics.
   final rawDualRead = environment['GRID_DUAL_READ'];
   final (dualRead, unrecognizedDualReadValue) = switch (rawDualRead) {
-    null || 'off' => (DualReadMode.off, null),
+    null => (null, null),
+    'off' => (DualReadMode.off, null),
     'observe' => (DualReadMode.observe, null),
     'primary' => (DualReadMode.primary, null),
     final value => (DualReadMode.off, value),
   };
+
+  final rawDiscipline = environment['GRID_TRAJECTORY_DISCIPLINE'];
+  final (discipline, unrecognizedDisciplineValue) = switch (rawDiscipline) {
+    null || 'shadow' => (TrajectoryDiscipline.shadow, null),
+    'cut' => (TrajectoryDiscipline.cut, null),
+    final value => (TrajectoryDiscipline.shadow, value),
+  };
+
+  final rawSoakWindowEpoch = environment['GRID_SOAK_WINDOW_EPOCH'];
+  final parsedSoakWindowEpoch = rawSoakWindowEpoch == null
+      ? null
+      : int.tryParse(rawSoakWindowEpoch);
+  final (soakWindowEpoch, unrecognizedSoakWindowEpochValue) = switch ((
+    rawSoakWindowEpoch,
+    parsedSoakWindowEpoch,
+  )) {
+    (null, _) => (0, null),
+    (_, final parsed?) when parsed >= 0 => (parsed, null),
+    (final value, _) => (0, value),
+  };
+
   final TrajectoryConfig config;
   if (!args.wasParsed('trajectory')) {
-    config = TrajectoryConfig(dualRead: dualRead);
+    config = TrajectoryConfig(
+      discipline: discipline,
+      dualRead: dualRead,
+      soakWindowEpoch: soakWindowEpoch,
+    );
   } else {
     config = args.flag('trajectory')
         ? TrajectoryConfig(
+            discipline: discipline,
             mode: TrajectoryConfigMode.required,
             dualRead: dualRead,
+            soakWindowEpoch: soakWindowEpoch,
           )
         : TrajectoryConfig(
+            discipline: discipline,
             mode: TrajectoryConfigMode.disabled,
             dualRead: dualRead,
+            soakWindowEpoch: soakWindowEpoch,
           );
   }
-  return (config: config, unrecognizedDualReadValue: unrecognizedDualReadValue);
+  return (
+    config: config,
+    unrecognizedDualReadValue: unrecognizedDualReadValue,
+    unrecognizedDisciplineValue: unrecognizedDisciplineValue,
+    unrecognizedSoakWindowEpochValue: unrecognizedSoakWindowEpochValue,
+  );
 }
 
 /// Maps `up`'s trajectory inputs onto their non-fatal resolved configuration.
 ///
-/// Invalid `GRID_DUAL_READ` input retains the historical fallback to
-/// [DualReadMode.off]. Call [trajectoryConfigResolutionFrom] when the caller
-/// also needs to report the invalid value.
+/// Invalid environment input retains each key's safe fallback. Call
+/// [trajectoryConfigResolutionFrom] when the caller also needs to report an
+/// invalid value.
 TrajectoryConfig trajectoryConfigFrom(
   ArgResults args, {
   Map<String, String> environment = const <String, String>{},
 }) => trajectoryConfigResolutionFrom(args, environment: environment).config;
 
-/// Renders positive boot evidence for the resolved dual-read posture.
+/// Renders positive boot evidence for the complete resolved trajectory posture.
 String dualReadBootLogLine({
   required String runnerName,
-  required DualReadMode posture,
-}) => '$runnerName up: dual-read posture resolved to ${posture.name}.';
+  required TrajectoryConfig config,
+}) =>
+    '$runnerName up: dual-read posture resolved to ${config.dualRead.name}. '
+    'Trajectory discipline resolved to ${config.discipline.name}; soak window '
+    'epoch resolved to ${config.soakWindowEpoch}.';
 
 /// The operator-facing WORD for a harness posture — DERIVED from the mode's
 /// own name so no surface can invent a second vocabulary.
@@ -222,19 +264,23 @@ String? trajectoryRequiredWarning(
 ///
 /// [armed] is the derived one-bit read a watcher polls; [mode] keeps the
 /// harness's own vocabulary so the wire never invents a second one.
-Map<String, Object?> trajectoryStatusJson(TrajectoryHarnessStatus status) =>
-    <String, Object?>{
-      'mode': status.mode.name,
-      'armed': status.mode == TrajectoryHarnessMode.live,
-      'cause': status.cause,
-      'epoch': status.epoch,
-      'queueDepth': status.queueDepth,
-      'appended': status.appended,
-      'deduped': status.deduped,
-      'dropped': status.dropped,
-      'suppressed': status.suppressed,
-      'exitJoinGaps': status.exitJoinGaps,
-    };
+Map<String, Object?> trajectoryStatusJson(
+  TrajectoryHarnessStatus status, {
+  required TrajectoryConfig config,
+}) => <String, Object?>{
+  'mode': status.mode.name,
+  'armed': status.mode == TrajectoryHarnessMode.live,
+  'discipline': config.discipline.name,
+  'soakWindowEpoch': config.soakWindowEpoch,
+  'cause': status.cause,
+  'epoch': status.epoch,
+  'queueDepth': status.queueDepth,
+  'appended': status.appended,
+  'deduped': status.deduped,
+  'dropped': status.dropped,
+  'suppressed': status.suppressed,
+  'exitJoinGaps': status.exitJoinGaps,
+};
 
 /// One rendered trajectory line for `status`, plus whether it is LOUD.
 typedef TrajectoryLine = ({String line, bool loud});
@@ -341,6 +387,7 @@ class SpaceStationStatus extends StationStatus {
   /// Creates the snapshot; every base field is forwarded unchanged.
   SpaceStationStatus({
     required TrajectoryHarnessStatus trajectory,
+    required TrajectoryConfig trajectoryConfig,
     this.roster = const [],
     required super.substation,
     required super.stateStore,
@@ -358,7 +405,9 @@ class SpaceStationStatus extends StationStatus {
     super.wedge,
     super.sync,
     super.admission,
-  }) : super(trajectory: trajectoryStatusJson(trajectory));
+  }) : super(
+         trajectory: trajectoryStatusJson(trajectory, config: trajectoryConfig),
+       );
 
   /// The ordered substation roster resolved and armed by this live station.
   final List<({String name, String root, String prefix})> roster;

@@ -8,6 +8,7 @@ import 'package:grid_sdk/grid_sdk.dart'
     show
         TrajectoryConfig,
         TrajectoryConfigMode,
+        TrajectoryDiscipline,
         TrajectoryHarnessMode,
         TrajectoryHarnessStatus,
         kNotWedged;
@@ -177,6 +178,124 @@ void main() {
     });
   });
 
+  group('the trajectory discipline and soak window are FED, never sniffed', () {
+    test('an unfed runner preserves the SDK defaults on every flag arm', () {
+      for (final args in const [
+        <String>[],
+        ['--trajectory'],
+        ['--no-trajectory'],
+      ]) {
+        final resolution = trajectoryConfigResolutionFrom(parse(args));
+        expect(
+          resolution.config.discipline,
+          TrajectoryDiscipline.shadow,
+          reason: '$args',
+        );
+        expect(resolution.config.soakWindowEpoch, 0, reason: '$args');
+        expect(resolution.unrecognizedDisciplineValue, isNull);
+        expect(resolution.unrecognizedSoakWindowEpochValue, isNull);
+      }
+    });
+
+    test('GRID_TRAJECTORY_DISCIPLINE accepts exactly shadow and cut', () {
+      for (final (value, expected) in const [
+        ('shadow', TrajectoryDiscipline.shadow),
+        ('cut', TrajectoryDiscipline.cut),
+      ]) {
+        final resolution = trajectoryConfigResolutionFrom(
+          parse(const []),
+          environment: {'GRID_TRAJECTORY_DISCIPLINE': value},
+        );
+        expect(resolution.config.discipline, expected, reason: value);
+        expect(resolution.unrecognizedDisciplineValue, isNull, reason: value);
+      }
+    });
+
+    test('cut with omitted posture requests uses the SDK implications', () {
+      final config = trajectoryConfigFrom(
+        parse(const []),
+        environment: const {'GRID_TRAJECTORY_DISCIPLINE': 'cut'},
+      );
+
+      expect(config.discipline, TrajectoryDiscipline.cut);
+      expect(config.dualRead, DualReadMode.primary);
+      expect(config.mode, TrajectoryConfigMode.required);
+      expect(config.soakWindowEpoch, 0);
+      expect(config.cutPostureRefusal, isNull);
+    });
+
+    test(
+      'an unrecognized discipline falls back to shadow and is preserved',
+      () {
+        final resolution = trajectoryConfigResolutionFrom(
+          parse(const []),
+          environment: const {'GRID_TRAJECTORY_DISCIPLINE': 'primary'},
+        );
+
+        expect(resolution.config.discipline, TrajectoryDiscipline.shadow);
+        expect(resolution.unrecognizedDisciplineValue, 'primary');
+      },
+    );
+
+    test('a non-negative integer sets the soak epoch on every flag arm', () {
+      for (final args in const [
+        <String>[],
+        ['--trajectory'],
+        ['--no-trajectory'],
+      ]) {
+        final resolution = trajectoryConfigResolutionFrom(
+          parse(args),
+          environment: const {
+            'GRID_TRAJECTORY_DISCIPLINE': 'cut',
+            'GRID_SOAK_WINDOW_EPOCH': '50',
+          },
+        );
+        expect(
+          resolution.config.discipline,
+          TrajectoryDiscipline.cut,
+          reason: '$args',
+        );
+        expect(resolution.config.soakWindowEpoch, 50, reason: '$args');
+        expect(resolution.unrecognizedSoakWindowEpochValue, isNull);
+      }
+    });
+
+    test(
+      'malformed soak epochs fall back to zero and preserve exact input',
+      () {
+        for (final value in const ['nope', '-1', '']) {
+          final resolution = trajectoryConfigResolutionFrom(
+            parse(const []),
+            environment: {'GRID_SOAK_WINDOW_EPOCH': value},
+          );
+          expect(resolution.config.soakWindowEpoch, 0, reason: value);
+          expect(
+            resolution.unrecognizedSoakWindowEpochValue,
+            value,
+            reason: value,
+          );
+        }
+      },
+    );
+
+    test('explicit observe plus cut exposes the SDK-owned named refusal', () {
+      final config = trajectoryConfigFrom(
+        parse(const []),
+        environment: const {
+          'GRID_DUAL_READ': 'observe',
+          'GRID_TRAJECTORY_DISCIPLINE': 'cut',
+        },
+      );
+
+      expect(config.dualRead, DualReadMode.primary);
+      expect(
+        config.cutPostureRefusal.toString(),
+        'CutPostureRefused(requested dualRead=observe, resolved '
+        'dualRead=primary)',
+      );
+    });
+  });
+
   group('dual-read boot diagnostics', () {
     test('resolved posture emits one flare and one log for unset and every '
         'recognized value', () {
@@ -209,7 +328,9 @@ void main() {
             'data': <String, String>{'posture': expected.name},
           }, reason: '$environment');
           expect(logLines, [
-            'lunar up: dual-read posture resolved to ${expected.name}.',
+            'lunar up: dual-read posture resolved to ${expected.name}. '
+                'Trajectory discipline resolved to shadow; soak window epoch '
+                'resolved to 0.',
           ], reason: '$environment');
         } finally {
           reporter.dispose();
@@ -260,7 +381,10 @@ void main() {
         'name': 'trajectory.dualReadConfigUnrecognized',
         'data': <String, String>{'configuredValue': '1', 'armedPosture': 'off'},
       });
-      expect(invalid.logs, ['space up: dual-read posture resolved to off.']);
+      expect(invalid.logs, [
+        'space up: dual-read posture resolved to off. Trajectory discipline '
+            'resolved to shadow; soak window epoch resolved to 0.',
+      ]);
 
       for (final environment in const [
         <String, String>{},
@@ -274,6 +398,70 @@ void main() {
           reason: '$environment',
         );
       }
+    });
+
+    test(
+      'invalid discipline and soak epoch emit distinct exact-value flares',
+      () {
+        final reporterLines = <String>[];
+        final reporter = StationDiagnosticsReporter(
+          writeLine: reporterLines.add,
+        );
+        try {
+          emitDualReadBootDiagnostics(
+            diagnostics: reporter,
+            writeLog: (_) {},
+            runnerName: 'space',
+            resolution: trajectoryConfigResolutionFrom(
+              parse(const []),
+              environment: const {
+                'GRID_TRAJECTORY_DISCIPLINE': '',
+                'GRID_SOAK_WINDOW_EPOCH': '-1',
+              },
+            ),
+          );
+        } finally {
+          reporter.dispose();
+        }
+
+        final flares = [
+          for (final line in reporterLines)
+            jsonDecode(line) as Map<String, dynamic>,
+        ];
+        expect(flares, hasLength(3));
+        expect(flares[1], <String, Object?>{
+          'type': 'flare',
+          'name': 'trajectory.disciplineConfigUnrecognized',
+          'data': <String, String>{
+            'configuredValue': '',
+            'armedDiscipline': 'shadow',
+          },
+        });
+        expect(flares[2], <String, Object?>{
+          'type': 'flare',
+          'name': 'trajectory.soakWindowEpochConfigUnrecognized',
+          'data': <String, String>{
+            'configuredValue': '-1',
+            'armedSoakWindowEpoch': '0',
+          },
+        });
+      },
+    );
+
+    test('the boot line reports the complete resolved cut posture', () {
+      final config = trajectoryConfigFrom(
+        parse(const []),
+        environment: const {
+          'GRID_TRAJECTORY_DISCIPLINE': 'cut',
+          'GRID_SOAK_WINDOW_EPOCH': '50',
+        },
+      );
+
+      expect(
+        dualReadBootLogLine(runnerName: 'space', config: config),
+        'space up: dual-read posture resolved to primary. Trajectory '
+        'discipline resolved to cut; soak window epoch resolved to 50.',
+      );
     });
 
     test('production up wires dual-read boot diagnostics exactly once before '
@@ -601,6 +789,10 @@ void main() {
           queueDepth: 6,
           exitJoinGaps: 2,
         ),
+        trajectoryConfig: const TrajectoryConfig(
+          discipline: TrajectoryDiscipline.cut,
+          soakWindowEpoch: 50,
+        ),
       );
       final block = snapshot.toJson()['trajectory']! as Map<String, Object?>;
       expect(
@@ -608,6 +800,8 @@ void main() {
         unorderedEquals(const [
           'mode',
           'armed',
+          'discipline',
+          'soakWindowEpoch',
           'cause',
           'epoch',
           'queueDepth',
@@ -621,6 +815,8 @@ void main() {
       expect(snapshot.trajectory, same(block));
       expect(block['mode'], 'live');
       expect(block['armed'], isTrue);
+      expect(block['discipline'], 'cut');
+      expect(block['soakWindowEpoch'], 50);
       expect(block['cause'], isNull);
       expect(block['epoch'], 4);
       expect(block['queueDepth'], 6);
@@ -636,6 +832,7 @@ void main() {
         if (mode == TrajectoryHarnessMode.live) continue;
         final block = trajectoryStatusJson(
           status(mode, cause: 'why ${mode.name}'),
+          config: const TrajectoryConfig(),
         );
         expect(block['armed'], isFalse, reason: mode.name);
         expect(block['mode'], mode.name);
@@ -645,7 +842,13 @@ void main() {
 
     test('the block keeps the harness vocabulary — no second mode set', () {
       for (final mode in TrajectoryHarnessMode.values) {
-        expect(trajectoryStatusJson(status(mode))['mode'], mode.name);
+        expect(
+          trajectoryStatusJson(
+            status(mode),
+            config: const TrajectoryConfig(),
+          )['mode'],
+          mode.name,
+        );
       }
     });
 
@@ -653,6 +856,7 @@ void main() {
         'parameter this subclass forgets is unreachable, silently', () {
       final json = SpaceStationStatus(
         trajectory: status(TrajectoryHarnessMode.live, epoch: 1),
+        trajectoryConfig: const TrajectoryConfig(),
         roster: const [
           (
             name: 'power_station',
@@ -688,11 +892,12 @@ void main() {
   });
 
   group('`status` renders the block (§3: loud on every status read)', () {
-    Map<String, Object?> payload(TrajectoryHarnessStatus s) =>
-        <String, Object?>{
-          'station': <String, Object?>{'dryRun': false},
-          'trajectory': trajectoryStatusJson(s),
-        };
+    Map<String, Object?> payload(
+      TrajectoryHarnessStatus s,
+    ) => <String, Object?>{
+      'station': <String, Object?>{'dryRun': false},
+      'trajectory': trajectoryStatusJson(s, config: const TrajectoryConfig()),
+    };
 
     test('an ABSENT block renders nothing and does not throw — an older '
         'producer, or a station booted before chunk WS', () {
@@ -886,18 +1091,21 @@ void main() {
 /// A `/status` snapshot with scripted station counts, so the tests read the
 /// trajectory block through the SAME serializer `up`'s view hands
 /// StationControl.
-SpaceStationStatus _status(TrajectoryHarnessStatus trajectory) =>
-    SpaceStationStatus(
-      trajectory: trajectory,
-      substation: 'space_station',
-      stateStore: '/home/memento/space_station',
-      workRoot: 'space_station=/home/memento/space_station',
-      dryRun: true,
-      pid: 4242,
-      startedAt: DateTime.utc(2026, 8, 31),
-      version: '3.11.0',
-      ready: 3,
-      mounted: 1,
-      liveSessions: 1,
-      lastSyncAt: null,
-    );
+SpaceStationStatus _status(
+  TrajectoryHarnessStatus trajectory, {
+  TrajectoryConfig trajectoryConfig = const TrajectoryConfig(),
+}) => SpaceStationStatus(
+  trajectory: trajectory,
+  trajectoryConfig: trajectoryConfig,
+  substation: 'space_station',
+  stateStore: '/home/memento/space_station',
+  workRoot: 'space_station=/home/memento/space_station',
+  dryRun: true,
+  pid: 4242,
+  startedAt: DateTime.utc(2026, 8, 31),
+  version: '3.11.0',
+  ready: 3,
+  mounted: 1,
+  liveSessions: 1,
+  lastSyncAt: null,
+);

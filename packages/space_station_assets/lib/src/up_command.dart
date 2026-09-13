@@ -126,11 +126,11 @@ void Function(GridHookError) buildContainedGridHookErrorSink({
   };
 }
 
-/// Emits positive boot evidence for the resolved dual-read posture.
+/// Emits positive boot evidence for the resolved trajectory posture.
 ///
 /// Every invocation emits one posture flare and one human log line. A set but
-/// unrecognized `GRID_DUAL_READ` value additionally emits a configuration
-/// flare naming both the exact input and the non-fatal posture that was armed.
+/// unrecognized environment value additionally emits its own configuration
+/// flare naming both the exact input and the non-fatal fallback that was armed.
 void emitDualReadBootDiagnostics({
   required StationDiagnosticsReporter diagnostics,
   required void Function(String message) writeLog,
@@ -141,7 +141,9 @@ void emitDualReadBootDiagnostics({
   diagnostics.flare('trajectory.dualReadPosture', <String, String>{
     'posture': posture.name,
   });
-  writeLog(dualReadBootLogLine(runnerName: runnerName, posture: posture));
+  writeLog(
+    dualReadBootLogLine(runnerName: runnerName, config: resolution.config),
+  );
 
   final unrecognizedValue = resolution.unrecognizedDualReadValue;
   if (unrecognizedValue != null) {
@@ -149,6 +151,25 @@ void emitDualReadBootDiagnostics({
       'configuredValue': unrecognizedValue,
       'armedPosture': posture.name,
     });
+  }
+
+  final unrecognizedDisciplineValue = resolution.unrecognizedDisciplineValue;
+  if (unrecognizedDisciplineValue != null) {
+    diagnostics
+        .flare('trajectory.disciplineConfigUnrecognized', <String, String>{
+          'configuredValue': unrecognizedDisciplineValue,
+          'armedDiscipline': resolution.config.discipline.name,
+        });
+  }
+
+  final unrecognizedSoakWindowEpochValue =
+      resolution.unrecognizedSoakWindowEpochValue;
+  if (unrecognizedSoakWindowEpochValue != null) {
+    diagnostics
+        .flare('trajectory.soakWindowEpochConfigUnrecognized', <String, String>{
+          'configuredValue': unrecognizedSoakWindowEpochValue,
+          'armedSoakWindowEpoch': resolution.config.soakWindowEpoch.toString(),
+        });
   }
 }
 
@@ -897,6 +918,7 @@ class UpCommand extends Command<int> {
     final capturedAt = latest.graph.capturedAt;
     return SpaceStationStatus(
       trajectory: workRuntime.trajectory.status,
+      trajectoryConfig: workRuntime.trajectory.config,
       roster: armed,
       substation: armed.map((s) => s.name).join(','),
       stateStore: config.gridHome,
