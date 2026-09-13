@@ -1,3 +1,6 @@
+@Tags(['bd-e2e'])
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

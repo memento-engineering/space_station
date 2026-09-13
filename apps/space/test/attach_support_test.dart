@@ -1,3 +1,6 @@
+@Tags(['bd-e2e'])
+library;
+
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
