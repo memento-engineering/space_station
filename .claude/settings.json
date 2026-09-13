@@ -1,11 +1,11 @@
 {
-  "$generated": "generated from grid_assets@429556d — do not edit; run `space assets install`",
+  "$generated": "generated from grid_assets@2210f5a — do not edit; run `dart run space:space assets install`",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
-            "command": "bd prime --hook-json",
+            "command": "dart run space:space prime --hook-json",
             "type": "command"
           }
         ],
