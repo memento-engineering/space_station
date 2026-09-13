@@ -95,26 +95,26 @@ void main() {
 
   tearDown(() => home.deleteSync(recursive: true));
 
-  test('the projection maps every OTHER coded substation, sorted by name', () {
-    const roster = [
+  test('the projection maps every OTHER ARMED substation, sorted by name', () {
+    const armed = [
       sdk.SubstationScope(name: 'beta', root: '/r/beta', prefix: 'beta'),
       sdk.SubstationScope(name: 'alpha', root: '/r/alpha', prefix: 'alpha'),
       sdk.SubstationScope(name: 'gamma', root: '/r/gamma', prefix: 'gamma'),
     ];
 
-    expect(externalProjectsFor(name: 'beta', roster: roster), {
+    expect(externalProjectsFor(name: 'beta', armed: armed), {
       'alpha': '/r/alpha',
       'gamma': '/r/gamma',
     });
     expect(
-      externalProjectsFor(name: 'beta', roster: roster).keys.toList(),
+      externalProjectsFor(name: 'beta', armed: armed).keys.toList(),
       ['alpha', 'gamma'],
       reason: 'sorted, so a re-run is byte-identical',
     );
     expect(
-      externalProjectsFor(name: 'solo', roster: const []),
+      externalProjectsFor(name: 'solo', armed: const []),
       isEmpty,
-      reason: 'an empty roster projects nothing rather than refusing',
+      reason: 'an empty armed roster projects nothing rather than refusing',
     );
   });
 
@@ -218,6 +218,39 @@ void main() {
     });
   });
 
+  // AC-4 — the half-finished hand edit: the key is PRESENT with no value at
+  // all. Treating that as an absent key appends a second `external_projects:`
+  // and the rewrite stops parsing, which used to throw out of the verb and
+  // strand the rest of the roster unconfigured.
+  test('a present-but-EMPTY external_projects key is filled in, not '
+      'duplicated, and the rest of the roster still runs', () async {
+    for (final name in const ['alpha', 'beta', 'gamma']) {
+      makeStore(name);
+    }
+    File(localConfigOf('beta')).writeAsStringSync(
+      '# operator started filling this in\n'
+      'external_projects:\n',
+    );
+
+    expect(await configure(), 0, reason: err.toString());
+
+    final rewritten = File(localConfigOf('beta')).readAsStringSync();
+    expect(
+      'external_projects:'.allMatches(rewritten).length,
+      1,
+      reason: 'exactly one top-level key, so the document still parses',
+    );
+    expect(rewritten, contains('# operator started filling this in'));
+    expect(externalProjectsIn('beta'), {
+      'alpha': rootOf('alpha'),
+      'gamma': rootOf('gamma'),
+    });
+    for (final name in const ['alpha', 'beta', 'gamma']) {
+      expect(out.toString(), contains('$name -> 2 projects written'));
+    }
+    expect(err.toString(), isEmpty);
+  });
+
   test('an existing external_projects key is REPLACED, not merged, so a '
       'retired substation leaves no stale row', () async {
     for (final name in const ['alpha', 'beta', 'gamma']) {
@@ -252,11 +285,13 @@ void main() {
     expect(File(localConfigOf('alpha')).existsSync(), isTrue);
     expect(
       externalProjectsIn('alpha'),
-      {'beta': rootOf('beta'), 'gamma': rootOf('gamma')},
+      {'beta': rootOf('beta')},
       reason:
-          'a skipped store is still a PROJECT the others can depend on — the '
-          'roster is the authority, not the filesystem',
+          'the WHAT maps every OTHER ARMED substation: an unarmed root is no '
+          'project, so writing its name would leave a row bd resolves to a '
+          'directory with no store',
     );
+    expect(out.toString(), contains('alpha -> 1 projects written'));
   });
 
   test('a root that does not exist at all is skipped the same way', () async {
@@ -267,6 +302,34 @@ void main() {
 
     expect(out.toString(), contains('gamma -> skipped (no store at '));
     expect(Directory(rootOf('gamma')).existsSync(), isFalse);
+  });
+
+  // A store bd will not read a local overlay for: the write would be inert, so
+  // it is skipped and reported rather than made and silently ignored. It is
+  // still ARMED, so the other stores still carry it as a project.
+  test('a .beads store with no tracked config.yaml is skipped, never written, '
+      'and its config.yaml is not invented', () async {
+    makeStore('alpha');
+    makeStore('beta');
+    Directory('${rootOf('gamma')}/.beads').createSync(recursive: true);
+
+    expect(await configure(), 0, reason: err.toString());
+
+    expect(
+      out.toString(),
+      contains(
+        'gamma -> skipped (no config.yaml at ${trackedConfigOf('gamma')}',
+      ),
+    );
+    expect(File(localConfigOf('gamma')).existsSync(), isFalse);
+    expect(File(trackedConfigOf('gamma')).existsSync(), isFalse);
+    expect(
+      externalProjectsIn('alpha'),
+      {'beta': rootOf('beta'), 'gamma': rootOf('gamma')},
+      reason:
+          'gamma resolves a work store, so it IS armed and IS a project — only '
+          'its own overlay would have gone unread',
+    );
   });
 
   test(
@@ -290,6 +353,11 @@ void main() {
         '- a list, not a mapping\n',
       );
       expect(out.toString(), contains('alpha -> 2 projects written'));
+      expect(
+        out.toString(),
+        contains('gamma -> 2 projects written'),
+        reason: 'a refusal is per store; the roster AFTER it still runs',
+      );
     },
   );
 
@@ -305,6 +373,27 @@ void main() {
     expect(
       File(localConfigOf('beta')).readAsStringSync(),
       'external_projects: nope\n',
+    );
+  });
+
+  test('a local config that is not valid YAML is REFUSED, and a --dry-run '
+      'reports the same refusal', () async {
+    makeStore('alpha');
+    makeStore('beta');
+    makeStore('gamma');
+    File(
+      localConfigOf('beta'),
+    ).writeAsStringSync('external_projects:\n  a: 1\nexternal_projects:\n');
+
+    expect(await configure(dryRun: true), 1);
+    expect(err.toString(), contains('beta -> REFUSED'));
+    err.clear();
+
+    expect(await configure(), 1);
+    expect(err.toString(), contains('beta -> REFUSED'));
+    expect(
+      File(localConfigOf('beta')).readAsStringSync(),
+      'external_projects:\n  a: 1\nexternal_projects:\n',
     );
   });
 

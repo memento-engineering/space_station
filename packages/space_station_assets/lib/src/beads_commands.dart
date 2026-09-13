@@ -6,16 +6,23 @@
 /// rides bd's native external dependency. `bd` resolves
 /// `external:<project>:<capability>` through the per-store `external_projects`
 /// map — `{name: path}` read from a store's `.beads/config.yaml` with
-/// `.beads/config.local.yaml` merged on top (bd `internal/config`:
-/// `GetExternalProjects` / `ResolveExternalProjectPath`). No store in this
-/// station's roster carries that map, so every `external:` row an operator
-/// writes is dead on arrival and the resident REFUSES it.
+/// `.beads/config.local.yaml` merged on top. No store in this station's roster
+/// carries that map, so every `external:` row an operator writes names a
+/// project bd cannot place, and the resident REFUSES it.
 ///
 /// **The station adds nothing bd lacks.** This verb writes bd's own config key
 /// from the ONE authority on which projects exist — [SpaceDelegate.substations],
 /// read through the owned offline mount ([codedRosterOf]: construct → mount →
 /// dispose), never the resident. It invents no dependency model, no link bead,
 /// and no second roster.
+///
+/// **ARMED is the unit, and armed is not this verb's own word.** The roster
+/// names substations; a substation is ARMED when its root resolves a `.beads/`
+/// work store, which is exactly what `space up` arms the tree with (grid_sdk
+/// [StoreLocator.locateWorkStore], the same probe, the same refusal). Only
+/// armed substations are written, and only armed substations appear in the map
+/// a store is written — an unarmed root is not a project any store can resolve
+/// a dependency into, so projecting it would write a row pointing at nothing.
 ///
 /// **Where it writes.** `config.local.yaml` only: the resolved roots are THIS
 /// machine's absolute paths, so they are machine-local and the tracked
@@ -32,19 +39,25 @@
 /// root without a `.beads/` directory is not a bd store; minting one here would
 /// invent a store the station never authored.
 ///
-/// **bd merges the local file only over a primary one.** bd reads
-/// `config.local.yaml` as an OVERLAY on `config.yaml` and skips the overlay
-/// entirely when the store has no `config.yaml` (bd `internal/config`: the
-/// local merge runs inside the `configPaths` branch). Every `bd init` store has
-/// one, so this is not a case worth branching on — but a hand-made `.beads/`
-/// with no `config.yaml` will take the write and bd will still not read it.
+/// **bd merges the local file only over a primary one, so a store with no
+/// `config.yaml` is ALSO skipped.** bd reads `config.local.yaml` as an OVERLAY
+/// on `config.yaml` and skips the overlay entirely when the store has no
+/// `config.yaml`. Writing one there would be INERT — the verb would report a
+/// projection bd never reads — so the store is reported `skipped` instead, and
+/// the missing `config.yaml` is never invented either. Every `bd init` store
+/// has one, so this is the hand-made `.beads/` case.
+///
+/// **Nothing here is written blind.** An existing local config that cannot be
+/// rewritten without guessing at the operator's data is REFUSED per store
+/// (stderr, exit 1) and left byte-identical, and the rest of the roster is
+/// still configured: no parse or rewrite failure aborts the run half-done.
 library;
 
 import 'dart:io';
 
 import 'package:args/command_runner.dart' show Command, UsageException;
 import 'package:grid_sdk/grid_sdk.dart'
-    show SubstationScope, SubstationScopeStores;
+    show StoreLocator, StoreRefusal, SubstationScope, SubstationScopeStores;
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart' show YamlException, loadYaml;
 import 'package:yaml_edit/yaml_edit.dart' show YamlEditor;
@@ -52,13 +65,18 @@ import 'package:yaml_edit/yaml_edit.dart' show YamlEditor;
 import 'space_delegate.dart';
 
 /// bd's cross-project resolution key — the ONE key this verb owns in a store's
-/// local config (bd `internal/config`: `GetExternalProjects`).
+/// local config.
 const String kExternalProjectsKey = 'external_projects';
 
-/// The machine-local half of a bd store's config, merged over `config.yaml`
-/// by bd itself. The projected roots are absolute paths on THIS machine, so
-/// they never belong in the tracked file.
+/// The machine-local half of a bd store's config, merged over
+/// [kPrimaryConfigFileName] by bd itself. The projected roots are absolute
+/// paths on THIS machine, so they never belong in the tracked file.
 const String kLocalConfigFileName = 'config.local.yaml';
+
+/// The TRACKED half of a bd store's config. This verb never writes it, and bd
+/// reads [kLocalConfigFileName] only as an overlay on one, so a store without
+/// it is skipped rather than given an inert projection.
+const String kPrimaryConfigFileName = 'config.yaml';
 
 /// What `beads configure` did — or refused to do — for ONE substation store.
 sealed class BeadsConfigureOutcome {
@@ -86,7 +104,7 @@ final class ExternalProjectsWritten extends BeadsConfigureOutcome {
   /// The `.beads/config.local.yaml` path the projection lands in.
   final String configPath;
 
-  /// The projected map: every OTHER coded substation, name → absolute root.
+  /// The projected map: every OTHER ARMED substation, name → absolute root.
   final Map<String, String> projects;
 }
 
@@ -107,8 +125,8 @@ final class ExternalProjectsUnchanged extends BeadsConfigureOutcome {
   final Map<String, String> projects;
 }
 
-/// The substation's root holds no `.beads/` directory: reported and skipped,
-/// never created.
+/// The substation's root holds no `.beads/` work store: it is NOT armed, so it
+/// is reported and skipped, never created — and it is no project either.
 final class WorkStoreMissing extends BeadsConfigureOutcome {
   /// Records the absent store directory [beadsDir].
   const WorkStoreMissing({
@@ -122,6 +140,27 @@ final class WorkStoreMissing extends BeadsConfigureOutcome {
 
   /// A short refusal reason rendered verbatim after a `skipped` line.
   String get reason => 'no store at $beadsDir';
+}
+
+/// The store exists but carries no tracked [kPrimaryConfigFileName], so bd
+/// would never read a [kLocalConfigFileName] beside it. The write would be
+/// inert, so it is reported and skipped — and the tracked config is not
+/// invented here either.
+final class PrimaryConfigMissing extends BeadsConfigureOutcome {
+  /// Records the absent tracked config at [primaryConfigPath].
+  const PrimaryConfigMissing({
+    required super.name,
+    required super.root,
+    required this.primaryConfigPath,
+  });
+
+  /// The tracked `config.yaml` bd would have merged the projection over.
+  final String primaryConfigPath;
+
+  /// A short refusal reason rendered verbatim after a `skipped` line.
+  String get reason =>
+      'no $kPrimaryConfigFileName at $primaryConfigPath, so bd would never '
+      'read a $kLocalConfigFileName beside it';
 }
 
 /// The store's existing local config cannot be edited without guessing at the
@@ -143,24 +182,29 @@ final class LocalConfigRefused extends BeadsConfigureOutcome {
 }
 
 /// The external-projects map store [name] gets: every OTHER substation in
-/// [roster], by coded name, mapped to its resolved absolute root.
+/// [armed], by coded name, mapped to its resolved absolute root.
+///
+/// [armed] is the ARMED roster — the substations whose roots resolve a work
+/// store. An unarmed substation is not a project: bd would resolve the name to
+/// a directory holding no store, so the row would be dead the moment a
+/// dependency used it.
 ///
 /// Sorted by name so the written file is deterministic — a re-run over the same
 /// roster must produce byte-identical output, which is what makes the
 /// `unchanged` report meaningful.
 Map<String, String> externalProjectsFor({
   required String name,
-  required List<SubstationScope> roster,
+  required List<SubstationScope> armed,
 }) {
   final others = [
-    for (final scope in roster)
+    for (final scope in armed)
       if (scope.name != name) scope,
   ]..sort((a, b) => a.name.compareTo(b.name));
   return {for (final scope in others) scope.name: scope.root};
 }
 
-/// Projects a coded roster into each substation store's bd `external_projects`
-/// map.
+/// Projects a coded roster into every ARMED substation store's bd
+/// `external_projects` map.
 ///
 /// Stateless: the roster is handed in (the caller owns the offline mount) and
 /// the only state touched is each store's `config.local.yaml`.
@@ -168,32 +212,62 @@ class BeadsConfigureService {
   /// Creates the projection service.
   const BeadsConfigureService();
 
-  /// Projects [roster] into every substation store, in roster order.
+  /// Projects [roster] into every ARMED substation store, in roster order.
   ///
-  /// With [dryRun] true nothing is written; the outcomes still report exactly
-  /// what a live run would do, so the printed map is the map that would land.
+  /// Armed is decided ONCE, up front, with grid_sdk's own
+  /// [StoreLocator.locateWorkStore] — the probe `space up` arms with — so the
+  /// map every store gets and the set of stores written come from the same
+  /// answer. With [dryRun] true nothing is written; the outcomes still report
+  /// exactly what a live run would do, so the printed map is the map that would
+  /// land.
   List<BeadsConfigureOutcome> configure({
     required List<SubstationScope> roster,
     bool dryRun = false,
-  }) => [
-    for (final scope in roster) _configureOne(scope, roster, dryRun: dryRun),
-  ];
+  }) {
+    final locator = StoreLocator();
+    final armed = <SubstationScope>[
+      for (final scope in roster)
+        if (_isArmed(locator, scope)) scope,
+    ];
+    final armedNames = <String>{for (final scope in armed) scope.name};
+    return [
+      for (final scope in roster)
+        if (armedNames.contains(scope.name))
+          _configureArmed(scope, armed, dryRun: dryRun)
+        else
+          WorkStoreMissing(
+            name: scope.name,
+            root: scope.root,
+            beadsDir: scope.workStore.beadsDir,
+          ),
+    ];
+  }
 
-  BeadsConfigureOutcome _configureOne(
+  bool _isArmed(StoreLocator locator, SubstationScope scope) {
+    try {
+      locator.locateWorkStore(root: scope.root, substationName: scope.name);
+      return true;
+    } on StoreRefusal {
+      return false;
+    }
+  }
+
+  BeadsConfigureOutcome _configureArmed(
     SubstationScope scope,
-    List<SubstationScope> roster, {
+    List<SubstationScope> armed, {
     required bool dryRun,
   }) {
     final beadsDir = scope.workStore.beadsDir;
-    if (!Directory(beadsDir).existsSync()) {
-      return WorkStoreMissing(
+    final primaryConfigPath = p.join(beadsDir, kPrimaryConfigFileName);
+    if (!File(primaryConfigPath).existsSync()) {
+      return PrimaryConfigMissing(
         name: scope.name,
         root: scope.root,
-        beadsDir: beadsDir,
+        primaryConfigPath: primaryConfigPath,
       );
     }
     final configPath = p.join(beadsDir, kLocalConfigFileName);
-    final projects = externalProjectsFor(name: scope.name, roster: roster);
+    final projects = externalProjectsFor(name: scope.name, armed: armed);
     final file = File(configPath);
     final existingText = file.existsSync() ? file.readAsStringSync() : '';
 
@@ -218,9 +292,13 @@ class BeadsConfigureService {
             'config is a mapping of keys',
       );
     }
-    final existingNode = document is Map
-        ? document[kExternalProjectsKey]
-        : null;
+    // PRESENT-BUT-NULL is a key, not an absence: `external_projects:` with
+    // nothing under it is what a half-finished hand edit leaves, and treating
+    // it as absent would append a SECOND top-level key and make the document
+    // unparseable. `containsKey` is the only question that separates the two.
+    final hasKey =
+        document is Map && document.containsKey(kExternalProjectsKey);
+    final existingNode = hasKey ? document[kExternalProjectsKey] : null;
     if (existingNode != null && existingNode is! Map) {
       return LocalConfigRefused(
         name: scope.name,
@@ -244,15 +322,25 @@ class BeadsConfigureService {
         projects: projects,
       );
     }
-    if (!dryRun) {
-      file.writeAsStringSync(
-        _rendered(
-          existingText: existingText,
-          hasKey: existingNode != null,
-          projects: projects,
-        ),
+    // Rendered BEFORE the dry-run branch and inside the guard: a rewrite this
+    // verb cannot perform is a per-store refusal a dry run must also report,
+    // and never an exception that strands the rest of the roster unconfigured.
+    final String rendered;
+    try {
+      rendered = _rendered(
+        existingText: existingText,
+        hasKey: hasKey,
+        projects: projects,
+      );
+    } on YamlException catch (error) {
+      return LocalConfigRefused(
+        name: scope.name,
+        root: scope.root,
+        configPath: configPath,
+        reason: 'the rewritten document would not parse (${error.message})',
       );
     }
+    if (!dryRun) file.writeAsStringSync(rendered);
     return ExternalProjectsWritten(
       name: scope.name,
       root: scope.root,
@@ -268,7 +356,8 @@ class BeadsConfigureService {
   /// is SEEDED with an empty `external_projects:` entry appended at the end
   /// before the update runs. Seeding by append (rather than letting the editor
   /// insert) keeps an operator's existing keys and header comments where they
-  /// were.
+  /// were. [hasKey] must come from `containsKey`: seeding over a present key
+  /// whose value is null would duplicate it.
   String _rendered({
     required String existingText,
     required bool hasKey,
@@ -310,8 +399,8 @@ class BeadsCommand extends Command<int> {
       "Operate the bd stores this station's roster names.";
 }
 
-/// `space beads configure` — writes the coded roster into every substation
-/// store's bd `external_projects` map.
+/// `space beads configure` — writes the ARMED roster into every armed
+/// substation store's bd `external_projects` map.
 class BeadsConfigureCommand extends Command<int> {
   /// Builds the verb over the roster [delegateFactory] authors.
   ///
@@ -357,7 +446,7 @@ class BeadsConfigureCommand extends Command<int> {
 
   @override
   final String description =
-      "Project the coded roster into every substation store's bd "
+      "Project the ARMED roster into every armed substation store's bd "
       'external_projects map (.beads/config.local.yaml), so '
       'external:<substation>:<capability> dependencies resolve. Offline and '
       'idempotent: config.yaml is never touched, unrelated local keys survive, '
@@ -395,6 +484,8 @@ class BeadsConfigureCommand extends Command<int> {
           _out.writeln('$name -> ${projects.length} projects unchanged');
           if (dryRun) _writeMap(projects);
         case WorkStoreMissing(:final name, :final reason):
+          _out.writeln('$name -> skipped ($reason)');
+        case PrimaryConfigMissing(:final name, :final reason):
           _out.writeln('$name -> skipped ($reason)');
         case LocalConfigRefused(:final name, :final configPath, :final reason):
           refused = true;
