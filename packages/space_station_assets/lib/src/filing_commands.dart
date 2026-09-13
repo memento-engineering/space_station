@@ -1,6 +1,6 @@
-/// `space filing` / `space approve` — the COMPOSITION of the VENDED front-door
-/// Commands (`grid_assets`' [FilingCommand] and [ApproveCommand]), never new
-/// ones.
+/// `space filing` / `space approve` / `space park` / `space unpark` /
+/// `space show` — the COMPOSITION of the VENDED filing Commands from
+/// `grid_assets`, never new ones.
 ///
 /// The asset owns the domain AND its CLI component (the_grid ADR-0011 D3;
 /// power_station ADR-0001): `grid_assets` ships the deterministic four-row
@@ -23,26 +23,34 @@
 /// `space` is run FROM its grid home, and the installed `discover` skill calls
 /// `space filing --json <id>` with no home flag.
 ///
-/// **A relative home is refused inside the vended guard.** Both verbs raise
-/// the absolute-path refusal from [storeRootForBead], which the vended `run()`
-/// bodies call INSIDE their own error guard: exit 1 with the refusal on
-/// stderr, nothing read and nothing written. That is the vended posture, not a
-/// fork of it — contrast `space search`, whose exit-64 `UsageException` is the
-/// vended `SearchCommand`'s own guard over the flag IT owns.
+/// **A relative home is refused inside the vended guard.** Every work-store
+/// callback raises the absolute-path refusal from [storeRootForBead], which the
+/// vended `run()` bodies call INSIDE their own error guards: nothing is read or
+/// written from an ambiguously rooted work store. That is the vended posture,
+/// not a fork of it — contrast `space search`, whose exit-64 `UsageException`
+/// is the vended `SearchCommand`'s own guard over the flag IT owns.
 ///
-/// **Writes.** `filing` is a pure read. `approve` WRITES the approval receipt
-/// onto the WORK bead — the operator's human gate, not a station
-/// session/lifecycle write, so the A37 split (which fences the ENGINE's
-/// session beads into the grid state store so the work source stays pristine)
-/// is untouched. The cross-store link beads `approve` reads to satisfy a
-/// foreign blocker live in that state store, at `<grid-home>/.grid/`.
+/// **Writes.** `filing` and `show` are pure reads. `approve` WRITES the approval
+/// receipt onto the WORK bead. `park` and `unpark` deliberately coordinate the
+/// work bead with its SESSION bead across A37's split. The cross-store link and
+/// session-lifecycle beads live in the state store at `<grid-home>/.grid/`.
 library;
 
 import 'dart:io';
 
 import 'package:args/command_runner.dart' show Command;
 import 'package:grid_assets/grid_assets.dart'
-    show ApproveCommand, ApproveService, FilingCommand, FilingService;
+    show
+        ApproveCommand,
+        ApproveService,
+        FilingCommand,
+        FilingService,
+        ParkCommand,
+        ParkService,
+        ShowCommand,
+        ShowService,
+        UnparkCommand,
+        UnparkService;
 import 'package:grid_sdk/grid_sdk.dart'
     show
         GridStateStore,
@@ -53,8 +61,14 @@ import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
 
-/// The vended front-door pair, composed with this station's coded roster.
-typedef SpaceFilingCommands = ({FilingCommand filing, ApproveCommand approve});
+/// The vended filing verbs composed with this station's coded roster.
+typedef SpaceFilingCommands = ({
+  FilingCommand filing,
+  ApproveCommand approve,
+  ParkCommand park,
+  UnparkCommand unpark,
+  ShowCommand show,
+});
 
 /// Resolves the WORK-STORE root that owns [beadId] from the roster
 /// [delegateFactory] authors, rooted at [gridHome].
@@ -97,25 +111,31 @@ String storeRootForBead({
   );
 }
 
-/// Builds the VENDED `filing` and `approve` Commands curried with space's
-/// resident-station context.
+/// Builds the VENDED filing Commands curried with space's resident-station
+/// context.
 ///
 /// [gridHomeDefault] resolves the home used when `--grid-home` is absent (the
-/// real CWD; tests inject a fixture home). [filing] and [approve] are the
-/// vended services (tests inject a scripted `bd` runner and a fake git runner
-/// and drive both verbs offline). [delegateFactory] names WHICH
+/// real CWD; tests inject a fixture home). [filing], [approve], [park],
+/// [unpark], and [show] are the vended services (tests inject a scripted `bd`
+/// runner and drive the verbs offline). [delegateFactory] names WHICH
 /// [SpaceDelegate] subclass authors the roster the bead id is resolved
 /// against. [out]/[err] default to the process sinks.
 SpaceFilingCommands buildSpaceFilingCommands({
   String Function() gridHomeDefault = _currentDirectory,
   FilingService filing = const FilingService(),
   ApproveService? approve,
+  ParkService? park,
+  UnparkService? unpark,
+  ShowService? show,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
   StringSink? out,
   StringSink? err,
 }) {
   late final FilingCommand filingCommand;
   late final ApproveCommand approveCommand;
+  late final ParkCommand parkCommand;
+  late final UnparkCommand unparkCommand;
+  late final ShowCommand showCommand;
 
   String homeOf(Command<int> command) {
     final flag = command.argResults?.option('grid-home')?.trim();
@@ -155,7 +175,51 @@ SpaceFilingCommands buildSpaceFilingCommands({
     out: out,
     err: err,
   );
-  for (final command in <Command<int>>[filingCommand, approveCommand]) {
+  parkCommand = ParkCommand(
+    service: park,
+    workStoreRoot: (beadId) => storeRootForBead(
+      verb: 'park',
+      beadId: beadId,
+      gridHome: homeOf(parkCommand),
+      delegateFactory: delegateFactory,
+    ),
+    stateRoot: () => homeOf(parkCommand),
+    out: out,
+    err: err,
+  );
+  unparkCommand = UnparkCommand(
+    service: unpark,
+    workStoreRoot: (beadId) => storeRootForBead(
+      verb: 'unpark',
+      beadId: beadId,
+      gridHome: homeOf(unparkCommand),
+      delegateFactory: delegateFactory,
+    ),
+    stateRoot: () => homeOf(unparkCommand),
+    out: out,
+    err: err,
+  );
+  showCommand = ShowCommand(
+    service: show,
+    // Show's vended callback takes no id, so read it inside the command's run
+    // guard after the exactly-one-bead check has succeeded.
+    storeRoot: () => storeRootForBead(
+      verb: 'show',
+      beadId: showCommand.argResults!.rest.single.trim(),
+      gridHome: homeOf(showCommand),
+      delegateFactory: delegateFactory,
+    ),
+    stateRoot: () => homeOf(showCommand),
+    out: out,
+    err: err,
+  );
+  for (final command in <Command<int>>[
+    filingCommand,
+    approveCommand,
+    parkCommand,
+    unparkCommand,
+    showCommand,
+  ]) {
     command.argParser.addOption(
       'grid-home',
       help:
@@ -164,7 +228,13 @@ SpaceFilingCommands buildSpaceFilingCommands({
           'roster this home roots.',
     );
   }
-  return (filing: filingCommand, approve: approveCommand);
+  return (
+    filing: filingCommand,
+    approve: approveCommand,
+    park: parkCommand,
+    unpark: unparkCommand,
+    show: showCommand,
+  );
 }
 
 String _resolvedHome(String verb, String raw) =>

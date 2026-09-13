@@ -6,10 +6,19 @@ import 'package:beads_dart/beads_dart.dart' show BdResult, BdRunner;
 import 'package:genesis_tree/genesis_tree.dart' show Seed, TreeContext;
 import 'package:grid_assets/grid_assets.dart'
     show
+        ApproveCommand,
         ApproveService,
         CrossLinkBlockerSource,
         ExactSubstationBeadSource,
-        FilingService;
+        FilingCommand,
+        FilingService,
+        ParkCommand,
+        ParkService,
+        ShowCommand,
+        ShowService,
+        UnparkCommand,
+        UnparkService;
+import 'package:grid_cli/grid_cli.dart' show PauseCommand, ResumeCommand;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
@@ -84,8 +93,13 @@ String _beadReply(String description, {String id = 'pow-child'}) => jsonEncode({
       'id': id,
       'title': 'child',
       'issue_type': 'task',
+      'status': 'open',
+      'priority': 2,
       'description': description,
+      'design': 'compose the vended command',
       'acceptance_criteria': '- [ ] checked',
+      'notes': 'reachable from the station runner',
+      'updated_at': '2026-09-12T12:00:00.000Z',
       'metadata': {'validation_plan': 'dart test'},
     },
   ],
@@ -116,10 +130,12 @@ Map<String, String> _metadataOf(List<String> argv) {
   StringBuffer out,
   StringBuffer err,
   List<String> storeRoots,
+  SpaceFilingCommands commands,
 })
 _harness(
   _ScriptedBdRunner bd, {
   String? home,
+  String runnerName = 'space',
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
 }) {
   final gridHome = home ?? _gridHome;
@@ -142,16 +158,24 @@ _harness(
       runnerFor: runnerFor,
       now: () => DateTime.utc(2026, 9, 2, 14, 30),
     ),
+    park: ParkService(runnerFor: runnerFor),
+    unpark: UnparkService(
+      approve: ApproveService(
+        runnerFor: runnerFor,
+        now: () => DateTime.utc(2026, 9, 2, 14, 30),
+      ),
+      runnerFor: runnerFor,
+    ),
+    show: ShowService(runnerFor: runnerFor),
     out: out,
     err: err,
   );
   return (
-    runner: CommandRunner<int>('space', "memento's grid station")
-      ..addCommand(commands.filing)
-      ..addCommand(commands.approve),
+    runner: buildRunner(name: runnerName, filingCommands: commands),
     out: out,
     err: err,
     storeRoots: storeRoots,
+    commands: commands,
   );
 }
 
@@ -164,6 +188,153 @@ void main() {
   });
 
   tearDown(() => _fixture.deleteSync(recursive: true));
+
+  test(
+    'composed runner resolves park unpark show pause and resume by name',
+    () {
+      final h = _harness(_ScriptedBdRunner(const {}));
+
+      expect(h.runner.commands['park'], isA<ParkCommand>());
+      expect(h.runner.commands['unpark'], isA<UnparkCommand>());
+      expect(h.runner.commands['show'], isA<ShowCommand>());
+      expect(h.runner.commands['pause'], isA<PauseCommand>());
+      expect(h.runner.commands['resume'], isA<ResumeCommand>());
+    },
+  );
+
+  test(
+    'all roster-aware filing verbs share grid-home and vended command types',
+    () async {
+      final commands = _harness(_ScriptedBdRunner(const {})).commands;
+      expect(commands.filing, isA<FilingCommand>());
+      expect(commands.approve, isA<ApproveCommand>());
+      expect(commands.park, isA<ParkCommand>());
+      expect(commands.unpark, isA<UnparkCommand>());
+      expect(commands.show, isA<ShowCommand>());
+
+      final help = <String?>{
+        for (final command in <Command<int>>[
+          commands.filing,
+          commands.approve,
+          commands.park,
+          commands.unpark,
+          commands.show,
+        ])
+          command.argParser.options['grid-home']?.help,
+      };
+      expect(help, hasLength(1));
+      expect(help.single, contains("bead id's prefix"));
+
+      final park = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply('No local ordering.'),
+          'dep': _depReply(const []),
+        }),
+      );
+      expect(
+        await park.runner.run([
+          'park',
+          '--actor',
+          'governor',
+          '--reason',
+          'stalled',
+          '--until',
+          '2026-09-13',
+          'pow-child',
+        ]),
+        1,
+      );
+      expect(
+        park.storeRoots.toSet(),
+        containsAll(<String>{'$_umbrella/power_station', '$_gridHome/.grid'}),
+      );
+
+      final unpark = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply('Depends on tg-89y8.'),
+          'dep': _depReply(const []),
+        }),
+      );
+      expect(
+        await unpark.runner.run(['unpark', '--actor', 'governor', 'pow-child']),
+        1,
+      );
+      expect(
+        unpark.storeRoots.toSet(),
+        containsAll(<String>{'$_umbrella/power_station', '$_gridHome/.grid'}),
+      );
+
+      final homeWithoutState = p.join(_umbrella, 'alternate_station');
+      final showWithoutState = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply('The foreign-store bead.'),
+          'dep': _depReply(const []),
+        }),
+        home: homeWithoutState,
+      );
+      expect(
+        await showWithoutState.runner.run(['show', '--json', 'pow-child']),
+        1,
+      );
+      expect(showWithoutState.storeRoots, isEmpty);
+
+      final showWithOverride = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply('The foreign-store bead.'),
+          'dep': _depReply(const []),
+        }),
+        home: homeWithoutState,
+      );
+      expect(
+        await showWithOverride.runner.run([
+          'show',
+          '--json',
+          '--state-root',
+          _gridHome,
+          'pow-child',
+        ]),
+        0,
+      );
+      expect(showWithOverride.storeRoots.toSet(), {'$_umbrella/power_station'});
+    },
+  );
+
+  test(
+    'composed show renders a power_station bead from the foreign work store',
+    () async {
+      final h = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply('The foreign-store bead.'),
+          'dep': _depReply(const []),
+        }),
+      );
+
+      expect(
+        await h.runner.run(['show', '--json', 'pow-child']),
+        0,
+        reason: '${h.out}${h.err}',
+      );
+      final shown = jsonDecode(h.out.toString()) as Map<String, dynamic>;
+      expect(shown['id'], 'pow-child');
+      expect(shown['shown'], isTrue);
+      expect(h.storeRoots.toSet(), {'$_umbrella/power_station'});
+      expect(h.storeRoots, isNot(contains(_gridHome)));
+    },
+  );
+
+  test(
+    'downstream-named runner inherits the same verbs without delegate wiring',
+    () {
+      final h = _harness(_ScriptedBdRunner(const {}), runnerName: 'lunar');
+
+      expect(h.runner.executableName, 'lunar');
+      expect(h.runner.commands['park'], same(h.commands.park));
+      expect(h.runner.commands['unpark'], same(h.commands.unpark));
+      expect(h.runner.commands['show'], same(h.commands.show));
+      expect(h.runner.commands['pause'], isA<PauseCommand>());
+      expect(h.runner.commands['resume'], isA<ResumeCommand>());
+    },
+  );
 
   test(
     '`filing --json <id>` reads the substation the id PREFIX names in the CODED '
