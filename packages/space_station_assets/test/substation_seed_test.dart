@@ -30,7 +30,6 @@ import 'package:grid_engine/grid_engine.dart'
 import 'package:grid_runtime/grid_runtime.dart'
     show GitOps, PrOpener, PullRequestRef, PullRequestResult, SystemGitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
-import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderScope;
 import 'package:space_station_assets/src/space_delegate.dart'
     show kMementoOrgApp;
 import 'package:space_station_assets/src/substation_seed.dart';
@@ -41,6 +40,20 @@ import 'package:test/test.dart';
 /// offline — every tree mounts in a bare genesis [TreeOwner] under a
 /// [ProviderScope] (the availability registry `runGrid` mounts at the
 /// production root).
+/// The STATION's half of the reconciler contract (github_grid_assets
+/// 0.2.0-dev.1): a live seat runs on the fenced service tick and attaches to
+/// the ONE [github.GitHubReconciliationQuery] the station registers in
+/// `TrajectoryConfig.obligationQueryExtensions`. Without it a live seat refuses
+/// LOUD at build rather than reconciling on nobody's schedule, so every tree
+/// here that arms a live poll provides one — exactly as `SpaceDelegate.build`
+/// does over the fan-out.
+Seed _stationTick({required Seed child}) => InheritedSeed<sdk.TrajectoryConfig>(
+  value: const sdk.TrajectoryConfig().withAppendedObligationQueries([
+    github.GitHubReconciliationQuery(),
+  ]),
+  child: child,
+);
+
 void main() {
   group('SubstationSeed — the composed seed', () {
     test(
@@ -709,22 +722,23 @@ void main() {
           _fakeClient(transport),
           child: Provider<github.GitHubSelfTrust>.value(
             github.GitHubSelfTrust(githubUser: 'NiCo'),
-            child: sdk.RawAssetGrid(
-              root: '/home/me/station',
-              assets: [
-                SubstationSeed(
-                  name: 'armed',
-                  root: '../private',
-                  githubPoll: const github.GitHubReconcilerConfig(
-                    owner: 'private-owner',
-                    repository: 'personal-repo',
-                    substation: 'armed',
-                    installationId: '99',
-                    interval: Duration(days: 1),
+            child: _stationTick(
+              child: sdk.RawAssetGrid(
+                root: '/home/me/station',
+                assets: [
+                  SubstationSeed(
+                    name: 'armed',
+                    root: '../private',
+                    githubPoll: const github.GitHubReconcilerConfig(
+                      owner: 'private-owner',
+                      repository: 'personal-repo',
+                      substation: 'armed',
+                      installationId: '99',
+                    ),
                   ),
-                ),
-                SubstationSeed(name: 'absent', root: '../other'),
-              ],
+                  SubstationSeed(name: 'absent', root: '../other'),
+                ],
+              ),
             ),
           ),
         ),
@@ -884,32 +898,32 @@ void main() {
             _fakeClient(transport),
             child: Provider<github.GitHubSelfTrust>.value(
               github.GitHubSelfTrust(githubUser: 'NiCo'),
-              child: sdk.RawAssetGrid(
-                root: '/station',
-                assets: [
-                  SubstationSeed(
-                    name: 'one',
-                    root: '/work/one',
-                    githubPoll: const github.GitHubReconcilerConfig(
-                      owner: 'memento',
-                      repository: 'one',
-                      substation: 'one',
-                      installationId: '99',
-                      interval: Duration(days: 1),
+              child: _stationTick(
+                child: sdk.RawAssetGrid(
+                  root: '/station',
+                  assets: [
+                    SubstationSeed(
+                      name: 'one',
+                      root: '/work/one',
+                      githubPoll: const github.GitHubReconcilerConfig(
+                        owner: 'memento',
+                        repository: 'one',
+                        substation: 'one',
+                        installationId: '99',
+                      ),
                     ),
-                  ),
-                  SubstationSeed(
-                    name: 'two',
-                    root: '/work/two',
-                    githubPoll: const github.GitHubReconcilerConfig(
-                      owner: 'memento',
-                      repository: 'two',
-                      substation: 'two',
-                      installationId: '99',
-                      interval: Duration(days: 1),
+                    SubstationSeed(
+                      name: 'two',
+                      root: '/work/two',
+                      githubPoll: const github.GitHubReconcilerConfig(
+                        owner: 'memento',
+                        repository: 'two',
+                        substation: 'two',
+                        installationId: '99',
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

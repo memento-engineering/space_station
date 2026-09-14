@@ -17,7 +17,8 @@ library;
 
 import 'package:args/args.dart' show ArgResults;
 // ignore: implementation_imports
-import 'package:grid_cli/src/station_control.dart' show StationStatus;
+import 'package:grid_cli/src/station_control.dart'
+    show GovernorFlareStatus, StationStatus;
 import 'package:grid_engine/grid_engine.dart' show DualReadMode;
 import 'package:grid_sdk/grid_sdk.dart'
     show
@@ -419,9 +420,17 @@ class SpaceStationStatus extends StationStatus {
   /// The ordered substation roster resolved and armed by this live station.
   final List<({String name, String root, String prefix})> roster;
 
+  /// Serializes the base wire shape and augments `station` with the roster.
+  ///
+  /// [governorFlares] is the base's own parameter, forwarded UNREAD: the
+  /// delivery snapshot belongs to the `/status` producer that owns the
+  /// governor feed, and this subclass augments the `station` map alone (grid_cli
+  /// 0.6.0-dev.3).
   @override
-  Map<String, Object?> toJson() {
-    final json = super.toJson();
+  Map<String, Object?> toJson({
+    GovernorFlareStatus governorFlares = const GovernorFlareStatus(),
+  }) {
+    final json = super.toJson(governorFlares: governorFlares);
     return <String, Object?>{
       ...json,
       'station': <String, Object?>{

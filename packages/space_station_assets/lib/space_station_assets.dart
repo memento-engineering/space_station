@@ -204,8 +204,12 @@ export 'src/search_command.dart' show buildSpaceSearchCommand;
 // substation's work store is the station-context half a downstream station
 // reuses.
 export 'src/filing_commands.dart'
-    show SpaceFilingCommands, buildSpaceFilingCommands, storeRootForBead;
-export 'src/link_commands.dart' show SpaceLinkCommands, buildSpaceLinkCommands;
+    show
+        SpaceFilingCommands,
+        armedSubstationNames,
+        buildSpaceFilingCommands,
+        storeRootForBead;
+export 'src/link_commands.dart' show buildSpaceLinkCommand;
 
 /// Builds memento's runner and the baseline asset composition that teaches its
 /// paired operator commands.
@@ -259,7 +263,7 @@ buildRunnerComposition({
 }) {
   final resolvedAssetRegistry =
       assetRegistry ?? GeneratedGridAssetRegistrant.registry;
-  final linkCommands = buildSpaceLinkCommands(delegateFactory: delegateFactory);
+  final linkCommand = buildSpaceLinkCommand(delegateFactory: delegateFactory);
   // Unlike `link`, whose endpoint list must exist at PARSE time, the filing
   // verbs resolve their store from the bead id at RUN time — so this
   // builder mounts no tree and costs nothing at assembly.
@@ -281,7 +285,6 @@ buildRunnerComposition({
   final beadsCommand = buildSpaceBeadsCommand(delegateFactory: delegateFactory);
   final filingCommand = resolvedFilingCommands.filing;
   final approveCommand = resolvedFilingCommands.approve;
-  final linkCommand = linkCommands.link;
   final upCommand = UpCommand(
     delegateFactory: delegateFactory,
     environment: environment,
@@ -362,7 +365,6 @@ buildRunnerComposition({
     ..addCommand(SeatCommand())
     ..addCommand(successionCommand)
     ..addCommand(linkCommand)
-    ..addCommand(linkCommands.unlink)
     // The station's OWN offline bd-store verb: `beads configure` projects the
     // coded roster into bd's native `external_projects` map so an
     // `external:<substation>:<capability>` dependency RESOLVES (the ruling,

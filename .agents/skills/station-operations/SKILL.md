@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@2210f5a — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@unknown — do not edit; run `dart run space:space assets install`
 name: station-operations
 description: >
   Operate the resident the_grid station: boot (dart run space:space up), bounce, tear
@@ -33,7 +33,7 @@ dart run space:space up --no-dry-run \
 - One `--substation` per work repo; `@prefix` only when the store's issue-id
   prefix differs from the name (`the_grid@tg=…`). Names and prefixes must be
   disjoint across substations — assembly refuses collisions.
-- Delivery is a per-substation BINDING, not a flag (the_grid ADR-0000 A51):
+- Delivery is a per-substation BINDING, not a flag (the_grid#a51-the-autonomous-refinements-behind-the-route-unification):
   every coded substation authors `GitHubGridAssets`, so a LIVE arm
   (`--no-dry-run`) pushes and opens a PR per landed bead. `--dry-run` binds
   nothing (the commit-only posture). There is no land flag to omit.

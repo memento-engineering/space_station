@@ -18,9 +18,10 @@
 /// substation's reconciler config.
 ///
 /// **The `GitServices` bundle is SPLIT** (STYLE rule 4: no provider is
-/// universal): the assets watch `StationGitService` and `GitOps` individually,
-/// so a non-git substation composes a stack without either — unavailability is
-/// a designed posture, projected into the tree, never an error.
+/// universal): the assets watch `StationGitRepository` and `GitOps`
+/// individually, so a non-git substation composes a stack without either —
+/// unavailability is a designed posture, projected into the tree, never an
+/// error.
 ///
 /// The GitHub binding and reconciler lifecycle belong to `github_grid_assets`.
 /// This library composes those imported extensions but exports only
@@ -44,9 +45,8 @@ import 'package:grid_assets/grid_assets.dart'
         SpecAgentEnvironment;
 import 'package:grid_engine/grid_engine.dart' show ServiceBundle;
 import 'package:grid_runtime/grid_runtime.dart'
-    show GitOps, RootCheckout, StationGitService;
+    show GitOps, RootCheckout, StationGitRepository;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
-import 'package:grid_sdk/grid_sdk.dart' show Provider, ProviderTreeContext;
 
 /// A GitHub App DELIVERY IDENTITY — config identity ONLY, a plain value type.
 ///
@@ -362,7 +362,8 @@ final class _SubstationGitHubReconcilerBindingAssets
 ///
 /// Mounted under the `Substation` it serves, it reads that substation's
 /// ambient [sdk.SubstationScope] (name + ONE root), OBSERVES the station's
-/// worktree-provisioning machinery individually — `watch<StationGitService>()`,
+/// worktree-provisioning machinery individually —
+/// `watch<StationGitRepository>()`,
 /// the split of the retired `GitServices` bundle — and provides the git
 /// [ServiceBundle] to the work subtree. A null observation is the offline /
 /// dry-run posture: provisioning no-ops while `workspaceFor`/`branchFor`/
@@ -400,7 +401,12 @@ class GitGridAssets extends SingleChildStatelessSeed {
     // The SPLIT observation (STYLE rules 3–4): the provisioning half alone,
     // nullable always — absence is the offline posture, and a later provider
     // mount flips this node live through the pending-registry rebuild.
-    final provisioner = context.watch<StationGitService>();
+    // The station-lifetime REPOSITORY, not the stateless service (grid_runtime
+    // 0.2.1-dev.2): it retains each provisioned worktree's base commit so the
+    // committee pins its review diff to the exact base the provisioner cut
+    // from. Nullable always — absence is the offline posture, and a later
+    // provider mount flips this node live through the pending-registry rebuild.
+    final provisioner = context.watch<StationGitRepository>();
     return _DerivedBundleSeed(
       // ONE source control, resolved by TREE POSITION (never a name keyed
       // into a map). No delivery bound — GitHubGridAssets binds it below.

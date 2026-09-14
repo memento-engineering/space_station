@@ -32,8 +32,19 @@
 ///
 /// **Writes.** `filing` and `show` are pure reads. `approve` WRITES the approval
 /// receipt onto the WORK bead. `park` and `unpark` deliberately coordinate the
-/// work bead with its SESSION bead across A37's split. The cross-store link and
-/// session-lifecycle beads live in the state store at `<grid-home>/.grid/`.
+/// work bead with its SESSION bead across A37's split. The session-lifecycle
+/// beads live in the state store at `<grid-home>/.grid/`; `park` and `show` are
+/// the only verbs that still reach it.
+///
+/// **The armed roster.** `filing`, `approve` and `unpark` project the bead's
+/// blockers from bd's own dependency rows (grid_assets 0.7.0-dev.2), and an
+/// `external:<project>:<capability>` row resolves its `<project>` against the
+/// station's ARMED substation NAMES. This composition threads them from the
+/// SAME coded roster the bead id is resolved against ([armedSubstationNames]),
+/// so a row naming an attached substation reports its resolution and a row
+/// naming anything else reports not-armed. Unthreaded, the vended default
+/// (`noArmedSubstations`) refuses every external row fail-closed — that is the
+/// composition gap this station closes.
 library;
 
 import 'dart:io';
@@ -52,11 +63,7 @@ import 'package:grid_assets/grid_assets.dart'
         UnparkCommand,
         UnparkService;
 import 'package:grid_sdk/grid_sdk.dart'
-    show
-        GridStateStore,
-        SubstationScope,
-        SubstationScopeStores,
-        requireAbsoluteRoot;
+    show SubstationScope, SubstationScopeStores, requireAbsoluteRoot;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
@@ -111,6 +118,28 @@ String storeRootForBead({
   );
 }
 
+/// The station's ARMED substation NAMES, rooted at [gridHome] — what an
+/// `external:<project>:<capability>` dependency row's `<project>` token is
+/// resolved against by the vended filing preflight.
+///
+/// The names come from the CODED roster ([SpaceDelegate.substations]) through
+/// the same offline mount [storeRootForBead] uses, never from a hand-typed
+/// list: attaching a substation is a code change, and the verbs follow it. A
+/// row naming a substation in this set resolves; one naming anything else is
+/// reported not-armed. [verb] names the composing command in the absolute-home
+/// refusal.
+Set<String> armedSubstationNames({
+  required String verb,
+  required String gridHome,
+  SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+}) {
+  final home = _resolvedHome(verb, gridHome);
+  return <String>{
+    for (final scope in codedRosterOf(delegateFactory, gridRoot: home))
+      scope.name,
+  };
+}
+
 /// Builds the VENDED filing Commands curried with space's resident-station
 /// context.
 ///
@@ -152,6 +181,11 @@ SpaceFilingCommands buildSpaceFilingCommands({
       gridHome: homeOf(filingCommand),
       delegateFactory: delegateFactory,
     ),
+    armedSubstations: () => armedSubstationNames(
+      verb: 'filing',
+      gridHome: homeOf(filingCommand),
+      delegateFactory: delegateFactory,
+    ),
     out: out,
     err: err,
   );
@@ -163,15 +197,15 @@ SpaceFilingCommands buildSpaceFilingCommands({
       gridHome: homeOf(approveCommand),
       delegateFactory: delegateFactory,
     ),
-    // The state store carrying the cross-store link beads is `<home>/.grid/`
-    // (GridStateStore.runtimeDir). Deliberately UNGUARDED: the vended run()
-    // resolves the state root BEFORE entering its error guard, so raising the
-    // absolute-home refusal here would escape as a bare stack trace. It is
-    // raised from storeRoot above instead, where the vended guard catches it
-    // and reports it LOUD on stderr.
-    stateRoot: () => GridStateStore(
-      gridRoot: p.normalize(homeOf(approveCommand)),
-    ).runtimeDir,
+    // The armed roster, read from the SAME home the bead id resolves against.
+    // Called from INSIDE the vended run()'s error guard, so an
+    // ambiguously-rooted home is reported LOUD on stderr rather than escaping
+    // as a bare stack trace.
+    armedSubstations: () => armedSubstationNames(
+      verb: 'approve',
+      gridHome: homeOf(approveCommand),
+      delegateFactory: delegateFactory,
+    ),
     out: out,
     err: err,
   );
@@ -195,7 +229,11 @@ SpaceFilingCommands buildSpaceFilingCommands({
       gridHome: homeOf(unparkCommand),
       delegateFactory: delegateFactory,
     ),
-    stateRoot: () => homeOf(unparkCommand),
+    armedSubstations: () => armedSubstationNames(
+      verb: 'unpark',
+      gridHome: homeOf(unparkCommand),
+      delegateFactory: delegateFactory,
+    ),
     out: out,
     err: err,
   );

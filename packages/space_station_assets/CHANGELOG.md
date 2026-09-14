@@ -2,6 +2,69 @@
 
 ## Unreleased
 
+## 0.5.0-dev.3
+
+- Breaking: the `unlink` verb is REMOVED from the station runner, and
+  `buildSpaceLinkCommands` / `SpaceLinkCommands` are replaced by
+  `buildSpaceLinkCommand`, which returns the `link` Command alone. grid_cli
+  0.6.0-dev.3 (the_grid#447) deleted `UnlinkCommand` with the state-store link
+  bead itself, and `LinkCommand` dropped `stateStorePrefix`; `LinkEndpointStore`
+  gained a required `name`, which this composition fills from the coded roster
+  so an `external:<project>:<capability>` row carries the substation's roster
+  name. A HARD CUT, with no shim and no station-local replacement.
+  Migration: call `buildSpaceLinkCommand(...)` and drop every `.link` / `.unlink`
+  field read; remove a cross-store blocker with
+  `bd dep remove <from> external:<project>:<capability>`, or let it lift when the
+  target ships (`bd ship <target>` on a CLOSED target). A store still holding the
+  retired link beads is converted once with
+  `space link migrate --grid-root <home> [--dry-run]`.
+- Breaking: `SpaceDelegate` takes `trajectoryConfig` and `SpaceDelegateFactory`
+  carries it. `space up` now registers exactly ONE
+  `GitHubReconciliationQuery` in the station's
+  `TrajectoryConfig.obligationQueryExtensions` and provides the harness's
+  resolved config above the substation fan-out, because github_grid_assets
+  0.2.0-dev.1 retired the per-seat poll loop (and `GitHubReconcilerConfig
+  .interval`) in favour of the fenced service tick: a live reconciler seat under
+  a tree offering no registration REFUSES LOUD at build.
+  Migration: a downstream delegate subclass adds `super.trajectoryConfig` to its
+  constructor so its tear-off still satisfies `SpaceDelegateFactory`, and drops
+  `interval:` from every `GitHubReconcilerConfig` it authors.
+- Breaking: the composed `filing`, `approve` and `unpark` verbs drop
+  `stateRoot:` and thread the station's ARMED substation NAMES instead
+  (`armedSubstations`), so an `external:<project>:<capability>` dependency row
+  resolves against the CODED roster rather than refusing fail-closed
+  (grid_assets 0.7.0-dev.2, pow-f6pc). The new export `armedSubstationNames`
+  derives them from the same offline roster mount `storeRootForBead` uses.
+  `park` and `show` keep `--state-root`; they are the only verbs that still
+  reach the state store.
+  Migration: nothing to do on the runner. A standing `grid.approved_rev` taken
+  when the retired cross-store link lookup was consulted is STALE and its bead
+  needs re-approving, because the basis `dependencies` member changed shape.
+- Breaking: `SpaceStationStatus.toJson` takes the base's `governorFlares`
+  parameter (grid_cli 0.6.0-dev.3) and forwards it; the roster augmentation it
+  owns is unchanged.
+  Migration: an override of this method adds the parameter and forwards it to
+  `super.toJson(governorFlares: governorFlares)`.
+- Changed: the substation stack's `GitGridAssets` watches `StationGitRepository`
+  rather than `StationGitService`, and the delegate builds that repository
+  IN-TREE over the work runtime's service (`Provider(create:)` + `dispose:`).
+  The repository retains each provisioned worktree's base commit, so a committee
+  pins its review diff to the exact base the provisioner cut from instead of a
+  moving `origin/<base>` (grid_runtime 0.2.1-dev.2, the_grid#436).
+- Removed: `test/link_frontier_integration_test.dart`. It proved that authored
+  state-store link beads governed the joined ready frontier, and grid_engine
+  0.4.0-dev.3 deleted that seam outright (`onUnresolvedCrossLink` with it). The
+  cross-store blocker is covered where it now lives: the bd dependency row in
+  `test/link_composition_test.dart`, and its roster resolution in
+  `test/filing_composition_test.dart`.
+- Changed: adopts the 2026-09-13 the_grid dev.3 wave and the matching
+  power_station wave, override-free from pub: `beads_dart ^0.3.0-dev.2`,
+  `genesis_tree ^0.4.0`, `grid_cli ^0.6.0-dev.3`, `grid_engine ^0.4.0-dev.3`,
+  `grid_exploration ^0.3.1-dev.2`, `grid_runtime ^0.2.1-dev.2`,
+  `grid_sdk ^0.4.0-dev.3`, `grid_assets ^0.7.0-dev.2`,
+  `github_grid_assets ^0.2.0-dev.2`, `federated_grid_assets ^0.3.1-dev.1` and
+  `dart_grid_assets ^0.2.1-dev.2`.
+
 - Added: `BeadsCommand` / `BeadsConfigureCommand` and `buildSpaceBeadsCommand`
   vend the offline `beads configure` verb, composed on the shared station
   runner. It projects the station's ARMED coded roster into every armed

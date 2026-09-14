@@ -8,7 +8,6 @@ import 'package:grid_assets/grid_assets.dart'
     show
         ApproveCommand,
         ApproveService,
-        CrossLinkBlockerSource,
         ExactSubstationBeadSource,
         FilingCommand,
         FilingService,
@@ -67,6 +66,7 @@ class _HyphenatedRosterDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.trajectoryConfig,
     super.githubSelfTrust,
     super.live,
   });
@@ -86,7 +86,16 @@ late Directory _fixture;
 late String _umbrella;
 late String _gridHome;
 
-String _beadReply(String description, {String id = 'pow-child'}) => jsonEncode({
+/// bd's RECORD surface for one bead: the record, with the dependency ROWS bd
+/// embeds beside it. That embedding is the whole read now (grid_assets
+/// 0.7.0-dev.2) — `bd dep list` RESOLVES each row to an issue record, and an
+/// `external:` target has none in this store, so the resolving surface drops
+/// exactly the rows this composition exists to thread a roster into.
+String _beadReply(
+  String description, {
+  String id = 'pow-child',
+  List<String> blockedBy = const [],
+}) => jsonEncode({
   'schema_version': 1,
   'data': [
     {
@@ -101,18 +110,20 @@ String _beadReply(String description, {String id = 'pow-child'}) => jsonEncode({
       'notes': 'reachable from the station runner',
       'updated_at': '2026-09-12T12:00:00.000Z',
       'metadata': {'validation_plan': 'dart test'},
+      'dependencies': [
+        for (final blocker in blockedBy)
+          {'issue_id': id, 'depends_on_id': blocker, 'type': 'blocks'},
+      ],
     },
   ],
 });
 
-String _depReply(List<String> blockers, {String id = 'pow-child'}) =>
-    jsonEncode({
-      'schema_version': 1,
-      'data': [
-        for (final blocker in blockers)
-          {'issue_id': id, 'depends_on_id': blocker, 'type': 'blocks'},
-      ],
-    });
+/// The `dependencies` requirement row of a filing report.
+Map<String, dynamic> _dependenciesRow(StringBuffer out) =>
+    ((jsonDecode(out.toString()) as Map<String, dynamic>)['requirements']!
+            as List)
+        .cast<Map<String, dynamic>>()
+        .singleWhere((row) => row['requirement'] == 'dependencies');
 
 Map<String, String> _metadataOf(List<String> argv) {
   final metadata = <String, String>{};
@@ -152,7 +163,6 @@ _harness(
     delegateFactory: delegateFactory,
     filing: FilingService(
       source: ExactSubstationBeadSource(runnerFor: runnerFor),
-      links: CrossLinkBlockerSource(runnerFor: runnerFor),
     ),
     approve: ApproveService(
       runnerFor: runnerFor,
@@ -226,10 +236,7 @@ void main() {
       expect(help.single, contains("bead id's prefix"));
 
       final park = _harness(
-        _ScriptedBdRunner({
-          'query': _beadReply('No local ordering.'),
-          'dep': _depReply(const []),
-        }),
+        _ScriptedBdRunner({'query': _beadReply('No local ordering.')}),
       );
       expect(
         await park.runner.run([
@@ -251,25 +258,24 @@ void main() {
 
       final unpark = _harness(
         _ScriptedBdRunner({
-          'query': _beadReply('Depends on tg-89y8.'),
-          'dep': _depReply(const []),
+          'query': _beadReply(
+            'The parked bead.',
+            blockedBy: const ['external:tortilla:tor-1'],
+          ),
         }),
       );
       expect(
         await unpark.runner.run(['unpark', '--actor', 'governor', 'pow-child']),
         1,
       );
-      expect(
-        unpark.storeRoots.toSet(),
-        containsAll(<String>{'$_umbrella/power_station', '$_gridHome/.grid'}),
-      );
+      // grid_assets 0.7.0-dev.2 retired `--state-root` from unpark: it clears
+      // the defer date in the WORK store and re-runs the preflight over that
+      // same store's bd rows, so the grid state store is never opened.
+      expect(unpark.storeRoots.toSet(), {'$_umbrella/power_station'});
 
       final homeWithoutState = p.join(_umbrella, 'alternate_station');
       final showWithoutState = _harness(
-        _ScriptedBdRunner({
-          'query': _beadReply('The foreign-store bead.'),
-          'dep': _depReply(const []),
-        }),
+        _ScriptedBdRunner({'query': _beadReply('The foreign-store bead.')}),
         home: homeWithoutState,
       );
       expect(
@@ -279,10 +285,7 @@ void main() {
       expect(showWithoutState.storeRoots, isEmpty);
 
       final showWithOverride = _harness(
-        _ScriptedBdRunner({
-          'query': _beadReply('The foreign-store bead.'),
-          'dep': _depReply(const []),
-        }),
+        _ScriptedBdRunner({'query': _beadReply('The foreign-store bead.')}),
         home: homeWithoutState,
       );
       expect(
@@ -303,10 +306,7 @@ void main() {
     'composed show renders a power_station bead from the foreign work store',
     () async {
       final h = _harness(
-        _ScriptedBdRunner({
-          'query': _beadReply('The foreign-store bead.'),
-          'dep': _depReply(const []),
-        }),
+        _ScriptedBdRunner({'query': _beadReply('The foreign-store bead.')}),
       );
 
       expect(
@@ -342,10 +342,7 @@ void main() {
     'store — and returns the four rows',
     () async {
       final h = _harness(
-        _ScriptedBdRunner({
-          'query': _beadReply('No local ordering.'),
-          'dep': _depReply(const []),
-        }),
+        _ScriptedBdRunner({'query': _beadReply('No local ordering.')}),
       );
 
       expect(
@@ -388,81 +385,153 @@ void main() {
     expect(h.out.toString(), isEmpty);
   });
 
-  test(
-    '`approve` REFUSES an unwired named blocker: exit 1, nothing written',
-    () async {
-      final bd = _ScriptedBdRunner({
-        'query': _beadReply('Child 2 of epic pow-n6n. Depends on pow-n6n.1.'),
-        'dep': _depReply(const []),
-      });
-      final h = _harness(bd);
+  test('an `external:` row naming an ARMED substation is reported WITH its '
+      'resolution and passes — the composed roster is threaded in', () async {
+    final h = _harness(
+      _ScriptedBdRunner({
+        'query': _beadReply(
+          'A cross-store consumer.',
+          blockedBy: const ['external:the_grid:tg-89y8'],
+        ),
+      }),
+    );
 
-      expect(
-        await h.runner.run(['approve', '--actor', 'governor', 'pow-child']),
-        1,
+    expect(
+      await h.runner.run(['filing', '--json', 'pow-child']),
+      0,
+      reason: '${h.out}${h.err}',
+    );
+    final row = _dependenciesRow(h.out);
+    expect(row['passed'], isTrue);
+    expect(row['detail'], contains('external:the_grid:tg-89y8 (armed)'));
+    // The fail-closed default is what this composition exists to close: an
+    // armed row must never come back unresolved.
+    expect(row['detail'], isNot(contains('no station roster was supplied')));
+  });
+
+  test('an `external:` row naming a substation the roster does NOT arm is '
+      'reported not-armed, and approve refuses it', () async {
+    final h = _harness(
+      _ScriptedBdRunner({
+        'query': _beadReply(
+          'A row nobody arms.',
+          blockedBy: const ['external:tortilla:tor-1'],
+        ),
+      }),
+    );
+
+    expect(await h.runner.run(['filing', '--json', 'pow-child']), 1);
+    final row = _dependenciesRow(h.out);
+    expect(row['passed'], isFalse);
+    expect(
+      row['detail'],
+      contains(
+        'external:tortilla:tor-1 names "tortilla", which this '
+        'station does not arm',
+      ),
+    );
+    // The refusal NAMES the armed roster, so the operator reads what this
+    // station actually carries.
+    expect(row['detail'], contains('the_grid'));
+    expect(row['detail'], isNot(contains('no station roster was supplied')));
+
+    final bd = _ScriptedBdRunner({
+      'query': _beadReply(
+        'A row nobody arms.',
+        blockedBy: const ['external:tortilla:tor-1'],
+      ),
+    });
+    final approve = _harness(bd);
+    expect(
+      await approve.runner.run(['approve', '--actor', 'governor', 'pow-child']),
+      1,
+    );
+    expect(approve.out.toString(), contains('REFUSED pow-child'));
+    expect(bd.updates, isEmpty);
+  });
+
+  test(
+    'a LOCAL blocking row is reported as bd holds it — prose is never read',
+    () async {
+      final h = _harness(
+        _ScriptedBdRunner({
+          // The sentence is PROSE and declares nothing (the grammar was
+          // deleted in grid_assets 0.7.0-dev.2); the ROW is the declaration.
+          'query': _beadReply(
+            'Child 2 of epic pow-n6n. Depends on pow-n6n.2.',
+            blockedBy: const ['pow-n6n.1'],
+          ),
+        }),
       );
-      expect(h.out.toString(), contains('REFUSED pow-child'));
-      expect(h.out.toString(), contains('pow-n6n.1'));
-      expect(bd.updates, isEmpty);
-    },
-  );
-
-  test(
-    '`approve` STAMPS a wired bead in ONE bd update against the '
-    'ROSTER-resolved store, with the state root defaulted to <home>/.grid',
-    () async {
-      final bd = _ScriptedBdRunner({
-        'query': _beadReply('Child 2 of epic pow-n6n. Depends on pow-n6n.1.'),
-        'dep': _depReply(const ['pow-n6n.1']),
-      });
-      final h = _harness(bd);
 
       expect(
-        await h.runner.run([
-          'approve',
-          '--json',
-          '--actor',
-          'governor',
-          'pow-child',
-        ]),
+        await h.runner.run(['filing', '--json', 'pow-child']),
         0,
         reason: '${h.out}${h.err}',
       );
-      expect(bd.updates, hasLength(1));
-      final argv = bd.updates.single;
-      expect(argv.take(2), ['update', 'pow-child']);
-      expect(argv, containsAllInOrder(['--actor', 'governor']));
-      // grid_assets rc.8: the stamp IS approval — the verb adds no label.
-      expect(argv, isNot(contains('--add-label')));
-      final metadata = _metadataOf(argv);
-      expect(
-        metadata.keys,
-        unorderedEquals(const [
-          'grid.approved_by',
-          'grid.approved_at',
-          'grid.approved_rev',
-        ]),
-      );
-      expect(metadata['grid.approved_by'], 'governor');
-      expect(metadata['grid.approved_at'], '2026-09-02T14:30:00.000Z');
-      final approvedRev = metadata['grid.approved_rev'];
-      expect(approvedRev, matches(RegExp(r'^filing:v1:sha256:[0-9a-f]{64}$')));
-      expect(
-        h.storeRoots,
-        contains('$_umbrella/power_station'),
-        reason:
-            'the preflight and the stamp ride the roster-resolved substation',
-      );
-      expect(
-        h.storeRoots,
-        contains('$_gridHome/.grid'),
-        reason: 'the cross-store link lookup rides the grid state store',
-      );
-      final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
-      expect(report['approved'], isTrue);
-      expect(report['rev'], approvedRev);
+      final row = _dependenciesRow(h.out);
+      expect(row['passed'], isTrue);
+      expect(row['detail'], contains('bd dependency rows: pow-n6n.1'));
+      expect(row['detail'], isNot(contains('pow-n6n.2')));
     },
   );
+
+  test('`approve` STAMPS a wired bead in ONE bd update against the '
+      'ROSTER-resolved store, and opens no second store', () async {
+    final bd = _ScriptedBdRunner({
+      'query': _beadReply(
+        'Child 2 of epic pow-n6n.',
+        blockedBy: const ['pow-n6n.1'],
+      ),
+    });
+    final h = _harness(bd);
+
+    expect(
+      await h.runner.run([
+        'approve',
+        '--json',
+        '--actor',
+        'governor',
+        'pow-child',
+      ]),
+      0,
+      reason: '${h.out}${h.err}',
+    );
+    expect(bd.updates, hasLength(1));
+    final argv = bd.updates.single;
+    expect(argv.take(2), ['update', 'pow-child']);
+    expect(argv, containsAllInOrder(['--actor', 'governor']));
+    // grid_assets rc.8: the stamp IS approval — the verb adds no label.
+    expect(argv, isNot(contains('--add-label')));
+    final metadata = _metadataOf(argv);
+    expect(
+      metadata.keys,
+      unorderedEquals(const [
+        'grid.approved_by',
+        'grid.approved_at',
+        'grid.approved_rev',
+      ]),
+    );
+    expect(metadata['grid.approved_by'], 'governor');
+    expect(metadata['grid.approved_at'], '2026-09-02T14:30:00.000Z');
+    final approvedRev = metadata['grid.approved_rev'];
+    expect(approvedRev, matches(RegExp(r'^filing:v1:sha256:[0-9a-f]{64}$')));
+    expect(
+      h.storeRoots,
+      contains('$_umbrella/power_station'),
+      reason: 'the preflight and the stamp ride the roster-resolved substation',
+    );
+    expect(
+      h.storeRoots,
+      isNot(contains('$_gridHome/.grid')),
+      reason:
+          'approve dropped --state-root: the preflight projects the WORK '
+          "store's own bd rows and reaches no second store",
+    );
+    final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
+    expect(report['approved'], isTrue);
+    expect(report['rev'], approvedRev);
+  });
 
   test('a RELATIVE --grid-home is refused LOUD by BOTH verbs: exit 1, nothing '
       'read, nothing written', () async {
@@ -504,7 +573,6 @@ void main() {
     final h = _harness(
       _ScriptedBdRunner({
         'query': _beadReply('No local ordering.', id: 'swift-infer-zfor'),
-        'dep': _depReply(const [], id: 'swift-infer-zfor'),
       }),
       delegateFactory: _HyphenatedRosterDelegate.new,
     );
@@ -527,7 +595,6 @@ void main() {
     () async {
       final bd = _ScriptedBdRunner({
         'query': _beadReply('No local ordering.', id: 'swift-infer-zfor'),
-        'dep': _depReply(const [], id: 'swift-infer-zfor'),
       });
       final h = _harness(bd, delegateFactory: _HyphenatedRosterDelegate.new);
 

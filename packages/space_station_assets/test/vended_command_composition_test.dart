@@ -49,6 +49,9 @@ const _excludedCommands = <String, String>{
   'grid_cli:BeadRoundCommand':
       '`bead round` is an optional downstream resident UI not claimed by the '
       'baseline.',
+  'grid_cli:BeadRearmCommand':
+      '`bead rearm` is an optional downstream resident UI not claimed by the '
+      'baseline.',
   'grid_cli:SessionCommand':
       '`session` is standalone held-worktree maintenance outside this '
       'station baseline.',

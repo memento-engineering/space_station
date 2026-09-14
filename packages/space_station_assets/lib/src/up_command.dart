@@ -530,7 +530,16 @@ class UpCommand extends Command<int> {
       results,
       environment: _environment,
     );
-    final trajectoryConfig = trajectoryResolution.config;
+    // THE station's ONE GitHub reconciliation query (github_grid_assets
+    // 0.2.0-dev.1). The seat-owned poll loop and its `interval` are gone:
+    // reconciliation is an OBLIGATION the fenced service tick repairs, so the
+    // station registers exactly one query here, hands it to the assembly with
+    // the rest of the posture, and provides the resolved config back into the
+    // tree ([SpaceDelegate.trajectoryConfig]). Every live polling substation
+    // attaches its runtime to this instance; a seat that finds none — or two —
+    // refuses LOUD at build instead of reconciling on nobody's schedule.
+    final trajectoryConfig = trajectoryResolution.config
+        .withAppendedObligationQueries([github.GitHubReconciliationQuery()]);
 
     // --- stores at roots (the discoverWorkspaces replacement). The grid state
     // store lives under `<grid-home>/.grid/`; a cwd-relative home re-imports
@@ -762,6 +771,11 @@ class UpCommand extends Command<int> {
       harnesses: harnesses,
       wiring: workRuntime.wiring,
       provisioner: workRuntime.git,
+      // The harness's OWN resolved posture, never a second copy of the rule:
+      // the assembly applied the dry-run force and appended its own station
+      // obligations, and the tree must offer the SAME query instance the tick
+      // repairs.
+      trajectoryConfig: workRuntime.trajectory.config,
       githubSelfTrust: githubSelfTrust,
       live: live,
     );
