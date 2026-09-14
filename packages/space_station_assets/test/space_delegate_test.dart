@@ -40,7 +40,16 @@ import 'package:grid_engine/grid_engine.dart'
         Workspace;
 import 'package:grid_engine/testing.dart'
     show FakeTreeContext, stepArgs, testWorkspace;
-import 'package:grid_runtime/grid_runtime.dart' show GitOps, PrOpener;
+import 'package:grid_runtime/grid_runtime.dart'
+    show
+        GitOps,
+        GitRunResult,
+        GitRunner,
+        PrOpener,
+        PullRequestRef,
+        PullRequestResult,
+        StationGitRepository,
+        StationGitService;
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
@@ -95,6 +104,7 @@ void main() {
     List<sdk.Substation> appended = const [],
     github.GitHubSelfTrust? githubSelfTrust,
     BdRunner Function(String workspaceRoot)? specifyBdRunnerFor,
+    sdk.TrajectoryConfig? trajectoryConfig,
     bool live = false,
   }) => SpaceDelegate(
     gridRoot: gridRoot,
@@ -102,7 +112,77 @@ void main() {
     agentConfig: const AgentConfig(harness: 'claude'),
     githubSelfTrust: githubSelfTrust,
     specifyBdRunnerFor: specifyBdRunnerFor,
+    trajectoryConfig: trajectoryConfig,
     live: live,
+  );
+
+  test(
+    'the station provides its RESOLVED trajectory posture above the fan-out, '
+    'and provides none when the boot supplies none',
+    () {
+      // The composition half of github_grid_assets 0.2.0-dev.1: a live
+      // reconciler seat attaches its runtime to the ONE
+      // GitHubReconciliationQuery the station registered, and refuses LOUD
+      // under a tree that offers none.
+      final query = github.GitHubReconciliationQuery();
+      final config = const sdk.TrajectoryConfig().withAppendedObligationQueries(
+        [query],
+      );
+      final armed = delegate(live: true, trajectoryConfig: config);
+      addTearDown(armed.dispose);
+      final provided = _mountedValues<sdk.TrajectoryConfig>(_Author(armed));
+      expect(provided, hasLength(1));
+      expect(
+        provided.single.obligationQueryExtensions
+            .whereType<github.GitHubReconciliationQuery>(),
+        [same(query)],
+        reason: 'the seats attach to the instance the station tick repairs',
+      );
+
+      final offline = delegate();
+      addTearDown(offline.dispose);
+      expect(
+        _mountedValues<sdk.TrajectoryConfig>(_Author(offline)),
+        isEmpty,
+        reason: 'absence is the offline posture, declared in the tree',
+      );
+    },
+  );
+
+  test(
+    'the worktree provisioner is provided as the station-lifetime REPOSITORY '
+    'the substation assets watch, and absence is the offline posture',
+    () {
+      final armed = delegate(live: true);
+      addTearDown(armed.dispose);
+      expect(
+        _mountedValues<StationGitRepository>(_Author(armed)),
+        isEmpty,
+        reason: 'no provisioner was supplied, so no provider is authored',
+      );
+
+      final service = StationGitService(
+        runner: const _FakeGitRunner(),
+        prOpener: const _FakePrOpener(),
+      );
+      final wired = SpaceDelegate(
+        gridRoot: '/home/memento/space_station',
+        agentConfig: const AgentConfig(harness: 'claude'),
+        provisioner: service,
+        live: true,
+      );
+      addTearDown(wired.dispose);
+      final repositories = _mountedValues<StationGitRepository>(_Author(wired));
+      expect(repositories, hasLength(1));
+      // grid_runtime 0.2.1-dev.2: GitSourceControl takes the REPOSITORY, which
+      // retains each provisioned worktree's base commit — a StationGitService
+      // no longer satisfies it.
+      expect(
+        _mountedValues<StationGitService>(_Author(wired)),
+        isEmpty,
+        reason: 'the bare service is no longer provided to the fan-out',
+      );
+    },
   );
 
   test('state-store maintenance follows the live posture', () {
@@ -803,16 +883,36 @@ void main() {
 
       expect(
         pubspec,
-        matches(RegExp(r'version: 0\.5\.0-dev\.2$', multiLine: true)),
+        matches(RegExp(r'version: 0\.5\.0-dev\.3$', multiLine: true)),
       );
-      expect(pubspec, contains('grid_assets: ^0.7.0-dev.1'));
-      expect(pubspec, contains('grid_sdk: ^0.3.0'));
+      expect(pubspec, contains('grid_assets: ^0.7.0-dev.2'));
+      expect(pubspec, contains('grid_sdk: ^0.4.0-dev.3'));
+      expect(pubspec, contains('grid_cli: ^0.6.0-dev.3'));
+      expect(pubspec, contains('github_grid_assets: ^0.2.0-dev.2'));
       expect(changelog, matches(RegExp(r'^# Changelog\n\n## Unreleased\n')));
-      const breakingLine =
-          '- Breaking: Removes SpaceDelegate.arming, SpaceDelegate.harnesses, codedArmingOf, and SubstationSeed.arming; SpaceDelegate.environments now takes (context, configuration), open seat-provider seeds mount during build, and codedSeatEnvironmentsOf returns CodedSeatEnvironmentSnapshot.';
-      const migrationLine =
-          '  Migration: Extending stations replace an arming getter with seatSeeds(context, configuration), returning one seat.provider() seed per preference, and override environments(context, configuration); lunar adopts this in its separate downstream bead.';
-      expect(changelog, contains('$breakingLine\n$migrationLine\n'));
+      // Every breaking bullet of the cut section carries its own Migration
+      // line, indented under it — the shape a downstream station reads to
+      // adopt.
+      final cut = changelog.substring(
+        changelog.indexOf('## 0.5.0-dev.3'),
+        changelog.indexOf('## 0.5.0-dev.2'),
+      );
+      final breaking = RegExp(
+        r'^- Breaking: ',
+        multiLine: true,
+      ).allMatches(cut);
+      expect(breaking, hasLength(4));
+      expect(
+        RegExp(r'^  Migration: ', multiLine: true).allMatches(cut),
+        hasLength(breaking.length),
+      );
+      expect(cut, contains('the `unlink` verb is REMOVED'));
+      expect(cut, contains('super.trajectoryConfig'));
+      expect(cut, contains('armedSubstationNames'));
+      expect(
+        changelog,
+        matches(RegExp(r'^## 0\.5\.0-dev\.3$', multiLine: true)),
+      );
       expect(
         changelog,
         matches(RegExp(r'^## 0\.5\.0-dev\.2$', multiLine: true)),
@@ -843,8 +943,33 @@ void main() {
         return rest.substring(0, nextPackage?.start ?? rest.length);
       }
 
-      expect(lockEntry('grid_assets'), contains('version: "0.7.0-dev.1"'));
-      expect(lockEntry('grid_sdk'), contains('version: "0.3.0"'));
+      // AC-1's real content: the whole wave resolves from pub, override-free.
+      // The RESOLVED versions are deliberately NOT pinned here — a caret floor
+      // admits the next prerelease of the same wave, and pinning the lock
+      // makes this suite fail on a producer publish nobody in this repo asked
+      // for. The declared FLOORS above are the deliberate adoption; this is the
+      // source check.
+      for (final package in const <String>[
+        'beads_dart',
+        'dart_grid_assets',
+        'federated_grid_assets',
+        'genesis_tree',
+        'github_grid_assets',
+        'grid_assets',
+        'grid_cli',
+        'grid_engine',
+        'grid_exploration',
+        'grid_runtime',
+        'grid_sdk',
+      ]) {
+        final entry = lockEntry(package);
+        expect(entry, contains('source: hosted'), reason: package);
+        expect(entry, contains('url: "https://pub.dev"'), reason: package);
+      }
+      expect(
+        Directory('..').listSync().map((e) => p.basename(e.path)),
+        isNot(contains('pubspec_overrides.yaml')),
+      );
     });
   });
 }
@@ -935,6 +1060,33 @@ class _SwapHostState extends State<_SwapHost> {
 
 /// Calls [SpaceDelegate.build] with a live [TreeContext] during mount (the
 /// offline stand-in for runGrid's `_DelegateRoot`, which does the same).
+/// A never-launched git runner — the work runtime's service is POSTURE here,
+/// mounted and never driven (Fakes not mocks).
+final class _FakeGitRunner implements GitRunner {
+  const _FakeGitRunner();
+
+  @override
+  Future<GitRunResult> run({
+    required String workingDirectory,
+    required List<String> args,
+  }) async => const GitRunResult(exitCode: 0, output: '');
+}
+
+/// A non-throwing PR opener fake (never invoked — posture only).
+final class _FakePrOpener implements PrOpener {
+  const _FakePrOpener();
+
+  @override
+  Future<PullRequestResult> open({
+    required String workDir,
+    required String branch,
+    required String baseBranch,
+    required String title,
+    String body = '',
+  }) async =>
+      PullRequestResult.opened(const PullRequestRef(url: 'https://x/pr/1'));
+}
+
 class _Author extends StatelessSeed {
   const _Author(this.delegate);
 
@@ -976,6 +1128,7 @@ class _AssetRosterDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.trajectoryConfig,
     super.githubSelfTrust,
     super.live,
   });
@@ -1019,6 +1172,7 @@ class _BuildMethodProbeDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.trajectoryConfig,
     super.githubSelfTrust,
     super.live,
   });
@@ -1071,6 +1225,7 @@ class _InvalidSubstationSeatDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.trajectoryConfig,
     super.githubSelfTrust,
     super.live,
   });

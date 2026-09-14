@@ -6,7 +6,7 @@ import 'package:grid_assets/grid_assets.dart'
         SearchCommand,
         SeatCommand,
         SuccessionCommand;
-import 'package:grid_cli/grid_cli.dart' show LinkCommand, UnlinkCommand;
+import 'package:grid_cli/grid_cli.dart' show LinkCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/reload_command.dart' show ReloadCommand;
 import 'package:space_station_assets/space_station_assets.dart';
@@ -32,7 +32,6 @@ void main() {
         'seat',
         'succession',
         'link',
-        'unlink',
         'dart',
         'gate',
         'serve',
@@ -42,10 +41,13 @@ void main() {
     expect(runner.commands['demo'], isNull);
   });
 
-  test('`link` and `unlink` are the VENDED grid_cli commands', () {
+  test('`link` is the VENDED grid_cli command and `unlink` is GONE', () {
     final runner = buildRunner();
     expect(runner.commands['link'], isA<LinkCommand>());
-    expect(runner.commands['unlink'], isA<UnlinkCommand>());
+    // grid_cli 0.6.0-dev.3 retired the verb with the state-store link bead
+    // itself (the_grid#447): a cross-store blocker is a bd dependency row, and
+    // it is removed with `bd dep remove` or lifts when the target ships.
+    expect(runner.commands['unlink'], isNull);
   });
 
   test('`search` is the VENDED grid_assets Command, composed — not a '

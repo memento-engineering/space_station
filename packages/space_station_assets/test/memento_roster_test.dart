@@ -228,9 +228,11 @@ void main() {
         // ONE App: the poll installation IS the delivery installation.
         expect(poll.installationId, kMementoOrgApp.installationId);
         expect(poll.installationId, '152260260');
-        // Unauthored, so the package defaults stand.
+        // Unauthored, so the package defaults stand. There is no per-seat
+        // interval any more (github_grid_assets 0.2.0-dev.1): the STATION tick
+        // owns reconciliation cadence through the one registered
+        // GitHubReconciliationQuery.
         expect(poll.arm, github.GitHubReconcilerArm.live);
-        expect(poll.interval, const Duration(minutes: 1));
         expect(poll.minimumSpacing, const Duration(seconds: 5));
       }
     });
@@ -536,6 +538,7 @@ class _DownstreamDelegate extends SpaceDelegate {
     super.harnesses,
     super.wiring,
     super.provisioner,
+    super.trajectoryConfig,
     super.githubSelfTrust,
     super.live,
   });

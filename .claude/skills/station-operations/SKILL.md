@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@43cc1ae — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@unknown — do not edit; run `dart run space:space assets install`
 name: station-operations
 description: >
   Operate the resident the_grid station: boot (dart run space:space up), bounce, tear
@@ -33,7 +33,7 @@ dart run space:space up --no-dry-run \
 - One `--substation` per work repo; `@prefix` only when the store's issue-id
   prefix differs from the name (`the_grid@tg=…`). Names and prefixes must be
   disjoint across substations — assembly refuses collisions.
-- Delivery is a per-substation BINDING, not a flag (the_grid ADR-0000 A51):
+- Delivery is a per-substation BINDING, not a flag (the_grid#a51-the-autonomous-refinements-behind-the-route-unification):
   every coded substation authors `GitHubGridAssets`, so a LIVE arm
   (`--no-dry-run`) pushes and opens a PR per landed bead. `--dry-run` binds
   nothing (the commit-only posture). There is no land flag to omit.
@@ -78,9 +78,9 @@ For this sweep, stamped means `grid.approved_by`, `grid.approved_at`, and
 not count. Before treating a stamped-but-unmounted bead as waiting,
 enumerate every OPEN blocker: read its in-store dependencies with
 `bd -C <work-store-root> dep list <bead-id> --json` and its cross-store
-dependencies from `bd -C .grid list -t link --status open --json`, using
-each link's `grid.link.from` and `grid.link.to` endpoints. Read every
-unique blocker in its owning store with
+dependencies — bd `external:<project>:<capability>` rows on the bead itself —
+with the station's `link ls` verb, which lists the external rows every armed
+store carries. Read every unique blocker in its owning store with
 `bd -C <blocker-store-root> query id=<blocker-id> --all --json --limit 0`,
 and discard any blocker whose own status is not open. A blocker that is a
 release node or whose notes explicitly say an agent executes it is

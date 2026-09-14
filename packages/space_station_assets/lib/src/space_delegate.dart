@@ -76,10 +76,15 @@ import 'package:grid_assets/grid_assets.dart'
         mountedValuesOf,
         resolveOverlaySourceRefSync;
 import 'package:grid_runtime/grid_runtime.dart'
-    show GhPrOpener, GitOps, PrOpener, StationGitService, SystemGitRunner;
+    show
+        GhPrOpener,
+        GitOps,
+        PrOpener,
+        StationGitRepository,
+        StationGitService,
+        SystemGitRunner;
 import 'package:github_grid_assets/github_grid_assets.dart' as github;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
-import 'package:grid_sdk/grid_sdk.dart' show Provider;
 import 'package:path/path.dart' as p;
 
 import '../station_asset_registry.dart';
@@ -102,6 +107,7 @@ typedef SpaceDelegateFactory =
       EnvironmentRegistry? harnesses,
       sdk.StationWorkWiring? wiring,
       StationGitService? provisioner,
+      sdk.TrajectoryConfig? trajectoryConfig,
       github.GitHubSelfTrust? githubSelfTrust,
       bool live,
     });
@@ -355,6 +361,7 @@ class SpaceDelegate extends sdk.GridDelegate {
     BdRunner Function(String workspaceRoot)? specifyBdRunnerFor,
     this.wiring,
     this.provisioner,
+    this.trajectoryConfig,
     this.githubSelfTrust,
     this.live = false,
   }) : _bootAgentConfig = agentConfig,
@@ -474,12 +481,32 @@ class SpaceDelegate extends sdk.GridDelegate {
 
   /// The station's shared worktree-provisioning service (leased per
   /// substation), built and OWNED by the off-tree work runtime; null ⇒
-  /// provisioning no-ops (offline). [build] ADOPTS it over the fan-out as a
-  /// `Provider<StationGitService>.value` (STYLE rule 2: `.value` adopts an
-  /// instance held by another owner — the runtime — exactly as `StationWork`
-  /// adopts the wiring's values); each substation's [GitGridAssets] observes it
-  /// individually (the retired `GitServices` bundle's split, space-47t).
+  /// provisioning no-ops (offline).
+  ///
+  /// [build] wraps it in the station-lifetime [StationGitRepository] the
+  /// substation assets consume (grid_runtime 0.2.1-dev.2): the repository
+  /// retains each provisioned worktree's base commit so a committee pins its
+  /// review diff to the exact base the provisioner cut from. The REPOSITORY is
+  /// the tree's own (`Provider(create:)` + `dispose:`, STYLE rule 2 — it is
+  /// constructed here, so the tree owns and releases it); the SERVICE inside it
+  /// stays the runtime's. Each substation's [GitGridAssets] observes the
+  /// repository individually (the retired `GitServices` bundle's split,
+  /// space-47t).
   final StationGitService? provisioner;
+
+  /// The station's RESOLVED trajectory posture, as the work runtime's harness
+  /// resolved it; null ⇒ the offline authoring mount, which provides none.
+  ///
+  /// [build] provides it above the substation fan-out because a live GitHub
+  /// reconciler seat runs on the STATION TICK and attaches to the single
+  /// `GitHubReconciliationQuery` registered in
+  /// [sdk.TrajectoryConfig.obligationQueryExtensions] (github_grid_assets
+  /// 0.2.0-dev.1 retired the per-seat poll loop and its `interval`). A live
+  /// seat under a tree that offers no registration REFUSES LOUD at build, so
+  /// this is the composition half of that contract: `space up` authors ONE
+  /// query, hands it to the assembly, and threads the resolved config back in
+  /// here.
+  final sdk.TrajectoryConfig? trajectoryConfig;
 
   /// The station-global SELF-only GitHub trust value.
   ///
@@ -564,6 +591,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   Seed build(TreeContext context, sdk.GridConfiguration configuration) {
     final armedWiring = wiring;
     final git = provisioner;
+    final trajectory = trajectoryConfig;
     final selfTrust = githubSelfTrust;
     final registry = _bootHarnesses ?? environments(context, configuration);
     // The availability registry (tg-1fa2.5): the substation assets OBSERVE their
@@ -608,11 +636,18 @@ class SpaceDelegate extends sdk.GridDelegate {
                     // The station's own resolution, projected for the `up`
                     // banner and the offline suites.
                     const _StationSeatEnvironmentsAssets(),
-                    // The work runtime's worktree machinery, ADOPTED (STYLE
-                    // rule 2: another owner's instance rides Provider.value;
-                    // the runner disposes it, never the tree). Absent ⇒ no
-                    // provider — the offline posture is absence.
-                    if (git != null) Provider<StationGitService>.value(git),
+                    // The work runtime's worktree machinery, wrapped in the
+                    // station-lifetime REPOSITORY the substation assets watch.
+                    // The repository is CONSTRUCTED here, so the tree owns it
+                    // (STYLE rule 2: `create:` + `dispose:`); the service
+                    // inside stays the runtime's and the runner still disposes
+                    // that. Absent ⇒ no provider — the offline posture is
+                    // absence.
+                    if (git != null)
+                      Provider<StationGitRepository>(
+                        create: (_) => StationGitRepository(service: git),
+                        dispose: (repository) => repository.dispose(),
+                      ),
                     // The EFFECT providers — LIVE arms only (space-47t):
                     // constructed IN-TREE, tree-owned. A dry run authors
                     // NEITHER, so the tree binds no delivery and the dry arm
@@ -628,6 +663,13 @@ class SpaceDelegate extends sdk.GridDelegate {
                       if (selfTrust != null)
                         Provider<github.GitHubSelfTrust>.value(selfTrust),
                     ],
+                    // The station's resolved trajectory posture, above the
+                    // fan-out: a live GitHub reconciler seat attaches to the
+                    // ONE GitHubReconciliationQuery this config registers, and
+                    // refuses LOUD if the tree offers none. Absent ⇒ no
+                    // provider — an offline mount arms no live seat.
+                    if (trajectory != null)
+                      _StationTrajectoryAssets(config: trajectory),
                     // ARMED: StationWork provides the engine's ambient
                     // work-axis stack above the fan-out (the runGrid→engine
                     // bridge, tg-yl8); UNARMED: H2's authoring-only shape.
@@ -687,9 +729,12 @@ class SpaceDelegate extends sdk.GridDelegate {
     // bead-id `prefix` (`tg`/`pow`/`space`/`dec`) addresses the WORK STORE and
     // has nothing to do with polling.
     //
-    // The three defaults stand unauthored — interval 1 minute, minimum
-    // spacing 5 seconds, arm live — which is the posture the downstream
-    // station's private substations already run under.
+    // The two defaults stand unauthored — minimum spacing 5 seconds, arm
+    // live — which is the posture the downstream station's private
+    // substations already run under. There is no per-seat interval any more:
+    // the STATION tick owns reconciliation cadence through the one
+    // `GitHubReconciliationQuery` [trajectoryConfig] registers
+    // (github_grid_assets 0.2.0-dev.1).
     // the substrate — driven directly (worktrees isolate under
     // .grid/worktrees; main untouched)
     SubstationSeed(
@@ -800,6 +845,31 @@ class SpaceDelegate extends sdk.GridDelegate {
       ),
     ),
   ];
+}
+
+/// Provides the station's RESOLVED trajectory posture to the fan-out.
+///
+/// The value a live `github.GitHubReconcilerAssets` reads to find the ONE
+/// `github.GitHubReconciliationQuery` its runtime attaches to: the station owns
+/// the reconciliation CADENCE through the fenced service tick, and a seat that
+/// finds no registration — or two — refuses LOUD rather than falling back to a
+/// loop of its own (github_grid_assets 0.2.0-dev.1). Mounted ABOVE the fan-out,
+/// because the registration is the STATION's, shared by every polling
+/// substation under it.
+final class _StationTrajectoryAssets extends SingleChildStatelessSeed {
+  const _StationTrajectoryAssets({
+    required this.config,
+    // Nest supplies this fold child; direct call sites deliberately omit it.
+    // ignore: unused_element_parameter
+    super.child,
+  });
+
+  /// The resolved posture, as the work runtime's harness resolved it.
+  final sdk.TrajectoryConfig config;
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) =>
+      InheritedSeed<sdk.TrajectoryConfig>(value: config, child: child);
 }
 
 /// Projects the STATION's own typed resolution — the value `up`'s banner

@@ -1,5 +1,5 @@
 ---
-# generated from grid_assets@2210f5a — do not edit; run `dart run space:space assets install`
+# generated from grid_assets@unknown — do not edit; run `dart run space:space assets install`
 name: intake-refinement
 description: >
   Shape work beads so a resident the_grid station can drive them: prior-art
@@ -87,36 +87,51 @@ PR merged.
 
 ## Wire every dependency at intake
 
-- **Local (same store)** — name each blocker on its own `Blocked by:` or
-  `Depends on:` description line, then wire it:
+A blocker is a DECLARATION bd holds. Writing `Blocked by: <id>` in the
+description declares NOTHING — it is a sentence, and nothing reads it. Wire the
+row, or the bead is not blocked.
+
+- **Local (same store)** —
 
   ```bash
   bd -C <store root> dep add <blocked bead> <blocker bead> --actor operator
   ```
 
   The BLOCKED bead is the first argument. The `filing` verb's `dependencies`
-  row reads the ids named in the description and fails until each one has an
-  outgoing `blocks` edge.
-- **Cross-store** — never a local dependency row, and never
-  `bd dep add <id> external:<project>:<id>`: mint an OPEN grid-state
-  `type=link` bead with the station's link verb, arming BOTH endpoint
-  prefixes:
+  row is a PROJECTION of the rows bd holds for the bead — it reports them and
+  reads no prose.
+- **Cross-store** — never a raw foreign id in a local dependency row: a
+  cross-store blocker is bd's OWN `external:<project>:<capability>` dependency
+  row on the BLOCKED bead, and the station's link verb is the sugar that writes
+  it:
 
   ```bash
-  dart run space:space link <blocked bead> --blocked-by <blocker bead> \
-    --prefix <blocked bead prefix> --prefix <blocker bead prefix> \
-    --actor operator --reason "<why this ordering exists>"
+  dart run space:space link <blocked bead> --blocked-by <blocker bead>
   ```
 
-  The link bead carries `grid.link.from`, `grid.link.to` and
-  `grid.link.type=blocks`; the station projects it and the shared block guard
-  enforces it. A malformed link fails closed. `dart run space:space link ls` lists what
-  is wired.
+  It labels the target `export:<target>` and runs
+  `bd dep add <blocked> external:<project>:<target>`, where `<project>` is the
+  target substation's ROSTER NAME. It mints no bead and never touches the
+  station's state store. The edge LIFTS when the target ships —
+  `bd ship <target>` on a CLOSED target — so there is nothing to unwire by
+  hand. `dart run space:space link ls` lists the external rows the roster's stores carry.
+
+  **Know this before you wire one.** `filing` and `approve` resolve
+  `<project>` against the armed roster the STATION composing them passes in,
+  and no station threads that roster yet. Until one does, every `external:`
+  row refuses both verbs with `no station roster was supplied` — a COMPOSITION
+  gap, not a bead defect. Wire the row anyway: an unwired cross-store blocker
+  is the failure this whole section exists to stop, and the refusal is loud,
+  named and correctable. Never delete the row to make the check pass, and
+  never hand-stamp `grid.approved_*` around it.
 
 **Why:** an unwired blocker leaves the blocked bead in `ready`, so the station
 mounts it and its agent builds against an API the blocker has not shipped. A
-raw foreign-id dependency row is worse: `bd doctor --fix` can classify it as
-orphaned and sever it silently.
+raw foreign id in a local row is worse: `bd doctor --fix` can classify it as
+orphaned and sever it silently, and the frontier resolves nothing against it.
+And a blocker named only in prose is invisible to every reader that matters:
+the hyphenated spelling `Blocked-by:` once read as absence, which cost a
+duplicate link bead, a false P1 and a withdrawn approval in one day.
 
 ## FLAG an EITHER/OR fork — never decide it
 
@@ -159,7 +174,7 @@ When the work extends something the tree already owns, write the pointer into
 the bead body as `path:line` plus the relationship:
 
 ```
-COMPOSE: packages/grid_assets/lib/src/filing/filing_contract.dart:242 owns the
+COMPOSE: packages/grid_assets/lib/src/filing/filing_contract.dart:311 owns the
 four-row completeness contract — CALL it; do not add a second predicate.
 ```
 
@@ -171,17 +186,16 @@ checker of its own.
 ## The exit check — `filing` is the oracle, and it is a COMMAND
 
 Refinement EXITS on the verb, never on a reading. From the grid home (the verb
-resolves the owning store by the id's prefix), and ALWAYS with `--state-root`
-pointed at that grid home, so the cross-store link beads are actually read:
+resolves the owning store by the id's prefix):
 
 ```bash
-dart run space:space filing --json --state-root "<grid home>" "<bead>"
+dart run space:space filing --json "<bead>"
 ```
 
-`--state-root` takes the GRID HOME, the same value `--grid-home` takes; the
-verb appends its `.grid` state store itself. Omitting it does not make the
-check stricter — it makes the check BLIND to every blocker wired by a link
-bead.
+The verb takes no `--state-root`: the `dependencies` row is a projection of the
+dependency rows the WORK store's own bd holds, and it reaches no second store.
+`park` and `show` still take the option, because they reach the grid home's
+session-lifecycle beads.
 
 The report is one JSON object: `{id, passed, requirements, error?}`.
 `requirements` carries exactly four rows, in order — `driveable_type`,
@@ -198,14 +212,21 @@ correction:
   validation_plan to every consumer**.
 - `acceptance_criteria is blank` — author `- [ ]` checkboxes a named command
   can falsify.
-- `missing outgoing blocks edges: <ids>` — the store WAS consulted and each
-  named id is genuinely unwired: wire it per **Wire every dependency at
-  intake**.
-- `cross-store edges not consulted — pass --state-root` — the store was NOT
-  consulted, so nothing is known about the foreign blockers this bead names.
-  RERUN with `--state-root "<grid home>"`. Never wire an edge off this
-  detail: the blocker it would name may already be wired by an open link bead,
-  and the duplicate is a WRITE driven by a read that never happened.
+- `bd dependency rows: <rows>` / `bd holds no blocking dependency rows` — the
+  row PASSED. It is a PROJECTION, not a comparison: it reports what bd holds
+  and asserts nothing about what the prose says. A bead that names a blocker in
+  a sentence and wires no row reports NO ROWS and passes — which is why **Wire
+  every dependency at intake** is a step and not a suggestion.
+- `unresolvable external dependency rows: <row> names "<project>", which this
+  station does not arm (armed: …)` — an `external:` row points at a project the
+  roster does not carry. Arm that substation, or re-point the row at one the
+  roster does. Never delete the row to make the check pass.
+- `unresolvable external dependency rows: <row> is unresolved: no station
+  roster was supplied` — nothing can resolve `<project>`, so the row refuses
+  fail-closed. This is a COMPOSITION gap and not a bead defect: the fix is in
+  the station that builds the verb, never in the bead. Say so on the bead,
+  leave the row wired, and do not work around it by deleting the row or
+  stamping the approval by hand.
 
 Then RERUN the verb. Repeat until the report reads `"passed": true`; only then
 stage the bead for approval. Nothing else stages a bead — a reading of the
@@ -226,17 +247,17 @@ mounted predicate refuses any unstamped bead with
 label is not read — so the mount race is closed without a timer:
 
 - Create UNSTAMPED, wire deps, finish the description and design,
-  and drive `dart run space:space filing --json --state-root "<grid home>" "<bead>"` to
+  and drive `dart run space:space filing --json "<bead>"` to
   `"passed": true`. Only after human approval, from the grid home, run:
 
   ```
-  dart run space:space approve --actor operator --json --state-root "<grid home>" "<bead>"
+  dart run space:space approve --actor operator --json "<bead>"
   ```
 
   The verb stamps `grid.approved_by` (the `--actor`), `grid.approved_at` (the
   UTC ISO-8601 instant) and `grid.approved_rev` (the digest of the FILING
   BASIS the preflight just evaluated — the bead's work fields, its validation
-  plan and its dependency proofs); that one stamped write is the final
+  plan and the dependency ROWS bd holds); that one stamped write is the final
   transition into the mounted frontier. Approval is granted to that basis, not
   to the bead id: EDITING an approved bead's description, acceptance, design,
   validation plan or blockers refuses it at the gate with
