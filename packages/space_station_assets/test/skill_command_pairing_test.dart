@@ -4,6 +4,7 @@ import 'package:args/command_runner.dart' show CommandRunner;
 import 'package:grid_assets/grid_assets.dart'
     show
         GridAssetsPack,
+        PrimeCommand,
         SubstationFacts,
         SubstationFactsSnapshot,
         SubstationKey,
@@ -13,11 +14,6 @@ import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
 const _fixtureSubstation = SubstationKey('fixture');
-const _expectedUncomposedTeachings = <String, String>{
-  'mount':
-      '`mount` remains temporarily uncomposed while space-4v4 adds it to the '
-      'runner.',
-};
 
 void main() {
   test(
@@ -33,6 +29,7 @@ void main() {
         'search',
         'filing',
         'approve',
+        'mount',
         'park',
         'unpark',
         'show',
@@ -74,6 +71,7 @@ void main() {
       'search',
       'filing',
       'approve',
+      'mount',
       'link',
       'up',
       'down',
@@ -86,6 +84,22 @@ void main() {
     expect(
       () => composition.pairedCommandNames.add('watch'),
       throwsUnsupportedError,
+    );
+  });
+
+  test('downstream runner threads its JIT invocation into prime', () {
+    final composition = buildRunnerComposition(
+      name: 'lunar',
+      runnerInvocation: 'dart run lunar:lunar',
+    );
+
+    expect(
+      composition.runner.commands['prime'],
+      isA<PrimeCommand>().having(
+        (command) => command.invocation,
+        'invocation',
+        'dart run lunar:lunar prime [--hook-json]',
+      ),
     );
   });
 
@@ -112,7 +126,6 @@ void main() {
       _commandCompositionRefusals(
         composedCommandNames: composedCommandNames,
         reachableDefinitions: reachable,
-        expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       isEmpty,
     );
@@ -138,7 +151,6 @@ void main() {
       _commandCompositionRefusals(
         composedCommandNames: composedCommandNames,
         reachableDefinitions: _resolve(unsupportedRegistry),
-        expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       <String>[
         'taught command "uncomposed" is not composed; declaring skill '
@@ -164,7 +176,6 @@ void main() {
       _commandCompositionRefusals(
         composedCommandNames: composedCommandNames,
         reachableDefinitions: _resolve(companionRegistry),
-        expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       isEmpty,
     );
@@ -253,7 +264,6 @@ Set<String> _composedCommandNames(CommandRunner<int> runner) =>
 List<String> _commandCompositionRefusals({
   required Set<String> composedCommandNames,
   required Iterable<sdk.GridAssetDefinition> reachableDefinitions,
-  required Map<String, String> expectedUncomposedTeachings,
 }) {
   final reachableSkills = reachableDefinitions
       .where((definition) => definition.assetKey.kind == sdk.AssetKind.skill)
@@ -263,7 +273,7 @@ List<String> _commandCompositionRefusals({
       .toSet();
   final unsupportedCommandNames = taughtCommandNames.difference(
     composedCommandNames,
-  )..removeAll(expectedUncomposedTeachings.keys);
+  );
   final refusals = <String>[
     for (final definition in reachableSkills)
       for (final name in definition.teaches)

@@ -287,6 +287,7 @@ buildRunnerComposition({
   final beadsCommand = buildSpaceBeadsCommand(delegateFactory: delegateFactory);
   final filingCommand = resolvedFilingCommands.filing;
   final approveCommand = resolvedFilingCommands.approve;
+  final mountCommand = resolvedFilingCommands.mount;
   final upCommand = UpCommand(
     delegateFactory: delegateFactory,
     environment: environment,
@@ -307,6 +308,7 @@ buildRunnerComposition({
     searchCommand,
     filingCommand,
     approveCommand,
+    mountCommand,
     linkCommand,
     upCommand,
     downCommand,
@@ -340,15 +342,17 @@ buildRunnerComposition({
     ..addCommand(searchCommand)
     // The FILING asset's exported CLI components, COMPOSED with space's
     // resident-station context — `space filing <id>` (the deterministic
-    // four-row front-door preflight the `discover` skill CALLS) and
+    // ten-row front-door preflight the `discover` skill CALLS) and
     // `space approve --actor <name> <id>` (the operator's approval VERB: the
-    // same preflight, then ONE stamped receipt on the work bead), plus the
-    // vended park/unpark lifecycle pair and the station-down-safe one-bead show
-    // read. All five take a bead id and are curried with the roster that
-    // resolves WHICH substation's store owns it (power_station ADR-0001, the
-    // coupled skill+command pattern).
+    // same preflight, then ONE stamped receipt on the work bead), `space mount
+    // <id>` (the offline ten-row explanation of every mount precondition),
+    // plus the vended park/unpark lifecycle pair and the station-down-safe
+    // one-bead show read. All six take a bead id and are curried with the roster
+    // that resolves WHICH substation's store owns it (power_station ADR-0001,
+    // the coupled skill+command pattern).
     ..addCommand(filingCommand)
     ..addCommand(approveCommand)
+    ..addCommand(mountCommand)
     ..addCommand(resolvedFilingCommands.park)
     ..addCommand(resolvedFilingCommands.unpark)
     ..addCommand(resolvedFilingCommands.show)
