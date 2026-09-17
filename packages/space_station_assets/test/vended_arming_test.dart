@@ -76,7 +76,7 @@ void main() {
 
       expect(
         pubspec,
-        matches(RegExp(r'^  grid_assets: \^0\.7\.0-dev\.2$', multiLine: true)),
+        matches(RegExp(r'^  grid_assets: \^0\.7\.0-dev\.3$', multiLine: true)),
       );
       expect(
         pubspec,

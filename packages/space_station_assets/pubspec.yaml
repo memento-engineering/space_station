@@ -40,8 +40,9 @@ dependencies:
   # 0.1.1-dev.1 is the compatible asset-pack release wave for grid_assets
   # 0.7.0-dev.1.
   github_grid_assets: ^0.2.0-dev.2
-  # 0.7.0-dev.1 vends the cross-store ShowCommand adopted by this runner.
-  grid_assets: ^0.7.0-dev.2
+  # 0.7.0-dev.3 requires PrimeCommand to receive the composing station's
+  # runner invocation so its pointers reach that station's JIT runner.
+  grid_assets: ^0.7.0-dev.3
   # rc.20 is the wave-16 CLI floor.
   grid_cli: ^0.6.0-dev.3
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct

@@ -885,7 +885,7 @@ void main() {
         pubspec,
         matches(RegExp(r'version: 0\.5\.0-dev\.3$', multiLine: true)),
       );
-      expect(pubspec, contains('grid_assets: ^0.7.0-dev.2'));
+      expect(pubspec, contains('grid_assets: ^0.7.0-dev.3'));
       expect(pubspec, contains('grid_sdk: ^0.4.0-dev.3'));
       expect(pubspec, contains('grid_cli: ^0.6.0-dev.3'));
       expect(pubspec, contains('github_grid_assets: ^0.2.0-dev.2'));
