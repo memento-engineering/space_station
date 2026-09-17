@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Breaking: `PrimeCommand` now receives the composed `runnerInvocation`, so
+  downstream prime pointers render that station's JIT invocation. This raises
+  the `grid_assets` floor to `^0.7.0-dev.3`, where the constructor parameter is
+  required and default-less.
+
 ## 0.5.0-dev.3
 
 - Breaking: the `unlink` verb is REMOVED from the station runner, and

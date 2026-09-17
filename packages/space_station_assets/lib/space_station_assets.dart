@@ -224,10 +224,11 @@ export 'src/link_commands.dart' show buildSpaceLinkCommand;
 /// [runnerInvocation] is the JIT invocation its installed manual teaches
 /// (`dart run lunar:lunar`) — threaded into the composed `assets` seat so the
 /// vended `{{runner}}` holes render to the DOWNSTREAM runner, not space's;
-/// it is ALSO threaded into `up`, whose boot banner and dev-mode line name
-/// the runner, its `reload` verb, and the JIT invocation that arms it
-/// (space-grl); [name] rides along as the runner word, and the STATION word
-/// comes from the delegate's `stationName`.
+/// into `prime`, whose pointers must reach that runner's checkout; and into
+/// `up`, whose boot banner and dev-mode line name the runner, its `reload`
+/// verb, and the JIT invocation that arms it (space-grl); [name] rides along as
+/// the runner word, and the STATION word comes from the delegate's
+/// `stationName`.
 /// [delegateFactory] is the station-authorship seam — the constructor
 /// tear-off of the station's [SpaceDelegate] SUBCLASS (identity, state
 /// partition, roster and substation stacks live on the class as override points),
@@ -356,12 +357,13 @@ buildRunnerComposition({
     // context beyond the --grid-root argument supplied at invocation time.
     ..addCommand(PauseCommand())
     ..addCommand(ResumeCommand())
-    // The SEAT asset's exported CLI commands: PrimeCommand and SeatCommand
-    // are composed BARE as the vended SessionStart hook target and the owner
-    // of builtin environment launch/refusal behavior. SuccessionCommand is
-    // paired above with the handoff skill's existing teaching claim. No
-    // station-local command or service duplicates any implementation.
-    ..addCommand(PrimeCommand())
+    // The SEAT asset's exported CLI commands: PrimeCommand receives the
+    // station's composed invocation as the vended SessionStart hook target;
+    // SeatCommand remains bare as the owner of builtin environment
+    // launch/refusal behavior. SuccessionCommand is paired above with the
+    // handoff skill's existing teaching claim. No station-local command or
+    // service duplicates any implementation.
+    ..addCommand(PrimeCommand(runnerInvocation: runnerInvocation))
     ..addCommand(SeatCommand())
     ..addCommand(successionCommand)
     ..addCommand(linkCommand)

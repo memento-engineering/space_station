@@ -515,7 +515,7 @@ void main() {
     expect(metadata['grid.approved_by'], 'governor');
     expect(metadata['grid.approved_at'], '2026-09-02T14:30:00.000Z');
     final approvedRev = metadata['grid.approved_rev'];
-    expect(approvedRev, matches(RegExp(r'^filing:v1:sha256:[0-9a-f]{64}$')));
+    expect(approvedRev, matches(RegExp(r'^filing:v2:sha256:[0-9a-f]{64}$')));
     expect(
       h.storeRoots,
       contains('$_umbrella/power_station'),
