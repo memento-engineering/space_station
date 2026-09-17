@@ -13,6 +13,11 @@ import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
 const _fixtureSubstation = SubstationKey('fixture');
+const _expectedUncomposedTeachings = <String, String>{
+  'mount':
+      '`mount` remains temporarily uncomposed while space-4v4 adds it to the '
+      'runner.',
+};
 
 void main() {
   test(
@@ -102,6 +107,7 @@ void main() {
       _commandCompositionRefusals(
         composedCommandNames: composedCommandNames,
         reachableDefinitions: reachable,
+        expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       isEmpty,
     );
@@ -116,6 +122,7 @@ void main() {
       _commandCompositionRefusals(
         composedCommandNames: composedCommandNames,
         reachableDefinitions: _resolve(unsupportedRegistry),
+        expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       <String>[
         'taught command "uncomposed" is not composed; declaring skill '
@@ -141,6 +148,7 @@ void main() {
       _commandCompositionRefusals(
         composedCommandNames: composedCommandNames,
         reachableDefinitions: _resolve(companionRegistry),
+        expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       isEmpty,
     );
@@ -183,7 +191,18 @@ void main() {
       );
     }
 
-    expect(stationOperations.teaches, <String>['up', 'down', 'status']);
+    expect(GridAssetsPack.skillIntakeRefinement.teaches, <String>[
+      'filing',
+      'approve',
+      'link',
+      'mount',
+    ]);
+    expect(stationOperations.teaches, <String>[
+      'up',
+      'down',
+      'status',
+      'mount',
+    ]);
   });
 
   test('coverage refusal names the command and former canonical skill key', () {
@@ -218,6 +237,7 @@ Set<String> _composedCommandNames(CommandRunner<int> runner) =>
 List<String> _commandCompositionRefusals({
   required Set<String> composedCommandNames,
   required Iterable<sdk.GridAssetDefinition> reachableDefinitions,
+  required Map<String, String> expectedUncomposedTeachings,
 }) {
   final reachableSkills = reachableDefinitions
       .where((definition) => definition.assetKey.kind == sdk.AssetKind.skill)
@@ -227,7 +247,7 @@ List<String> _commandCompositionRefusals({
       .toSet();
   final unsupportedCommandNames = taughtCommandNames.difference(
     composedCommandNames,
-  );
+  )..removeAll(expectedUncomposedTeachings.keys);
   final refusals = <String>[
     for (final definition in reachableSkills)
       for (final name in definition.teaches)

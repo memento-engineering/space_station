@@ -29,6 +29,9 @@ const _excludedCommands = <String, String>{
   'grid_assets:IndexCommand':
       '`index` requires an embedding provider and site binding that this '
       'baseline runner does not arm.',
+  'grid_assets:MountCommand':
+      '`mount` composition is owned by space-4v4 and remains outside this '
+      'dependency adoption.',
   'grid_cli:UpCommand':
       '`up` is replaced by the station-context implementation in this package.',
   'grid_cli:DownCommand':
@@ -76,6 +79,12 @@ const _excludedCommands = <String, String>{
   'grid_cli:AssetCatalogCommand':
       '`asset-catalog` requires a station-specific catalog resolver that this '
       'runner does not compose.',
+  'grid_cli:AdmissionCommand':
+      '`admission` composition is decided by the space-beb follow-up, not this '
+      'dependency adoption.',
+  'grid_cli:AdmissionSetCommand':
+      '`admission set` composition is decided by the space-beb follow-up, not '
+      'this dependency adoption.',
   'grid_cli:DemoCommand':
       '`demo` is the framework\'s throwaway reactivity demonstration.',
 };
