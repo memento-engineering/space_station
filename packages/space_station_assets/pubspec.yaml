@@ -77,9 +77,8 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  # rc.22 is the specify-provenance floor exposing
-  # registryBuilderWithSpecWriter and SpecifyAuthoredSpecWriter.
-  grid_sdk: ^0.4.0-dev.3
+  # dev.5 adds the Stage-2 posture, G1 receipt, and named prerequisite refusal.
+  grid_sdk: ^0.4.0-dev.5
   path: ^1.9.0
   # bd's own config primitive is YAML: `beads configure` READS the existing
   # `.beads/config.local.yaml` (to decide written-vs-unchanged) and REWRITES

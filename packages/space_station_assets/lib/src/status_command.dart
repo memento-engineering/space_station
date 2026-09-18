@@ -268,6 +268,8 @@ class StatusCommand extends Command<int> {
     final trajectory = trajectoryStatusLine(payload);
     if (trajectory == null) return;
     _out(trajectory.loud ? trajectory.line : '  ${trajectory.line}');
+    final g2Cut = g2CutStatusLine(payload);
+    if (g2Cut != null) _out('  $g2Cut');
   }
 
   Future<void> _renderDownFallback(
