@@ -79,12 +79,6 @@ const _excludedCommands = <String, String>{
   'grid_cli:AssetCatalogCommand':
       '`asset-catalog` requires a station-specific catalog resolver that this '
       'runner does not compose.',
-  'grid_cli:AdmissionCommand':
-      '`admission` composition is decided by the space-beb follow-up, not this '
-      'dependency adoption.',
-  'grid_cli:AdmissionSetCommand':
-      '`admission set` composition is decided by the space-beb follow-up, not '
-      'this dependency adoption.',
   'grid_cli:DemoCommand':
       '`demo` is the framework\'s throwaway reactivity demonstration.',
 };
@@ -123,6 +117,15 @@ void main() {
       }
     }
     expect(refusals..sort(), isEmpty);
+  });
+
+  test('admission noun composes its setter without exclusions', () {
+    expect(
+      observed,
+      containsAll(<String>['AdmissionCommand', 'AdmissionSetCommand']),
+    );
+    expect(_excludedCommands, isNot(contains('grid_cli:AdmissionCommand')));
+    expect(_excludedCommands, isNot(contains('grid_cli:AdmissionSetCommand')));
   });
 
   test('guard refuses when ShowCommand is removed from the composed tree', () {

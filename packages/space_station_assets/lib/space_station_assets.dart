@@ -48,7 +48,8 @@ import 'package:grid_assets/grid_assets.dart'
         SuccessionCommand,
         computeDispatchHandler,
         kComputeKind;
-import 'package:grid_cli/grid_cli.dart' show PauseCommand, ResumeCommand;
+import 'package:grid_cli/grid_cli.dart'
+    show AdmissionCommand, PauseCommand, ResumeCommand;
 // ignore: implementation_imports
 import 'package:grid_cli/src/gate_command.dart' show GateCommand;
 // ignore: implementation_imports
@@ -357,6 +358,10 @@ buildRunnerComposition({
     // context beyond the --grid-root argument supplied at invocation time.
     ..addCommand(PauseCommand())
     ..addCommand(ResumeCommand())
+    // The admission noun owns its sole `set` subcommand. Like pause/resume it
+    // carries the vended StationCommandClient and resolves the operator's
+    // absolute --grid-root only when invoked.
+    ..addCommand(AdmissionCommand())
     // The SEAT asset's exported CLI commands: PrimeCommand receives the
     // station's composed invocation as the vended SessionStart hook target;
     // SeatCommand remains bare as the owner of builtin environment

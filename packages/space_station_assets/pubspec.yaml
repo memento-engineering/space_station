@@ -43,8 +43,8 @@ dependencies:
   # 0.7.0-dev.3 requires PrimeCommand to receive the composing station's
   # runner invocation so its pointers reach that station's JIT runner.
   grid_assets: ^0.7.0-dev.3
-  # rc.20 is the wave-16 CLI floor.
-  grid_cli: ^0.6.0-dev.3
+  # 0.6.0-dev.4 is the first release exporting the admission noun and setter.
+  grid_cli: ^0.6.0-dev.4
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
   # dependency pins the contract version; code imports the public grid_cli
   # barrel rather than introducing a second import surface.
