@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:beads_dart/beads_dart.dart' show BdResult, BdRunner;
+import 'package:beads_dart/beads_dart.dart' show Bead, BdResult, BdRunner;
 import 'package:genesis_tree/genesis_tree.dart' show Seed, TreeContext;
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -10,13 +10,18 @@ import 'package:grid_assets/grid_assets.dart'
         ApproveService,
         ExactSubstationBeadSource,
         FilingCommand,
+        FilingEvidence,
+        FilingEvidenceSource,
         FilingService,
         ParkCommand,
         ParkService,
         ShowCommand,
         ShowService,
         UnparkCommand,
-        UnparkService;
+        UnparkService,
+        ValidationPlanParseResult,
+        kFilingLaneShell,
+        kFilingPortabilityShell;
 import 'package:grid_cli/grid_cli.dart' show PauseCommand, ResumeCommand;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
@@ -52,6 +57,36 @@ final class _ScriptedBdRunner implements BdRunner {
 
   List<List<String>> get updates =>
       argvs.where((argv) => argv.first == 'update').toList();
+}
+
+/// Complete, immutable evidence for these composition-only filing probes.
+///
+/// The suite is about space's command wiring, not live shell, bead-catalog or
+/// decision-index IO, so every viability leg receives a deterministic answer.
+final class _FixtureFilingEvidenceSource implements FilingEvidenceSource {
+  const _FixtureFilingEvidenceSource();
+
+  static const _evidence = FilingEvidence(
+    lanePlanParse: ValidationPlanParseResult(
+      shell: kFilingLaneShell,
+      exitCode: 0,
+    ),
+    portablePlanParse: ValidationPlanParseResult(
+      shell: kFilingPortabilityShell,
+      exitCode: 0,
+    ),
+    beadCatalogs: {
+      'pow': {'pow-child', 'pow-n6n', 'pow-n6n.1', 'pow-n6n.2'},
+      'swift-infer': {'swift-infer-zfor'},
+    },
+    decisionRegisters: {},
+  );
+
+  @override
+  Future<FilingEvidence> gather({
+    required String storeRoot,
+    required Bead bead,
+  }) async => _evidence;
 }
 
 /// A downstream roster whose substations include a HYPHENATED prefix AND the strict
@@ -125,6 +160,11 @@ Map<String, dynamic> _dependenciesRow(StringBuffer out) =>
         .cast<Map<String, dynamic>>()
         .singleWhere((row) => row['requirement'] == 'dependencies');
 
+List<Map<String, dynamic>> _requirements(StringBuffer out) =>
+    ((jsonDecode(out.toString()) as Map<String, dynamic>)['requirements']!
+            as List)
+        .cast<Map<String, dynamic>>();
+
 Map<String, String> _metadataOf(List<String> argv) {
   final metadata = <String, String>{};
   for (var i = 0; i < argv.length - 1; i++) {
@@ -153,6 +193,7 @@ _harness(
   final out = StringBuffer();
   final err = StringBuffer();
   final storeRoots = <String>[];
+  const evidence = _FixtureFilingEvidenceSource();
   BdRunner runnerFor(String storeRoot) {
     storeRoots.add(storeRoot);
     return bd;
@@ -163,16 +204,19 @@ _harness(
     delegateFactory: delegateFactory,
     filing: FilingService(
       source: ExactSubstationBeadSource(runnerFor: runnerFor),
+      evidence: evidence,
     ),
     approve: ApproveService(
       runnerFor: runnerFor,
       now: () => DateTime.utc(2026, 9, 2, 14, 30),
+      evidence: evidence,
     ),
     park: ParkService(runnerFor: runnerFor),
     unpark: UnparkService(
       approve: ApproveService(
         runnerFor: runnerFor,
         now: () => DateTime.utc(2026, 9, 2, 14, 30),
+        evidence: evidence,
       ),
       runnerFor: runnerFor,
     ),
@@ -339,7 +383,7 @@ void main() {
   test(
     '`filing --json <id>` reads the substation the id PREFIX names in the CODED '
     'roster — `pow-…` is power_station at ../power_station, never the CWD '
-    'store — and returns the four rows',
+    'store — and returns the ten rows',
     () async {
       final h = _harness(
         _ScriptedBdRunner({'query': _beadReply('No local ordering.')}),
@@ -355,18 +399,24 @@ void main() {
       final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
       expect(report['id'], 'pow-child');
       expect(report['passed'], isTrue);
+      final requirements = (report['requirements']! as List)
+          .cast<Map<String, dynamic>>();
       expect(
-        [
-          for (final row in report['requirements']! as List)
-            (row as Map<String, dynamic>)['requirement'],
-        ],
+        [for (final row in requirements) row['requirement']],
         [
           'driveable_type',
           'validation_plan',
           'acceptance_criteria',
           'dependencies',
+          'validation_plan_syntax',
+          'validation_plan_portability',
+          'repo_relative_paths',
+          'bead_references',
+          'release_versions',
+          'decision_references',
         ],
       );
+      expect(requirements, everyElement(containsPair('passed', true)));
     },
   );
 
@@ -423,6 +473,12 @@ void main() {
     expect(await h.runner.run(['filing', '--json', 'pow-child']), 1);
     final row = _dependenciesRow(h.out);
     expect(row['passed'], isFalse);
+    expect(
+      _requirements(
+        h.out,
+      ).where((requirement) => requirement['requirement'] != 'dependencies'),
+      everyElement(containsPair('passed', true)),
+    );
     expect(
       row['detail'],
       contains(

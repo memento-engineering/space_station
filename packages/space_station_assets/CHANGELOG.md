@@ -1,14 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.5.0-dev.4
 
-- Added: the shared runner now composes `admission set` for every downstream
-  station and raises the `grid_cli` floor to `^0.6.0-dev.4`, the first release
-  exporting `AdmissionCommand` and `AdmissionSetCommand`.
 - Breaking: `PrimeCommand` now receives the composed `runnerInvocation`, so
   downstream prime pointers render that station's JIT invocation. This raises
   the `grid_assets` floor to `^0.7.0-dev.3`, where the constructor parameter is
   required and default-less.
+- Added: the shared runner now composes `admission set` for every downstream
+  station and raises the `grid_cli` floor to `^0.6.0-dev.4`, the first release
+  exporting `AdmissionCommand` and `AdmissionSetCommand`.
+- Changed: floors `grid_assets` at `^0.7.0-dev.4` and `github_grid_assets` at `^0.2.0-dev.4` — the
+  ten-row viability FilingContract (power_station#323) and the bounded explore-decision gather
+  (power_station#355, #356) — so a downstream station's mounts stop clipping cited decision entries.
+
+Commits:
+ - **FEAT**(runner): compose admission controls ([#121](https://github.com/memento-engineering/space_station/issues/121)).
+ - **FEAT**(assets): surface G2 posture and cut receipts ([#120](https://github.com/memento-engineering/space_station/issues/120)).
+ - **BREAKING** **FEAT**(space_station_assets): thread runnerInvocation into PrimeCommand and adopt grid_assets 0.7.0-dev.3 ([#119](https://github.com/memento-engineering/space_station/issues/119)).
 
 ## 0.5.0-dev.3
 
