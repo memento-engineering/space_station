@@ -1,9 +1,9 @@
-/// `space filing` / `space approve` / `space park` / `space unpark` /
-/// `space show` — the COMPOSITION of the VENDED filing Commands from
-/// `grid_assets`, never new ones.
+/// `space filing` / `space approve` / `space mount` / `space park` /
+/// `space unpark` / `space show` — the COMPOSITION of the VENDED filing
+/// Commands from `grid_assets`, never new ones.
 ///
 /// The asset owns the domain AND its CLI component (the_grid ADR-0011 D3;
-/// power_station ADR-0001): `grid_assets` ships the deterministic four-row
+/// power_station ADR-0001): `grid_assets` ships the deterministic ten-row
 /// filing preflight ([FilingService]) and the approval verb over it
 /// ([ApproveService] — the preflight, then ONE stamped `bd update`), plus the
 /// THIN Commands over both. A station COMPOSES them with ITS resident-station
@@ -30,14 +30,14 @@
 /// not a fork of it — contrast `space search`, whose exit-64 `UsageException`
 /// is the vended `SearchCommand`'s own guard over the flag IT owns.
 ///
-/// **Writes.** `filing` and `show` are pure reads. `approve` WRITES the approval
-/// receipt onto the WORK bead. `park` and `unpark` deliberately coordinate the
-/// work bead with its SESSION bead across A37's split. The session-lifecycle
-/// beads live in the state store at `<grid-home>/.grid/`; `park` and `show` are
-/// the only verbs that still reach it.
+/// **Writes.** `filing`, `mount`, and `show` are pure reads. `approve` WRITES
+/// the approval receipt onto the WORK bead. `park` and `unpark` deliberately
+/// coordinate the work bead with its SESSION bead across A37's split. The
+/// session-lifecycle beads live in the state store at `<grid-home>/.grid/`;
+/// `mount`, `park`, and `show` are the only verbs that still reach it.
 ///
-/// **The armed roster.** `filing`, `approve` and `unpark` project the bead's
-/// blockers from bd's own dependency rows (grid_assets 0.7.0-dev.2), and an
+/// **The armed roster.** `filing`, `approve`, `mount`, and `unpark` project the
+/// bead's blockers from bd's own dependency rows, and an
 /// `external:<project>:<capability>` row resolves its `<project>` against the
 /// station's ARMED substation NAMES. This composition threads them from the
 /// SAME coded roster the bead id is resolved against ([armedSubstationNames]),
@@ -56,6 +56,8 @@ import 'package:grid_assets/grid_assets.dart'
         ApproveService,
         FilingCommand,
         FilingService,
+        MountCommand,
+        MountExplanationService,
         ParkCommand,
         ParkService,
         ShowCommand,
@@ -72,6 +74,7 @@ import 'space_delegate.dart';
 typedef SpaceFilingCommands = ({
   FilingCommand filing,
   ApproveCommand approve,
+  MountCommand mount,
   ParkCommand park,
   UnparkCommand unpark,
   ShowCommand show,
@@ -144,15 +147,16 @@ Set<String> armedSubstationNames({
 /// context.
 ///
 /// [gridHomeDefault] resolves the home used when `--grid-home` is absent (the
-/// real CWD; tests inject a fixture home). [filing], [approve], [park],
-/// [unpark], and [show] are the vended services (tests inject a scripted `bd`
-/// runner and drive the verbs offline). [delegateFactory] names WHICH
+/// real CWD; tests inject a fixture home). [filing], [approve], [mount],
+/// [park], [unpark], and [show] are the vended services (tests inject a
+/// scripted `bd` runner and drive the verbs offline). [delegateFactory] names WHICH
 /// [SpaceDelegate] subclass authors the roster the bead id is resolved
 /// against. [out]/[err] default to the process sinks.
 SpaceFilingCommands buildSpaceFilingCommands({
   String Function() gridHomeDefault = _currentDirectory,
-  FilingService filing = const FilingService(),
+  FilingService? filing,
   ApproveService? approve,
+  MountExplanationService? mount,
   ParkService? park,
   UnparkService? unpark,
   ShowService? show,
@@ -162,6 +166,7 @@ SpaceFilingCommands buildSpaceFilingCommands({
 }) {
   late final FilingCommand filingCommand;
   late final ApproveCommand approveCommand;
+  late final MountCommand mountCommand;
   late final ParkCommand parkCommand;
   late final UnparkCommand unparkCommand;
   late final ShowCommand showCommand;
@@ -204,6 +209,23 @@ SpaceFilingCommands buildSpaceFilingCommands({
     armedSubstations: () => armedSubstationNames(
       verb: 'approve',
       gridHome: homeOf(approveCommand),
+      delegateFactory: delegateFactory,
+    ),
+    out: out,
+    err: err,
+  );
+  mountCommand = MountCommand(
+    service: mount,
+    storeRoot: () => storeRootForBead(
+      verb: 'mount',
+      beadId: mountCommand.argResults!.rest.single.trim(),
+      gridHome: homeOf(mountCommand),
+      delegateFactory: delegateFactory,
+    ),
+    stateRoot: () => homeOf(mountCommand),
+    armedSubstations: () => armedSubstationNames(
+      verb: 'mount',
+      gridHome: homeOf(mountCommand),
       delegateFactory: delegateFactory,
     ),
     out: out,
@@ -254,6 +276,7 @@ SpaceFilingCommands buildSpaceFilingCommands({
   for (final command in <Command<int>>[
     filingCommand,
     approveCommand,
+    mountCommand,
     parkCommand,
     unparkCommand,
     showCommand,
@@ -269,6 +292,7 @@ SpaceFilingCommands buildSpaceFilingCommands({
   return (
     filing: filingCommand,
     approve: approveCommand,
+    mount: mountCommand,
     park: parkCommand,
     unpark: unparkCommand,
     show: showCommand,

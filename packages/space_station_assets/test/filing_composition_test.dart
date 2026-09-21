@@ -13,6 +13,8 @@ import 'package:grid_assets/grid_assets.dart'
         FilingEvidence,
         FilingEvidenceSource,
         FilingService,
+        MountCommand,
+        MountExplanationService,
         ParkCommand,
         ParkService,
         ShowCommand,
@@ -28,13 +30,13 @@ import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
-/// The LAST-MILE composition: `space filing` / `space approve` are the VENDED
-/// `grid_assets` Commands curried with space's resident-station context, so the
-/// store each one reads (and, for approve, WRITES) is the substation the bead
-/// id's
-/// PREFIX names in the coded roster (`SpaceDelegate.substations`) — never the
-/// CWD's store. The Commands' own behaviour is pinned in power_station; this
-/// suite pins the WIRING. Offline: a scripted `bd` runner + captured sinks.
+/// The LAST-MILE composition: `space filing` / `space approve` / `space mount`
+/// are the VENDED `grid_assets` Commands curried with space's resident-station
+/// context, so the store each one reads (and, for approve, WRITES) is the
+/// substation the bead id's PREFIX names in the coded roster
+/// (`SpaceDelegate.substations`) — never the CWD's store. The Commands' own
+/// behaviour is pinned in power_station; this suite pins the WIRING. Offline: a
+/// scripted `bd` runner + captured sinks.
 final class _ScriptedBdRunner implements BdRunner {
   _ScriptedBdRunner(this.replies);
 
@@ -211,6 +213,10 @@ _harness(
       now: () => DateTime.utc(2026, 9, 2, 14, 30),
       evidence: evidence,
     ),
+    mount: MountExplanationService(
+      runnerFor: runnerFor,
+      now: () => DateTime.utc(2026, 9, 2, 14, 30),
+    ),
     park: ParkService(runnerFor: runnerFor),
     unpark: UnparkService(
       approve: ApproveService(
@@ -244,10 +250,11 @@ void main() {
   tearDown(() => _fixture.deleteSync(recursive: true));
 
   test(
-    'composed runner resolves park unpark show pause and resume by name',
+    'composed runner resolves mount park unpark show pause and resume by name',
     () {
       final h = _harness(_ScriptedBdRunner(const {}));
 
+      expect(h.runner.commands['mount'], isA<MountCommand>());
       expect(h.runner.commands['park'], isA<ParkCommand>());
       expect(h.runner.commands['unpark'], isA<UnparkCommand>());
       expect(h.runner.commands['show'], isA<ShowCommand>());
@@ -262,6 +269,7 @@ void main() {
       final commands = _harness(_ScriptedBdRunner(const {})).commands;
       expect(commands.filing, isA<FilingCommand>());
       expect(commands.approve, isA<ApproveCommand>());
+      expect(commands.mount, isA<MountCommand>());
       expect(commands.park, isA<ParkCommand>());
       expect(commands.unpark, isA<UnparkCommand>());
       expect(commands.show, isA<ShowCommand>());
@@ -270,6 +278,7 @@ void main() {
         for (final command in <Command<int>>[
           commands.filing,
           commands.approve,
+          commands.mount,
           commands.park,
           commands.unpark,
           commands.show,
@@ -347,6 +356,80 @@ void main() {
   );
 
   test(
+    'mount resolves the work store, state store, armed dependency, ten '
+    'ordered rows, and blocked exit through the shared station callbacks',
+    () async {
+      final h = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply(
+            'A mount candidate with one armed external dependency.',
+            blockedBy: const ['external:the_grid:tg-89y8'],
+          ),
+        }),
+      );
+
+      expect(
+        await h.runner.run(['mount', '--json', 'pow-child']),
+        1,
+        reason: '${h.out}${h.err}',
+      );
+      expect(h.storeRoots.toSet(), {
+        '$_umbrella/power_station',
+        '$_gridHome/.grid',
+      });
+      final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
+      expect(report['id'], 'pow-child');
+      expect(report['verdict'], 'BLOCKED');
+      final rows = (report['preconditions'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(rows.map((row) => row['precondition']), const [
+        'driveable_type',
+        'validation_plan',
+        'acceptance_criteria',
+        'dependencies',
+        'approval_stamp',
+        'session_occupancy',
+        'defer_state',
+        'verdict_cap',
+        'mount_attempt_cap',
+        'live_admission',
+      ]);
+      expect(
+        rows.singleWhere((row) => row['precondition'] == 'dependencies'),
+        allOf(
+          containsPair('outcome', 'PASS'),
+          containsPair('detail', contains('external:the_grid:tg-89y8 (armed)')),
+        ),
+      );
+      expect(
+        rows.singleWhere(
+          (row) => row['precondition'] == 'approval_stamp',
+        )['outcome'],
+        'BLOCKED',
+      );
+      for (final precondition in const [
+        'session_occupancy',
+        'verdict_cap',
+        'mount_attempt_cap',
+      ]) {
+        expect(
+          rows.singleWhere(
+            (row) => row['precondition'] == precondition,
+          )['outcome'],
+          isNot('UNCHECKED'),
+          reason: '$precondition reads the composed .grid state store',
+        );
+      }
+      expect(
+        rows.singleWhere(
+          (row) => row['precondition'] == 'live_admission',
+        )['outcome'],
+        'UNCHECKED',
+      );
+    },
+  );
+
+  test(
     'composed show renders a power_station bead from the foreign work store',
     () async {
       final h = _harness(
@@ -367,16 +450,36 @@ void main() {
   );
 
   test(
-    'downstream-named runner inherits the same verbs without delegate wiring',
-    () {
-      final h = _harness(_ScriptedBdRunner(const {}), runnerName: 'lunar');
+    'downstream runner inherits mount and resolves its longest-prefix roster '
+    'override without command wiring',
+    () async {
+      final h = _harness(
+        _ScriptedBdRunner({
+          'query': _beadReply(
+            'A downstream-only mount candidate.',
+            id: 'swift-infer-zfor',
+          ),
+        }),
+        runnerName: 'lunar',
+        delegateFactory: _HyphenatedRosterDelegate.new,
+      );
 
       expect(h.runner.executableName, 'lunar');
+      expect(h.runner.commands['mount'], same(h.commands.mount));
       expect(h.runner.commands['park'], same(h.commands.park));
       expect(h.runner.commands['unpark'], same(h.commands.unpark));
       expect(h.runner.commands['show'], same(h.commands.show));
       expect(h.runner.commands['pause'], isA<PauseCommand>());
       expect(h.runner.commands['resume'], isA<ResumeCommand>());
+      expect(
+        await h.runner.run(['mount', '--json', 'swift-infer-zfor']),
+        1,
+        reason: '${h.out}${h.err}',
+      );
+      expect(h.storeRoots, contains('$_umbrella/swift-infer'));
+      expect(h.storeRoots, isNot(contains('$_umbrella/swift')));
+      final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
+      expect(report['id'], 'swift-infer-zfor');
     },
   );
 
