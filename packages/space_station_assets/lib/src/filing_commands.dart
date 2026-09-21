@@ -50,25 +50,40 @@ library;
 import 'dart:io';
 
 import 'package:args/command_runner.dart' show Command;
+import 'package:beads_dart/beads_dart.dart'
+    show BdRunner, Bead, ProcessBdRunner;
 import 'package:grid_assets/grid_assets.dart'
     show
         ApproveCommand,
         ApproveService,
+        BdListAllStatusBeadSource,
+        ExactSubstationBeadSource,
         FilingCommand,
+        FilingEvidence,
+        FilingEvidenceSource,
         FilingService,
         MountCommand,
         MountExplanationService,
         ParkCommand,
         ParkService,
+        ShellRunner,
         ShowCommand,
         ShowService,
+        SystemFilingEvidenceSource,
+        SystemShellRunner,
+        SystemValidationPlanProbe,
         UnparkCommand,
-        UnparkService;
+        UnparkService,
+        ValidationPlanProbe,
+        commandDecisionIndexSource;
 import 'package:grid_sdk/grid_sdk.dart'
     show SubstationScope, SubstationScopeStores, requireAbsoluteRoot;
 import 'package:path/path.dart' as p;
 
 import 'space_delegate.dart';
+
+BdRunner _processRunnerFor(String storeRoot) =>
+    ProcessBdRunner(workspaceRoot: storeRoot);
 
 /// The vended filing verbs composed with this station's coded roster.
 typedef SpaceFilingCommands = ({
@@ -99,6 +114,19 @@ String storeRootForBead({
   required String beadId,
   required String gridHome,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
+}) => _owningScopeForBead(
+  verb: verb,
+  beadId: beadId,
+  gridHome: gridHome,
+  delegateFactory: delegateFactory,
+).owner.workStore.storeRoot;
+
+({String home, List<SubstationScope> roster, SubstationScope owner})
+_owningScopeForBead({
+  required String verb,
+  required String beadId,
+  required String gridHome,
+  required SpaceDelegateFactory delegateFactory,
 }) {
   final home = _resolvedHome(verb, gridHome);
   final roster = codedRosterOf(delegateFactory, gridRoot: home);
@@ -112,13 +140,72 @@ String storeRootForBead({
       owner = scope;
     }
   }
-  if (owner != null) return owner.workStore.storeRoot;
+  if (owner != null) return (home: home, roster: roster, owner: owner);
   throw StateError(
     'space $verb: no substation in the CODED roster mints "$beadId". The '
     'coded substations are '
     '${[for (final scope in roster) '${scope.name}@${scope.prefix}'].join(', ')}'
     ' — the roster is CODE (SpaceDelegate.substations), never a flag.',
   );
+}
+
+/// Binds invocation-time station context to the shared live evidence gather.
+///
+/// Commands are assembled once, while ownership and `--grid-home` vary per
+/// invocation. Their store-root callbacks call [bind] immediately before the
+/// shared [FilingService] gathers, then this source remounts that home's coded
+/// roster and delegates every evidence leg to [SystemFilingEvidenceSource].
+final class _DeferredFilingEvidenceSource implements FilingEvidenceSource {
+  _DeferredFilingEvidenceSource({
+    required this.runnerFor,
+    required this.validationPlanProbe,
+    required this.decisionShell,
+    required this.runnerInvocation,
+    required this.delegateFactory,
+  });
+
+  final BdRunner Function(String storeRoot) runnerFor;
+  final ValidationPlanProbe validationPlanProbe;
+  final ShellRunner decisionShell;
+  final String runnerInvocation;
+  final SpaceDelegateFactory delegateFactory;
+  final Map<String, String> _gridHomesByStoreRoot = {};
+
+  void bind({required String storeRoot, required String gridHome}) {
+    _gridHomesByStoreRoot[p.normalize(storeRoot)] = p.normalize(gridHome);
+  }
+
+  @override
+  Future<FilingEvidence> gather({
+    required String storeRoot,
+    required Bead bead,
+  }) async {
+    final normalizedStoreRoot = p.normalize(storeRoot);
+    final gridHome = _gridHomesByStoreRoot[normalizedStoreRoot];
+    if (gridHome == null) {
+      throw StateError(
+        'space filing evidence: no invocation grid home was bound for '
+        '$normalizedStoreRoot',
+      );
+    }
+    final resolved = _owningScopeForBead(
+      verb: 'filing evidence',
+      beadId: bead.id,
+      gridHome: gridHome,
+      delegateFactory: delegateFactory,
+    );
+    return SystemFilingEvidenceSource(
+      probe: validationPlanProbe,
+      catalog: BdListAllStatusBeadSource(runnerFor: runnerFor),
+      owning: resolved.owner,
+      attached: resolved.roster,
+      decisions: commandDecisionIndexSource(
+        decisionShell,
+        runnerInvocation: runnerInvocation,
+        gridHome: resolved.home,
+      ),
+    ).gather(storeRoot: normalizedStoreRoot, bead: bead);
+  }
 }
 
 /// The station's ARMED substation NAMES, rooted at [gridHome] — what an
@@ -146,13 +233,18 @@ Set<String> armedSubstationNames({
 /// Builds the VENDED filing Commands curried with space's resident-station
 /// context.
 ///
+/// [runnerInvocation] is this station's composed JIT invocation, used verbatim
+/// for decision-index evidence; it has no literal-executable fallback.
 /// [gridHomeDefault] resolves the home used when `--grid-home` is absent (the
-/// real CWD; tests inject a fixture home). [filing], [approve], [mount],
-/// [park], [unpark], and [show] are the vended services (tests inject a
-/// scripted `bd` runner and drive the verbs offline). [delegateFactory] names WHICH
-/// [SpaceDelegate] subclass authors the roster the bead id is resolved
-/// against. [out]/[err] default to the process sinks.
+/// real CWD; tests inject a fixture home). [filing], [approve], [mount], [park],
+/// [unpark], and [show] are authoritative service overrides. Without them,
+/// one shared vended [FilingService] and [ApproveService] serve filing,
+/// approve, and unpark over the invocation-bound live evidence. [runnerFor],
+/// [validationPlanProbe], and [decisionShell] are its I/O seams.
+/// [delegateFactory] names WHICH [SpaceDelegate] subclass authors the roster
+/// the bead id is resolved against. [out]/[err] default to the process sinks.
 SpaceFilingCommands buildSpaceFilingCommands({
+  required String runnerInvocation,
   String Function() gridHomeDefault = _currentDirectory,
   FilingService? filing,
   ApproveService? approve,
@@ -160,10 +252,33 @@ SpaceFilingCommands buildSpaceFilingCommands({
   ParkService? park,
   UnparkService? unpark,
   ShowService? show,
+  BdRunner Function(String storeRoot) runnerFor = _processRunnerFor,
+  ValidationPlanProbe validationPlanProbe = const SystemValidationPlanProbe(),
+  ShellRunner decisionShell = const SystemShellRunner(),
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
   StringSink? out,
   StringSink? err,
 }) {
+  final deferredEvidence = _DeferredFilingEvidenceSource(
+    runnerFor: runnerFor,
+    validationPlanProbe: validationPlanProbe,
+    decisionShell: decisionShell,
+    runnerInvocation: runnerInvocation,
+    delegateFactory: delegateFactory,
+  );
+  final resolvedFiling =
+      filing ??
+      FilingService(
+        source: ExactSubstationBeadSource(runnerFor: runnerFor),
+        evidence: deferredEvidence,
+      );
+  final resolvedApprove =
+      approve ?? ApproveService(filing: resolvedFiling, runnerFor: runnerFor);
+  final resolvedPark = park ?? ParkService(runnerFor: runnerFor);
+  final resolvedUnpark =
+      unpark ?? UnparkService(approve: resolvedApprove, runnerFor: runnerFor);
+  final resolvedShow = show ?? ShowService(runnerFor: runnerFor);
+
   late final FilingCommand filingCommand;
   late final ApproveCommand approveCommand;
   late final MountCommand mountCommand;
@@ -176,15 +291,30 @@ SpaceFilingCommands buildSpaceFilingCommands({
     return flag == null || flag.isEmpty ? gridHomeDefault() : flag;
   }
 
+  String evidenceStoreRoot({
+    required String verb,
+    required String beadId,
+    required Command<int> command,
+  }) {
+    final resolved = _owningScopeForBead(
+      verb: verb,
+      beadId: beadId,
+      gridHome: homeOf(command),
+      delegateFactory: delegateFactory,
+    );
+    final storeRoot = resolved.owner.workStore.storeRoot;
+    deferredEvidence.bind(storeRoot: storeRoot, gridHome: resolved.home);
+    return storeRoot;
+  }
+
   filingCommand = FilingCommand(
-    service: filing,
+    service: resolvedFiling,
     // Called from INSIDE the vended run(), after its own "exactly one bead id"
     // usage check has passed — `rest.single` is safe here and nowhere earlier.
-    storeRoot: () => storeRootForBead(
+    storeRoot: () => evidenceStoreRoot(
       verb: 'filing',
       beadId: filingCommand.argResults!.rest.single.trim(),
-      gridHome: homeOf(filingCommand),
-      delegateFactory: delegateFactory,
+      command: filingCommand,
     ),
     armedSubstations: () => armedSubstationNames(
       verb: 'filing',
@@ -195,12 +325,11 @@ SpaceFilingCommands buildSpaceFilingCommands({
     err: err,
   );
   approveCommand = ApproveCommand(
-    service: approve,
-    storeRoot: () => storeRootForBead(
+    service: resolvedApprove,
+    storeRoot: () => evidenceStoreRoot(
       verb: 'approve',
       beadId: approveCommand.argResults!.rest.single.trim(),
-      gridHome: homeOf(approveCommand),
-      delegateFactory: delegateFactory,
+      command: approveCommand,
     ),
     // The armed roster, read from the SAME home the bead id resolves against.
     // Called from INSIDE the vended run()'s error guard, so an
@@ -232,7 +361,7 @@ SpaceFilingCommands buildSpaceFilingCommands({
     err: err,
   );
   parkCommand = ParkCommand(
-    service: park,
+    service: resolvedPark,
     workStoreRoot: (beadId) => storeRootForBead(
       verb: 'park',
       beadId: beadId,
@@ -244,12 +373,11 @@ SpaceFilingCommands buildSpaceFilingCommands({
     err: err,
   );
   unparkCommand = UnparkCommand(
-    service: unpark,
-    workStoreRoot: (beadId) => storeRootForBead(
+    service: resolvedUnpark,
+    workStoreRoot: (beadId) => evidenceStoreRoot(
       verb: 'unpark',
       beadId: beadId,
-      gridHome: homeOf(unparkCommand),
-      delegateFactory: delegateFactory,
+      command: unparkCommand,
     ),
     armedSubstations: () => armedSubstationNames(
       verb: 'unpark',
@@ -260,7 +388,7 @@ SpaceFilingCommands buildSpaceFilingCommands({
     err: err,
   );
   showCommand = ShowCommand(
-    service: show,
+    service: resolvedShow,
     // Show's vended callback takes no id, so read it inside the command's run
     // guard after the exactly-one-bead check has succeeded.
     storeRoot: () => storeRootForBead(

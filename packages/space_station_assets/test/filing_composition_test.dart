@@ -19,8 +19,11 @@ import 'package:grid_assets/grid_assets.dart'
         ParkService,
         ShowCommand,
         ShowService,
+        ShellRunResult,
+        ShellRunner,
         UnparkCommand,
         UnparkService,
+        ValidationPlanProbe,
         ValidationPlanParseResult,
         kFilingLaneShell,
         kFilingPortabilityShell;
@@ -89,6 +92,117 @@ final class _FixtureFilingEvidenceSource implements FilingEvidenceSource {
     required String storeRoot,
     required Bead bead,
   }) async => _evidence;
+}
+
+/// A per-roster-root fake for the DEFAULT service composition. Exact reads,
+/// all-status catalogs, undefer, and approval writes all travel through this
+/// one injected vended seam.
+final class _RosterBdRunner {
+  _RosterBdRunner({
+    required this.ownerRoot,
+    required this.attachedRoot,
+    required this.description,
+  });
+
+  final String ownerRoot;
+  final String attachedRoot;
+  String description;
+  final List<({String storeRoot, List<String> argv})> calls = [];
+
+  BdRunner runnerFor(String storeRoot) =>
+      _RootedRosterBdRunner(owner: this, storeRoot: p.normalize(storeRoot));
+
+  List<({String storeRoot, List<String> argv})> get updates => calls
+      .where((call) => call.argv.first == 'update')
+      .toList(growable: false);
+
+  List<({String storeRoot, List<String> argv})> get undefers => calls
+      .where((call) => call.argv.first == 'undefer')
+      .toList(growable: false);
+
+  Future<BdResult> run(String storeRoot, List<String> args) async {
+    calls.add((storeRoot: storeRoot, argv: List.of(args)));
+    if (args.first == 'query' && storeRoot == p.normalize(ownerRoot)) {
+      return BdResult(exitCode: 0, stdout: _beadReply(description), stderr: '');
+    }
+    if (args.first == 'list') {
+      final type = args[args.indexOf('-t') + 1];
+      final rows = <Map<String, Object?>>[
+        if (type == 'task' && storeRoot == p.normalize(ownerRoot))
+          {'id': 'pow-child', 'title': 'child', 'issue_type': 'task'},
+        if (type == 'task' && storeRoot == p.normalize(attachedRoot))
+          {'id': 'tg-attached', 'title': 'attached', 'issue_type': 'task'},
+      ];
+      return BdResult(
+        exitCode: 0,
+        stdout: jsonEncode({'schema_version': 1, 'data': rows}),
+        stderr: '',
+      );
+    }
+    return const BdResult(
+      exitCode: 0,
+      stdout: '{"schema_version":1,"data":[]}',
+      stderr: '',
+    );
+  }
+}
+
+final class _RootedRosterBdRunner implements BdRunner {
+  const _RootedRosterBdRunner({required this.owner, required this.storeRoot});
+
+  final _RosterBdRunner owner;
+  final String storeRoot;
+
+  @override
+  Future<BdResult> run(List<String> args, {Duration? timeout, String? stdin}) =>
+      owner.run(storeRoot, args);
+}
+
+final class _PassingValidationPlanProbe implements ValidationPlanProbe {
+  final List<({String shell, String plan, String workingDirectory})> calls = [];
+
+  @override
+  Future<ValidationPlanParseResult> parse({
+    required String shell,
+    required String plan,
+    required String workingDirectory,
+  }) async {
+    calls.add((shell: shell, plan: plan, workingDirectory: workingDirectory));
+    return ValidationPlanParseResult(shell: shell, exitCode: 0);
+  }
+}
+
+/// The surface query finds no governing entry; only the unfiltered roster
+/// query proves that the cited decision is recorded under the attached seat.
+final class _CannedDecisionShell implements ShellRunner {
+  _CannedDecisionShell({required this.registerRoot, required this.slug});
+
+  final String registerRoot;
+  final String slug;
+  final List<({String workingDirectory, String command})> calls = [];
+
+  @override
+  Future<ShellRunResult> run({
+    required String workingDirectory,
+    required String command,
+  }) async {
+    calls.add((workingDirectory: workingDirectory, command: command));
+    final decisions = command.contains('--surface')
+        ? const <Map<String, Object?>>[]
+        : <Map<String, Object?>>[
+            {
+              'slug': slug,
+              'originRegister': 'the_grid',
+              'originPath': registerRoot,
+              'status': 'accepted',
+              'surfaces': <String>['the_grid/docs/decisions/**'],
+            },
+          ];
+    return ShellRunResult(
+      exitCode: 0,
+      output: jsonEncode({'spec': 2, 'decisions': decisions}),
+    );
+  }
 }
 
 /// A downstream roster whose substations include a HYPHENATED prefix AND the strict
@@ -202,6 +316,7 @@ _harness(
   }
 
   final commands = buildSpaceFilingCommands(
+    runnerInvocation: 'dart run space:space',
     gridHomeDefault: () => gridHome,
     delegateFactory: delegateFactory,
     filing: FilingService(
@@ -236,6 +351,34 @@ _harness(
     err: err,
     storeRoots: storeRoots,
     commands: commands,
+  );
+}
+
+({CommandRunner<int> runner, StringBuffer out, StringBuffer err})
+_defaultServiceHarness(
+  _RosterBdRunner bd,
+  _PassingValidationPlanProbe probe,
+  _CannedDecisionShell shell,
+) {
+  final out = StringBuffer();
+  final err = StringBuffer();
+  final commands = buildSpaceFilingCommands(
+    runnerInvocation: 'dart run lunar:lunar',
+    gridHomeDefault: () => p.join(_umbrella, 'unused-default-home'),
+    runnerFor: bd.runnerFor,
+    validationPlanProbe: probe,
+    decisionShell: shell,
+    out: out,
+    err: err,
+  );
+  return (
+    runner: buildRunner(
+      name: 'lunar',
+      runnerInvocation: 'dart run lunar:lunar',
+      filingCommands: commands,
+    ),
+    out: out,
+    err: err,
   );
 }
 
@@ -520,6 +663,161 @@ void main() {
         ],
       );
       expect(requirements, everyElement(containsPair('passed', true)));
+    },
+  );
+
+  test(
+    'default filing approve and unpark compose attached decision evidence per '
+    'invocation',
+    () async {
+      const slug = 'stage-2-requires-a-recorded-entry';
+      final registerRoot = p.join(_umbrella, 'the_grid', 'docs', 'decisions');
+      Directory(registerRoot).createSync(recursive: true);
+      File(p.join(registerRoot, '2026-09-21-stage-2.md')).writeAsStringSync(
+        '---\nslug: $slug\nstatus: accepted\n---\n\nRecorded elsewhere.\n',
+      );
+      final bd = _RosterBdRunner(
+        ownerRoot: p.join(_umbrella, 'power_station'),
+        attachedRoot: p.join(_umbrella, 'the_grid'),
+        description: 'Uses tg-attached and follows the_grid#$slug.',
+      );
+      final probe = _PassingValidationPlanProbe();
+      final shell = _CannedDecisionShell(
+        registerRoot: registerRoot,
+        slug: slug,
+      );
+
+      final filing = _defaultServiceHarness(bd, probe, shell);
+      expect(
+        await filing.runner.run([
+          'filing',
+          '--json',
+          '--grid-home',
+          _gridHome,
+          'pow-child',
+        ]),
+        0,
+        reason: '${filing.out}${filing.err}',
+      );
+      final filingReport =
+          jsonDecode(filing.out.toString()) as Map<String, dynamic>;
+      final filingRows = (filingReport['requirements']! as List)
+          .cast<Map<String, dynamic>>();
+      for (final requirement in const [
+        'validation_plan_syntax',
+        'validation_plan_portability',
+        'bead_references',
+        'decision_references',
+      ]) {
+        expect(
+          filingRows.singleWhere(
+            (row) => row['requirement'] == requirement,
+          )['passed'],
+          isTrue,
+          reason: '$requirement: $filingRows',
+        );
+      }
+      expect(
+        filingRows.singleWhere(
+          (row) => row['requirement'] == 'decision_references',
+        )['detail'],
+        contains('the_grid#$slug'),
+      );
+      expect(probe.calls.map((call) => call.workingDirectory).toSet(), {
+        p.join(_umbrella, 'power_station'),
+      });
+      expect(
+        shell.calls.map((call) => call.workingDirectory),
+        everyElement(_gridHome),
+      );
+      expect(
+        shell.calls.map((call) => call.command),
+        containsAll(<String>{
+          'dart run lunar:lunar decisions index --surface '
+              'power_station/README.md',
+          'dart run lunar:lunar decisions index',
+        }),
+      );
+
+      final approve = _defaultServiceHarness(bd, probe, shell);
+      expect(
+        await approve.runner.run([
+          'approve',
+          '--json',
+          '--actor',
+          'governor',
+          '--grid-home',
+          _gridHome,
+          'pow-child',
+        ]),
+        0,
+        reason: '${approve.out}${approve.err}',
+      );
+      expect(bd.updates, hasLength(1));
+      expect(bd.updates.single.storeRoot, p.join(_umbrella, 'power_station'));
+
+      final unpark = _defaultServiceHarness(bd, probe, shell);
+      expect(
+        await unpark.runner.run([
+          'unpark',
+          '--json',
+          '--actor',
+          'governor',
+          '--grid-home',
+          _gridHome,
+          'pow-child',
+        ]),
+        0,
+        reason: '${unpark.out}${unpark.err}',
+      );
+      expect(bd.undefers, hasLength(1));
+      expect(bd.updates, hasLength(2));
+
+      const missingSlug = 'stage-2-entry-that-was-never-recorded';
+      const missingCitation = 'the_grid#$missingSlug';
+      const missingDescription =
+          'Uses tg-attached and follows $missingCitation.';
+      bd.description = missingDescription;
+      final updatesBeforeRefusal = bd.updates.length;
+      final refused = _defaultServiceHarness(bd, probe, shell);
+      expect(
+        await refused.runner.run([
+          'approve',
+          '--json',
+          '--actor',
+          'governor',
+          '--grid-home',
+          _gridHome,
+          'pow-child',
+        ]),
+        1,
+        reason: '${refused.out}${refused.err}',
+      );
+      expect(bd.updates, hasLength(updatesBeforeRefusal));
+      final refusal =
+          jsonDecode(refused.out.toString()) as Map<String, dynamic>;
+      final refusalRows =
+          ((refusal['filing']! as Map<String, dynamic>)['requirements']!
+                  as List)
+              .cast<Map<String, dynamic>>();
+      final decisionRow = refusalRows.singleWhere(
+        (row) => row['requirement'] == 'decision_references',
+      );
+      expect(decisionRow['passed'], isFalse);
+      expect(
+        decisionRow['detail'],
+        contains(
+          '"$missingCitation" '
+          '(description:${missingDescription.indexOf(missingCitation)})',
+        ),
+      );
+      expect(
+        decisionRow['detail'],
+        contains(
+          'cite an existing entry or describe the proposed entry without a '
+          'citation',
+        ),
+      );
     },
   );
 
