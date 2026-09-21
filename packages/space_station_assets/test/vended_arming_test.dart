@@ -75,8 +75,11 @@ void main() {
       final barrel = File('lib/space_station_assets.dart').readAsStringSync();
 
       expect(
-        pubspec,
-        matches(RegExp(r'^  grid_assets: \^0\.7\.0-dev\.3$', multiLine: true)),
+        RegExp(
+          r'^  grid_assets: \^0\.7\.0-dev\.\d+$',
+          multiLine: true,
+        ).allMatches(pubspec),
+        hasLength(1),
       );
       expect(
         pubspec,

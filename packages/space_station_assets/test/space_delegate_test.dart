@@ -883,12 +883,26 @@ void main() {
       ).readAsStringSync();
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final lockfile = File('../../pubspec.lock').readAsStringSync();
-
-      expect(
+      final packageVersion = _manifestValue(pubspec, 'version');
+      final gridAssetsFloor = _manifestValue(pubspec, 'grid_assets');
+      final githubGridAssetsFloor = _manifestValue(
         pubspec,
-        matches(RegExp(r'version: 0\.5\.0-dev\.3$', multiLine: true)),
+        'github_grid_assets',
       );
-      expect(pubspec, contains('grid_assets: ^0.7.0-dev.3'));
+
+      expect(packageVersion, matches(RegExp(r'^0\.5\.0-dev\.\d+$')));
+      expect(
+        _caretDevFloorAtLeast(gridAssetsFloor, family: '0.7.0', floor: 4),
+        isTrue,
+      );
+      expect(
+        _caretDevFloorAtLeast(githubGridAssetsFloor, family: '0.2.0', floor: 4),
+        isTrue,
+      );
+      expect(
+        _manifestValue(appPubspec, 'space_station_assets'),
+        '^$packageVersion',
+      );
       expect(pubspec, contains('grid_sdk: ^0.4.0-dev.5'));
       for (final source in <String>[pubspec, appPubspec]) {
         expect(
@@ -899,10 +913,34 @@ void main() {
           hasLength(1),
         );
       }
-      expect(pubspec, contains('github_grid_assets: ^0.2.0-dev.2'));
-      expect(changelog, matches(RegExp(r'^# Changelog\n\n## Unreleased\n')));
+      final headings = RegExp(
+        r'^## (.+)$',
+        multiLine: true,
+      ).allMatches(changelog).toList();
+      expect(headings, hasLength(greaterThanOrEqualTo(3)));
+      expect(headings.first.group(1), packageVersion);
+      final release = changelog.substring(
+        headings.first.start,
+        headings[1].start,
+      );
+      final firstBullet = RegExp(
+        r'^- .+$',
+        multiLine: true,
+      ).firstMatch(release)!.group(0)!;
       expect(
-        changelog,
+        firstBullet,
+        startsWith(
+          '- Breaking: `PrimeCommand` now receives the composed '
+          '`runnerInvocation`',
+        ),
+      );
+      expect(release, contains('`grid_assets` at `$gridAssetsFloor`'));
+      expect(
+        release,
+        contains('`github_grid_assets` at `$githubGridAssetsFloor`'),
+      );
+      expect(
+        release,
         contains(
           'the shared runner now composes `admission set` for every downstream\n'
           '  station and raises the `grid_cli` floor to `^0.6.0-dev.4`',
@@ -911,10 +949,7 @@ void main() {
       // Every breaking bullet of the cut section carries its own Migration
       // line, indented under it — the shape a downstream station reads to
       // adopt.
-      final cut = changelog.substring(
-        changelog.indexOf('## 0.5.0-dev.3'),
-        changelog.indexOf('## 0.5.0-dev.2'),
-      );
+      final cut = changelog.substring(headings[1].start, headings[2].start);
       final breaking = RegExp(
         r'^- Breaking: ',
         multiLine: true,
@@ -927,14 +962,6 @@ void main() {
       expect(cut, contains('the `unlink` verb is REMOVED'));
       expect(cut, contains('super.trajectoryConfig'));
       expect(cut, contains('armedSubstationNames'));
-      expect(
-        changelog,
-        matches(RegExp(r'^## 0\.5\.0-dev\.3$', multiLine: true)),
-      );
-      expect(
-        changelog,
-        matches(RegExp(r'^## 0\.5\.0-dev\.2$', multiLine: true)),
-      );
       expect(
         changelog,
         matches(RegExp(r'^## 0\.4\.0(?:-rc\.\d+)?$', multiLine: true)),
@@ -998,6 +1025,30 @@ void main() {
       expect(File('../../pubspec_overrides.yaml').existsSync(), isFalse);
     });
   });
+}
+
+String _manifestValue(String manifest, String key) {
+  final matches = RegExp(
+    '^\\s*${RegExp.escape(key)}:\\s*(\\S+)\\s*\$',
+    multiLine: true,
+  ).allMatches(manifest).toList();
+  if (matches.length != 1) {
+    throw StateError(
+      'expected exactly one $key manifest value, found ${matches.length}',
+    );
+  }
+  return matches.single.group(1)!;
+}
+
+bool _caretDevFloorAtLeast(
+  String constraint, {
+  required String family,
+  required int floor,
+}) {
+  final match = RegExp(
+    '^\\^${RegExp.escape(family)}-dev\\.(\\d+)\$',
+  ).firstMatch(constraint);
+  return match != null && int.parse(match.group(1)!) >= floor;
 }
 
 bool _gridCliLockVersionIsAtLeastDev4(String version) {
