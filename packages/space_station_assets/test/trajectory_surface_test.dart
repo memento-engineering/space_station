@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:args/command_runner.dart' show CommandRunner;
 import 'package:grid_cli/grid_cli.dart' show StationDiagnosticsReporter;
 import 'package:grid_engine/grid_engine.dart' show DualReadMode;
 import 'package:grid_sdk/grid_sdk.dart'
     show
+        G2Posture,
         TrajectoryConfig,
         TrajectoryConfigMode,
         TrajectoryDiscipline,
@@ -60,6 +62,42 @@ void main() {
     exitJoinGaps: exitJoinGaps,
   );
 
+  Future<({int? code, List<String> out, List<String> err})> runUp(
+    List<String> arguments, {
+    Map<String, String> environment = const {},
+  }) async {
+    final out = <String>[];
+    final err = <String>[];
+    final runner = CommandRunner<int>('lunar', 'test')
+      ..addCommand(
+        UpCommand(
+          runnerName: 'lunar',
+          environment: environment,
+          out: out.add,
+          err: err.add,
+        ),
+      );
+    final code = await runner.run([
+      'up',
+      '--grid-home',
+      '/g2-runner-test',
+      ...arguments,
+    ]);
+    return (code: code, out: out, err: err);
+  }
+
+  Map<String, String> g2Environment({
+    String posture = 'shadow',
+    String? certificate,
+    String? discipline,
+    String? dualRead,
+  }) => {
+    'GRID_G2_POSTURE': posture,
+    if (certificate != null) 'GRID_G1_CERTIFICATE_PASSED': certificate,
+    if (discipline != null) 'GRID_TRAJECTORY_DISCIPLINE': discipline,
+    if (dualRead != null) 'GRID_DUAL_READ': dualRead,
+  };
+
   group('--trajectory is TRI-STATE (§1.3)', () {
     test('the flag is declared on `up`, negatable, and defaults to null — '
         'ABSENT must be a third state, not a silent --no-trajectory', () {
@@ -107,6 +145,170 @@ void main() {
         expect(config.queueBound, defaults.queueBound);
         expect(config.shutdownDrainTimeout, defaults.shutdownDrainTimeout);
       }
+    });
+  });
+
+  group('Stage-2 runner posture (G2-S)', () {
+    test('G2 inputs resolve from flags over environment and default inert', () {
+      final options = UpCommand().argParser.options;
+      expect(options['g2-posture']!.allowed, isNull);
+      expect(options['g1-certificate-passed']!.defaultsTo, isNull);
+      expect(options['g1-certificate-passed']!.negatable, isTrue);
+      TrajectoryConfig config(
+        List<String> args, [
+        Map<String, String> environment = const {},
+      ]) => trajectoryConfigFrom(parse(args), environment: environment);
+
+      expect(
+        (config(const []).g2Posture, config(const []).g1CertificatePassed),
+        (G2Posture.off, null),
+      );
+      for (final (wire, posture) in const [
+        ('off', G2Posture.off),
+        ('shadow', G2Posture.shadow),
+        ('cut', G2Posture.cut),
+      ]) {
+        expect(config(const [], {'GRID_G2_POSTURE': wire}).g2Posture, posture);
+      }
+      expect(
+        config(const ['--g2-posture', 'cut'], g2Environment()).g2Posture,
+        G2Posture.cut,
+      );
+      expect(
+        (
+          config(const [
+            '--g1-certificate-passed',
+          ], g2Environment(certificate: 'false')).g1CertificatePassed,
+          config(const [
+            '--no-g1-certificate-passed',
+          ], g2Environment(certificate: 'true')).g1CertificatePassed,
+        ),
+        (true, false),
+      );
+      expect(
+        [
+          for (final wire in const ['true', 'false'])
+            config(
+              const [],
+              g2Environment(certificate: wire),
+            ).g1CertificatePassed,
+        ],
+        [true, false],
+      );
+    });
+
+    test('invalid G2 values preserve exact input and refuse by name', () async {
+      for (final (arguments, environment, value) in const [
+        (<String>[], {'GRID_G2_POSTURE': 'phase-two'}, 'phase-two'),
+        (<String>['--g2-posture', ''], <String, String>{}, ''),
+      ]) {
+        final resolution = trajectoryConfigResolutionFrom(
+          parse(arguments),
+          environment: environment,
+        );
+        expect(
+          (resolution.config.g2Posture, resolution.unrecognizedG2PostureValue),
+          (G2Posture.off, value),
+        );
+
+        final result = await runUp(arguments, environment: environment);
+        expect(result.code, 64);
+        expect(result.out, isEmpty);
+        expect(result.err, [
+          'lunar up: G2PostureConfigRefused(configuredValue: $value, '
+              'expected: off|shadow|cut)',
+        ]);
+      }
+    });
+
+    test(
+      'every G1 prerequisite mismatch refuses by name before assembly',
+      () async {
+        for (final (arguments, environment, mismatch) in [
+          (
+            const <String>[],
+            g2Environment(),
+            'posture: shadow, field: g1Certificate, expected: certified, '
+                'actual: missing',
+          ),
+          (
+            const <String>[],
+            g2Environment(certificate: 'false'),
+            'posture: shadow, field: g1Certificate, expected: certified, '
+                'actual: uncertified',
+          ),
+          (
+            const <String>[],
+            g2Environment(certificate: 'true'),
+            'posture: shadow, field: discipline, expected: cut, '
+                'actual: shadow',
+          ),
+          (
+            const ['--no-trajectory'],
+            g2Environment(certificate: 'true', discipline: 'cut'),
+            'posture: shadow, field: mode, expected: required, '
+                'actual: disabled',
+          ),
+          (
+            const <String>[],
+            g2Environment(
+              posture: 'cut',
+              certificate: 'true',
+              discipline: 'cut',
+              dualRead: 'observe',
+            ),
+            'posture: cut, field: dualRead, expected: primary, '
+                'actual: observe',
+          ),
+        ]) {
+          final result = await runUp(arguments, environment: environment);
+          expect(result.code, 64);
+          expect(result.out, isEmpty);
+          expect(result.err, ['lunar up: G2G1PrerequisiteRefused($mismatch)']);
+        }
+      },
+    );
+
+    test('no runner path demotes a requested refused G2 posture', () async {
+      for (final result in [
+        await runUp(const [], environment: g2Environment(posture: 'cut')),
+        await runUp(const [
+          '--g2-posture',
+          'shadow',
+          '--g1-certificate-passed',
+          '--no-trajectory',
+        ], environment: g2Environment(discipline: 'cut')),
+      ]) {
+        expect(result.code, 64);
+        expect(result.err.single, contains('G2G1PrerequisiteRefused'));
+        expect(result.err.single, isNot(contains('nothing to arm')));
+      }
+    });
+
+    test('G2 resolution and production defaults have one guarded source', () {
+      final production =
+          [
+                Directory('lib'),
+                Directory('../../apps/space/lib'),
+                Directory('../../apps/space/bin'),
+              ]
+              .expand(
+                (root) =>
+                    root.existsSync() ? root.listSync(recursive: true) : [],
+              )
+              .whereType<File>()
+              .where((file) => file.path.endsWith('.dart'))
+              .map((file) => file.readAsStringSync())
+              .join('\n');
+
+      expect('GRID_G2_POSTURE'.allMatches(production), hasLength(1));
+      expect(
+        RegExp(
+          r'g2Posture\s*:\s*G2Posture\.(shadow|cut)',
+        ).allMatches(production),
+        isEmpty,
+      );
+      expect(trajectoryConfigFrom(parse(const [])).g2Posture, G2Posture.off);
     });
   });
 
@@ -802,6 +1004,10 @@ void main() {
           'armed',
           'discipline',
           'soakWindowEpoch',
+          'g2Posture',
+          'g1CertificatePassed',
+          'g2ThreeCleanRoundsPassed',
+          'g2ZeroResiduePassed',
           'cause',
           'epoch',
           'queueDepth',
@@ -817,6 +1023,10 @@ void main() {
       expect(block['armed'], isTrue);
       expect(block['discipline'], 'cut');
       expect(block['soakWindowEpoch'], 50);
+      expect(block['g2Posture'], 'off');
+      expect(block['g1CertificatePassed'], isNull);
+      expect(block['g2ThreeCleanRoundsPassed'], isNull);
+      expect(block['g2ZeroResiduePassed'], isNull);
       expect(block['cause'], isNull);
       expect(block['epoch'], 4);
       expect(block['queueDepth'], 6);
@@ -888,6 +1098,67 @@ void main() {
           'prefix': 'pow',
         },
       ]);
+    });
+
+    test('status reports G2 posture and cut receipt states', () {
+      for (final posture in G2Posture.values) {
+        final block = trajectoryStatusJson(
+          status(TrajectoryHarnessMode.live),
+          config: TrajectoryConfig(g2Posture: posture),
+        );
+        expect(block['g2Posture'], posture.name);
+        expect(
+          g2CutStatusLine({'trajectory': block}),
+          'g2: posture=${posture.name} · g1-certificate=missing · '
+          'three-clean-rounds=missing · zero-residue=missing',
+        );
+      }
+
+      for (final (receipt, certificateWord, residueWord) in const [
+        (null, 'missing', 'missing'),
+        (false, 'uncertified', 'not-zero'),
+        (true, 'certified', 'zero'),
+      ]) {
+        final block = trajectoryStatusJson(
+          status(TrajectoryHarnessMode.live),
+          config: TrajectoryConfig(g1CertificatePassed: receipt),
+          g2ThreeCleanRoundsPassed: receipt,
+          g2ZeroResiduePassed: receipt,
+        );
+        expect(block['g1CertificatePassed'], receipt);
+        expect(block['g2ThreeCleanRoundsPassed'], receipt);
+        expect(block['g2ZeroResiduePassed'], receipt);
+        expect(
+          g2CutStatusLine({'trajectory': block}),
+          'g2: posture=off · g1-certificate=$certificateWord · '
+          'three-clean-rounds=$certificateWord · '
+          'zero-residue=$residueWord',
+        );
+      }
+
+      final serialized =
+          _status(
+                status(TrajectoryHarnessMode.live),
+                g2ThreeCleanRoundsPassed: true,
+                g2ZeroResiduePassed: false,
+              ).toJson()['trajectory']!
+              as Map<String, Object?>;
+      expect(serialized['g2ThreeCleanRoundsPassed'], isTrue);
+      expect(serialized['g2ZeroResiduePassed'], isFalse);
+
+      expect(g2CutStatusLine(const {}), isNull);
+      expect(
+        g2CutStatusLine(const {
+          'trajectory': <String, Object?>{'mode': 'live'},
+        }),
+        isNull,
+      );
+      for (final malformed in const [
+        <String, Object?>{'g2Posture': 'future'},
+        <String, Object?>{'g2Posture': 'cut', 'g1CertificatePassed': 'yes'},
+      ]) {
+        expect(g2CutStatusLine({'trajectory': malformed}), isNull);
+      }
     });
   });
 
@@ -1094,9 +1365,13 @@ void main() {
 SpaceStationStatus _status(
   TrajectoryHarnessStatus trajectory, {
   TrajectoryConfig trajectoryConfig = const TrajectoryConfig(),
+  bool? g2ThreeCleanRoundsPassed,
+  bool? g2ZeroResiduePassed,
 }) => SpaceStationStatus(
   trajectory: trajectory,
   trajectoryConfig: trajectoryConfig,
+  g2ThreeCleanRoundsPassed: g2ThreeCleanRoundsPassed,
+  g2ZeroResiduePassed: g2ZeroResiduePassed,
   substation: 'space_station',
   stateStore: '/home/memento/space_station',
   workRoot: 'space_station=/home/memento/space_station',

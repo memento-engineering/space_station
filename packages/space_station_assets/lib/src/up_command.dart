@@ -326,6 +326,19 @@ class UpCommand extends Command<int> {
             'always disables it. Required-mode connection failure degrades '
             'loudly without blocking boot.',
       )
+      ..addOption(
+        'g2-posture',
+        help:
+            'Stage-2 posture: off (default), shadow, or cut. Invalid values '
+            'refuse boot by name.',
+      )
+      ..addFlag(
+        'g1-certificate-passed',
+        defaultsTo: null,
+        help:
+            'Recorded G1 cut certificate receipt. Absent means missing; '
+            '--no-g1-certificate-passed records uncertified.',
+      )
       // The SUPERVISOR knob, not a posture: it hands THIS invocation to
       // launchd instead of running it here, so no seat session owns the
       // resident. Non-negatable — `--no-daemon` is just the default.
@@ -530,6 +543,21 @@ class UpCommand extends Command<int> {
       results,
       environment: _environment,
     );
+    final unrecognizedG2Posture =
+        trajectoryResolution.unrecognizedG2PostureValue;
+    if (unrecognizedG2Posture != null) {
+      err('$runnerName up: ${G2PostureConfigRefused(unrecognizedG2Posture)}');
+      return 64;
+    }
+    // Validate the REQUESTED config before assembly can apply its dry-run or
+    // break-glass force. Neither may demote a refused non-off posture to `off`
+    // and make the boot appear successful.
+    final g2G1PrerequisiteRefusal =
+        trajectoryResolution.config.g2G1PrerequisiteRefusal;
+    if (g2G1PrerequisiteRefusal != null) {
+      err('$runnerName up: $g2G1PrerequisiteRefusal');
+      return 64;
+    }
     // THE station's ONE GitHub reconciliation query (github_grid_assets
     // 0.2.0-dev.1). The seat-owned poll loop and its `interval` are gone:
     // reconciliation is an OBLIGATION the fenced service tick repairs, so the

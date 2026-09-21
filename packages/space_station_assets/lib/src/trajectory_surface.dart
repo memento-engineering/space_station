@@ -1,5 +1,6 @@
-/// The Stage-1 trajectory RUNNER surface — chunk WS of
-/// `the_grid/docs/design/trajectory/stage1-wiring.md`.
+/// The trajectory RUNNER surface — Stage-1 chunk WS and Stage-2 chunk G2-S of
+/// `the_grid/docs/design/trajectory/stage1-wiring.md` and
+/// `the_grid/docs/design/trajectory/stage2-wiring.md`.
 ///
 /// §1.1 splits Stage 1 across two repos: the harness, the recorder, and the
 /// hooks land in the_grid; the `--trajectory`/`--no-trajectory` flag, the boot
@@ -22,23 +23,47 @@ import 'package:grid_cli/src/station_control.dart'
 import 'package:grid_engine/grid_engine.dart' show DualReadMode;
 import 'package:grid_sdk/grid_sdk.dart'
     show
+        G2Posture,
         TrajectoryConfig,
         TrajectoryConfigMode,
         TrajectoryDiscipline,
         TrajectoryHarnessMode,
         TrajectoryHarnessStatus;
 
-/// A resolved trajectory configuration together with invalid environment input.
+/// A resolved trajectory configuration together with invalid runner input.
 ///
 /// Each nullable value is the exact set value that could not be resolved, or
-/// null when its environment key was unset or recognized. Invalid input
-/// remains non-fatal and resolves [config] to the key's safe fallback.
+/// null when its input was unset or recognized. Invalid input resolves
+/// [config] to a safe carrier; the runner decides whether that value refuses.
 typedef TrajectoryConfigResolution = ({
   TrajectoryConfig config,
   String? unrecognizedDualReadValue,
   String? unrecognizedDisciplineValue,
+  String? unrecognizedG2PostureValue,
   String? unrecognizedSoakWindowEpochValue,
 });
+
+/// A Stage-2 posture input outside the exact `off|shadow|cut` vocabulary.
+///
+/// The resolver carries [configuredValue] beside an inert `off` config so the
+/// runner can refuse by name before assembly. The fallback is never authority
+/// to continue booting.
+final class G2PostureConfigRefused implements Exception {
+  /// Creates the named refusal with the exact unrecognized input.
+  const G2PostureConfigRefused(this.configuredValue)
+    : expected = 'off|shadow|cut';
+
+  /// The exact flag or environment value the operator supplied.
+  final String configuredValue;
+
+  /// The complete accepted wire vocabulary.
+  final String expected;
+
+  @override
+  String toString() =>
+      'G2PostureConfigRefused(configuredValue: $configuredValue, '
+      'expected: $expected)';
+}
 
 /// Maps `up`'s tri-state `--trajectory` flag onto the assembly's
 /// [TrajectoryConfig] and preserves invalid dual-read input (stage1-wiring
@@ -104,32 +129,47 @@ TrajectoryConfigResolution trajectoryConfigResolutionFrom(
     (final value, _) => (0, value),
   };
 
-  final TrajectoryConfig config;
-  if (!args.wasParsed('trajectory')) {
-    config = TrajectoryConfig(
-      discipline: discipline,
-      dualRead: dualRead,
-      soakWindowEpoch: soakWindowEpoch,
-    );
-  } else {
-    config = args.flag('trajectory')
-        ? TrajectoryConfig(
-            discipline: discipline,
-            mode: TrajectoryConfigMode.required,
-            dualRead: dualRead,
-            soakWindowEpoch: soakWindowEpoch,
-          )
-        : TrajectoryConfig(
-            discipline: discipline,
-            mode: TrajectoryConfigMode.disabled,
-            dualRead: dualRead,
-            soakWindowEpoch: soakWindowEpoch,
-          );
-  }
+  // G2 stays inert unless one of its three exact posture values is supplied.
+  // A bad value is retained for the runner's named pre-assembly refusal; the
+  // accompanying `off` value is only a safe carrier and never authorizes boot.
+  final rawG2Posture = args.wasParsed('g2-posture')
+      ? args.option('g2-posture')
+      : environment['GRID_G2_POSTURE'];
+  final (g2Posture, unrecognizedG2PostureValue) = switch (rawG2Posture) {
+    null || 'off' => (G2Posture.off, null),
+    'shadow' => (G2Posture.shadow, null),
+    'cut' => (G2Posture.cut, null),
+    final value => (G2Posture.off, value),
+  };
+
+  // This is a recorded receipt, not a boot-time certification calculation.
+  // wasParsed preserves the flag's explicit false rung from absence.
+  final bool? g1CertificatePassed = args.wasParsed('g1-certificate-passed')
+      ? args.flag('g1-certificate-passed')
+      : switch (environment['GRID_G1_CERTIFICATE_PASSED']) {
+          'true' => true,
+          'false' => false,
+          _ => null,
+        };
+
+  final trajectoryMode = !args.wasParsed('trajectory')
+      ? null
+      : args.flag('trajectory')
+      ? TrajectoryConfigMode.required
+      : TrajectoryConfigMode.disabled;
+  final config = TrajectoryConfig(
+    discipline: discipline,
+    mode: trajectoryMode,
+    dualRead: dualRead,
+    g2Posture: g2Posture,
+    g1CertificatePassed: g1CertificatePassed,
+    soakWindowEpoch: soakWindowEpoch,
+  );
   return (
     config: config,
     unrecognizedDualReadValue: unrecognizedDualReadValue,
     unrecognizedDisciplineValue: unrecognizedDisciplineValue,
+    unrecognizedG2PostureValue: unrecognizedG2PostureValue,
     unrecognizedSoakWindowEpochValue: unrecognizedSoakWindowEpochValue,
   );
 }
@@ -272,14 +312,22 @@ String? trajectoryRequiredWarning(
 ///
 /// [armed] is the derived one-bit read a watcher polls; [mode] keeps the
 /// harness's own vocabulary so the wire never invents a second one.
+/// [g2ThreeCleanRoundsPassed] and [g2ZeroResiduePassed] remain null until their
+/// runtime receipt producers land; null is serialized as an explicit absence.
 Map<String, Object?> trajectoryStatusJson(
   TrajectoryHarnessStatus status, {
   required TrajectoryConfig config,
+  bool? g2ThreeCleanRoundsPassed,
+  bool? g2ZeroResiduePassed,
 }) => <String, Object?>{
   'mode': status.mode.name,
   'armed': status.mode == TrajectoryHarnessMode.live,
   'discipline': config.discipline.name,
   'soakWindowEpoch': config.soakWindowEpoch,
+  'g2Posture': config.g2Posture.name,
+  'g1CertificatePassed': config.g1CertificatePassed,
+  'g2ThreeCleanRoundsPassed': g2ThreeCleanRoundsPassed,
+  'g2ZeroResiduePassed': g2ZeroResiduePassed,
   'cause': status.cause,
   'epoch': status.epoch,
   'queueDepth': status.queueDepth,
@@ -289,6 +337,43 @@ Map<String, Object?> trajectoryStatusJson(
   'suppressed': status.suppressed,
   'exitJoinGaps': status.exitJoinGaps,
 };
+
+/// Renders Stage 2's posture and cut receipts from the trajectory wire block.
+///
+/// Null means a missing receipt. A false G1 or three-clean-round receipt is
+/// `uncertified`; a false residue receipt is `not-zero`. An older or malformed
+/// block renders nothing instead of inventing a cut result.
+String? g2CutStatusLine(Map<String, Object?> payload) {
+  final block = payload['trajectory'];
+  if (block is! Map<String, Object?>) return null;
+
+  final posture = block['g2Posture'];
+  if (posture is! String ||
+      !G2Posture.values.any((value) => value.name == posture)) {
+    return null;
+  }
+
+  String? certificateState(Object? value) => switch (value) {
+    null => 'missing',
+    false => 'uncertified',
+    true => 'certified',
+    _ => null,
+  };
+  String? residueState(Object? value) => switch (value) {
+    null => 'missing',
+    false => 'not-zero',
+    true => 'zero',
+    _ => null,
+  };
+
+  final g1 = certificateState(block['g1CertificatePassed']);
+  final threeClean = certificateState(block['g2ThreeCleanRoundsPassed']);
+  final zeroResidue = residueState(block['g2ZeroResiduePassed']);
+  if (g1 == null || threeClean == null || zeroResidue == null) return null;
+
+  return 'g2: posture=$posture · g1-certificate=$g1 · '
+      'three-clean-rounds=$threeClean · zero-residue=$zeroResidue';
+}
 
 /// One rendered trajectory line for `status`, plus whether it is LOUD.
 typedef TrajectoryLine = ({String line, bool loud});
@@ -396,6 +481,8 @@ class SpaceStationStatus extends StationStatus {
   SpaceStationStatus({
     required TrajectoryHarnessStatus trajectory,
     required TrajectoryConfig trajectoryConfig,
+    bool? g2ThreeCleanRoundsPassed,
+    bool? g2ZeroResiduePassed,
     this.roster = const [],
     required super.substation,
     required super.stateStore,
@@ -414,7 +501,12 @@ class SpaceStationStatus extends StationStatus {
     super.sync,
     super.admission,
   }) : super(
-         trajectory: trajectoryStatusJson(trajectory, config: trajectoryConfig),
+         trajectory: trajectoryStatusJson(
+           trajectory,
+           config: trajectoryConfig,
+           g2ThreeCleanRoundsPassed: g2ThreeCleanRoundsPassed,
+           g2ZeroResiduePassed: g2ZeroResiduePassed,
+         ),
        );
 
   /// The ordered substation roster resolved and armed by this live station.

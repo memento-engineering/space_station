@@ -13,6 +13,7 @@ const _decisionSurface =
 // size projected over the same command surface (3527 + 608 = 4135 bytes).
 const _newCommandHelpBytes = 608;
 const _rootHelpCeilingBytes = 4007;
+const _upHelpCeilingBytes = 3000;
 
 void main() {
   test('all composed command help is bounded recursively', () {
@@ -35,7 +36,7 @@ void main() {
   test('up help is compact and rationale-free', () {
     final help = buildRunner().commands['up']!.usage;
 
-    expect(_cliBytes(help), lessThanOrEqualTo(2500));
+    expect(_cliBytes(help), lessThanOrEqualTo(_upHelpCeilingBytes));
     for (final rationale in const [
       'authored as a SpaceDelegate',
       'driven with runGrid',
@@ -118,6 +119,10 @@ void main() {
       'Other values are refused',
       '--trajectory requires it',
       '--no-trajectory disables it',
+      '--g2-posture',
+      'off (default), shadow, or cut',
+      '--[no-]g1-certificate-passed',
+      '--no-g1-certificate-passed records uncertified',
       'Required-mode connection failure degrades loudly without blocking boot',
       'Withheld: design rationale and architecture history',
       'decisions index --surface $_decisionSurface',
