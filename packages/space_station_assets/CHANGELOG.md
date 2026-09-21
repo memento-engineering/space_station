@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added: the shared runner now composes `admission set` for every downstream
+  station and raises the `grid_cli` floor to `^0.6.0-dev.4`, the first release
+  exporting `AdmissionCommand` and `AdmissionSetCommand`.
 - Breaking: `PrimeCommand` now receives the composed `runnerInvocation`, so
   downstream prime pointers render that station's JIT invocation. This raises
   the `grid_assets` floor to `^0.7.0-dev.3`, where the constructor parameter is

@@ -21,7 +21,7 @@ const _expectedUncomposedTeachings = <String, String>{
 
 void main() {
   test(
-    'buildRunnerComposition exposes the unchanged runner and paired commands',
+    'buildRunnerComposition exposes the exact runner and paired commands',
     () {
       final composition = buildRunnerComposition();
       final expectedCommands = <String>{
@@ -38,6 +38,7 @@ void main() {
         'show',
         'pause',
         'resume',
+        'admission',
         'prime',
         'seat',
         'succession',
@@ -58,6 +59,10 @@ void main() {
       );
       expect(_composedCommandNames(composition.runner), expectedCommands);
       expect(_composedCommandNames(buildRunner()), expectedCommands);
+      expect(
+        composition.runner.commands['admission']!.subcommands.keys,
+        <String>['set'],
+      );
     },
   );
 
@@ -110,6 +115,17 @@ void main() {
         expectedUncomposedTeachings: _expectedUncomposedTeachings,
       ),
       isEmpty,
+    );
+    expect(
+      reachable
+          .where(
+            (definition) =>
+                definition.assetKey.kind == sdk.AssetKind.skill &&
+                definition.teaches.contains('admission'),
+          )
+          .map((definition) => definition.assetKey.canonical),
+      isEmpty,
+      reason: 'the baseline pack does not yet teach the admission verb',
     );
 
     final stationOperations = GridAssetsPack.skillStationOperations;

@@ -878,6 +878,9 @@ void main() {
     test('dependency floors and breaking release note name coordinated '
         'widening', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
+      final appPubspec = File(
+        '../../apps/space/pubspec.yaml',
+      ).readAsStringSync();
       final changelog = File('CHANGELOG.md').readAsStringSync();
       final lockfile = File('../../pubspec.lock').readAsStringSync();
 
@@ -887,9 +890,24 @@ void main() {
       );
       expect(pubspec, contains('grid_assets: ^0.7.0-dev.3'));
       expect(pubspec, contains('grid_sdk: ^0.4.0-dev.5'));
-      expect(pubspec, contains('grid_cli: ^0.6.0-dev.3'));
+      for (final source in <String>[pubspec, appPubspec]) {
+        expect(
+          RegExp(
+            r'^  grid_cli: \^0\.6\.0-dev\.4$',
+            multiLine: true,
+          ).allMatches(source),
+          hasLength(1),
+        );
+      }
       expect(pubspec, contains('github_grid_assets: ^0.2.0-dev.2'));
       expect(changelog, matches(RegExp(r'^# Changelog\n\n## Unreleased\n')));
+      expect(
+        changelog,
+        contains(
+          'the shared runner now composes `admission set` for every downstream\n'
+          '  station and raises the `grid_cli` floor to `^0.6.0-dev.4`',
+        ),
+      );
       // Every breaking bullet of the cut section carries its own Migration
       // line, indented under it — the shape a downstream station reads to
       // adopt.
@@ -966,12 +984,40 @@ void main() {
         expect(entry, contains('source: hosted'), reason: package);
         expect(entry, contains('url: "https://pub.dev"'), reason: package);
       }
-      expect(
-        Directory('..').listSync().map((e) => p.basename(e.path)),
-        isNot(contains('pubspec_overrides.yaml')),
-      );
+      final gridCliEntry = lockEntry('grid_cli');
+      final gridCliVersion = RegExp(
+        r'^    version: "([^"]+)"$',
+        multiLine: true,
+      ).firstMatch(gridCliEntry)!.group(1)!;
+      expect(_gridCliLockVersionIsAtLeastDev4('0.6.0-dev.3'), isFalse);
+      expect(_gridCliLockVersionIsAtLeastDev4('0.6.0-dev.4'), isTrue);
+      expect(_gridCliLockVersionIsAtLeastDev4('0.6.0-dev.5'), isTrue);
+      expect(_gridCliLockVersionIsAtLeastDev4('0.6.0'), isTrue);
+      expect(_gridCliLockVersionIsAtLeastDev4('0.6.1'), isTrue);
+      expect(_gridCliLockVersionIsAtLeastDev4(gridCliVersion), isTrue);
+      expect(File('../../pubspec_overrides.yaml').existsSync(), isFalse);
     });
   });
+}
+
+bool _gridCliLockVersionIsAtLeastDev4(String version) {
+  final match = RegExp(
+    r'^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?(?:\+[0-9A-Za-z.-]+)?$',
+  ).firstMatch(version);
+  if (match == null) return false;
+
+  final core = <int>[
+    int.parse(match.group(1)!),
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  ];
+  const floor = <int>[0, 6, 0];
+  for (var index = 0; index < core.length; index++) {
+    if (core[index] != floor[index]) return core[index] > floor[index];
+  }
+
+  final dev = match.group(4);
+  return dev == null || int.parse(dev) >= 4;
 }
 
 /// Mounts [root] in a bare tree and flushes one build pass (the Track B/F
