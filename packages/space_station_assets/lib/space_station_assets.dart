@@ -271,7 +271,10 @@ buildRunnerComposition({
   // builder mounts no tree and costs nothing at assembly.
   final resolvedFilingCommands =
       filingCommands ??
-      buildSpaceFilingCommands(delegateFactory: delegateFactory);
+      buildSpaceFilingCommands(
+        runnerInvocation: runnerInvocation,
+        delegateFactory: delegateFactory,
+      );
   final assetsGridRoot = Directory.current.absolute.path;
   final assetsCommand = buildSpaceAssetsCommand(
     runnerInvocation: runnerInvocation,
