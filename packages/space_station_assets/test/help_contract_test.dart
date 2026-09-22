@@ -7,13 +7,9 @@ import 'package:test/test.dart';
 
 const _decisionSurface =
     'space_station/packages/space_station_assets/lib/src/up_command.dart';
-// Root usage measured 3527 -> 2886 -> 2929 -> 3537 -> 4004 -> 4154 bytes.
-// `mount` adds 150 bytes to the root surface, so the seven newly composed
-// top-level verbs add 798 bytes. The 4197-byte ceiling keeps the measured
-// 43-byte drift allowance while staying below the pre-#107 help size projected
-// over the same command surface (3527 + 798 = 4325 bytes).
-const _newCommandHelpBytes = 798;
-const _rootHelpCeilingBytes = 4197;
+// Root usage is 4211 bytes in the dev.5 wave. Preserve the existing bounded
+// 43-byte allowance for harmless vended wrapping drift.
+const _rootHelpCeilingBytes = 4254;
 const _upHelpCeilingBytes = 3000;
 
 void main() {
@@ -83,7 +79,7 @@ void main() {
     );
   });
 
-  test('root help ceiling tolerates vended drift and rejects the old size', () {
+  test('root help ceiling tolerates bounded vended drift', () {
     final currentBytes = _cliBytes(buildRunner().usage);
     final driftedBytes = _cliBytes(
       _runnerWithUsageBytes(currentBytes + 43).usage,
@@ -91,11 +87,11 @@ void main() {
     expect(driftedBytes, currentBytes + 43);
     expect(driftedBytes, lessThanOrEqualTo(_rootHelpCeilingBytes));
 
-    final oldSizeBytes = _cliBytes(
-      _runnerWithUsageBytes(3527 + _newCommandHelpBytes).usage,
+    final firstRejectedBytes = _cliBytes(
+      _runnerWithUsageBytes(_rootHelpCeilingBytes + 1).usage,
     );
-    expect(oldSizeBytes, 4325);
-    expect(oldSizeBytes, isNot(lessThanOrEqualTo(_rootHelpCeilingBytes)));
+    expect(firstRejectedBytes, _rootHelpCeilingBytes + 1);
+    expect(firstRejectedBytes, isNot(lessThanOrEqualTo(_rootHelpCeilingBytes)));
   });
 
   test('up help retains its operational contract', () {

@@ -13,6 +13,8 @@ import 'package:grid_assets/grid_assets.dart'
         FilingEvidence,
         FilingEvidenceSource,
         FilingService,
+        InferenceResult,
+        InferenceRunner,
         MountCommand,
         MountExplanationService,
         ParkCommand,
@@ -25,9 +27,13 @@ import 'package:grid_assets/grid_assets.dart'
         UnparkService,
         ValidationPlanProbe,
         ValidationPlanParseResult,
+        kDiscoveryLenses,
         kFilingLaneShell,
-        kFilingPortabilityShell;
+        kFilingPortabilityShell,
+        kPreStampAdvisoryNodePath,
+        kReadinessRubric;
 import 'package:grid_cli/grid_cli.dart' show PauseCommand, ResumeCommand;
+import 'package:grid_runtime/grid_runtime.dart' show RuntimeConfig;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
@@ -171,6 +177,50 @@ final class _PassingValidationPlanProbe implements ValidationPlanProbe {
     return ValidationPlanParseResult(shell: shell, exitCode: 0);
   }
 }
+
+/// A Fake inference runner answering each advisory lens from a FIFO script.
+final class _ScriptedInferenceRunner implements InferenceRunner {
+  _ScriptedInferenceRunner(List<InferenceResult> replies)
+    : _replies = [...replies];
+
+  final List<InferenceResult> _replies;
+  final List<RuntimeConfig> calls = [];
+
+  @override
+  Future<InferenceResult> run(RuntimeConfig config) async {
+    calls.add(config);
+    if (_replies.isEmpty) {
+      return const InferenceResult(ok: false, output: '');
+    }
+    return _replies.removeAt(0);
+  }
+}
+
+InferenceResult _readinessReply(
+  String grade, {
+  String rationale = 'the filing is actionable',
+}) => InferenceResult(
+  ok: true,
+  output: jsonEncode({
+    'rubric': kReadinessRubric,
+    'version': 1,
+    'grade': grade,
+    'rationale': rationale,
+    'nodePath': kPreStampAdvisoryNodePath,
+    'round': 0,
+  }),
+);
+
+InferenceResult _cleanDiscoveryReply(String lens) => InferenceResult(
+  ok: true,
+  output: jsonEncode({
+    'outcome': 'report',
+    'lens': lens,
+    'version': 2,
+    'context': <Object?>[],
+    'violations': <Object?>[],
+  }),
+);
 
 /// The surface query finds no governing entry; only the unfiltered roster
 /// query proves that the cited decision is recorded under the attached seat.
@@ -358,8 +408,9 @@ _harness(
 _defaultServiceHarness(
   _RosterBdRunner bd,
   _PassingValidationPlanProbe probe,
-  _CannedDecisionShell shell,
-) {
+  _CannedDecisionShell shell, {
+  InferenceRunner? inference,
+}) {
   final out = StringBuffer();
   final err = StringBuffer();
   final commands = buildSpaceFilingCommands(
@@ -368,6 +419,7 @@ _defaultServiceHarness(
     runnerFor: bd.runnerFor,
     validationPlanProbe: probe,
     decisionShell: shell,
+    inference: inference,
     out: out,
     err: err,
   );
@@ -461,7 +513,13 @@ void main() {
         }),
       );
       expect(
-        await unpark.runner.run(['unpark', '--actor', 'governor', 'pow-child']),
+        await unpark.runner.run([
+          'unpark',
+          '--readiness=skip',
+          '--actor',
+          'governor',
+          'pow-child',
+        ]),
         1,
       );
       // grid_assets 0.7.0-dev.2 retired `--state-root` from unpark: it clears
@@ -629,14 +687,19 @@ void main() {
   test(
     '`filing --json <id>` reads the substation the id PREFIX names in the CODED '
     'roster — `pow-…` is power_station at ../power_station, never the CWD '
-    'store — and returns the ten rows',
+    'store — and returns the eleven rows',
     () async {
       final h = _harness(
         _ScriptedBdRunner({'query': _beadReply('No local ordering.')}),
       );
 
       expect(
-        await h.runner.run(['filing', '--json', 'pow-child']),
+        await h.runner.run([
+          'filing',
+          '--json',
+          '--readiness=skip',
+          'pow-child',
+        ]),
         0,
         reason: '${h.out}${h.err}',
       );
@@ -660,6 +723,7 @@ void main() {
           'bead_references',
           'release_versions',
           'decision_references',
+          'no_corrupting_text',
         ],
       );
       expect(requirements, everyElement(containsPair('passed', true)));
@@ -692,6 +756,7 @@ void main() {
         await filing.runner.run([
           'filing',
           '--json',
+          '--readiness=skip',
           '--grid-home',
           _gridHome,
           'pow-child',
@@ -744,6 +809,7 @@ void main() {
         await approve.runner.run([
           'approve',
           '--json',
+          '--readiness=skip',
           '--actor',
           'governor',
           '--grid-home',
@@ -761,6 +827,7 @@ void main() {
         await unpark.runner.run([
           'unpark',
           '--json',
+          '--readiness=skip',
           '--actor',
           'governor',
           '--grid-home',
@@ -784,6 +851,7 @@ void main() {
         await refused.runner.run([
           'approve',
           '--json',
+          '--readiness=skip',
           '--actor',
           'governor',
           '--grid-home',
@@ -821,12 +889,95 @@ void main() {
     },
   );
 
+  test(
+    'default approve wires the pre-stamp advisory: D refuses and B stamps',
+    () async {
+      _RosterBdRunner readyBd() => _RosterBdRunner(
+        ownerRoot: p.join(_umbrella, 'power_station'),
+        attachedRoot: p.join(_umbrella, 'the_grid'),
+        description: 'A complete filing with no local ordering.',
+      );
+
+      _CannedDecisionShell decisionShell() => _CannedDecisionShell(
+        registerRoot: p.join(_umbrella, 'the_grid', 'docs', 'decisions'),
+        slug: 'unused-by-this-filing',
+      );
+
+      const holdReason = 'name the implementation surface before approval';
+      final heldBd = readyBd();
+      final heldInference = _ScriptedInferenceRunner([
+        _readinessReply('D', rationale: holdReason),
+      ]);
+      final held = _defaultServiceHarness(
+        heldBd,
+        _PassingValidationPlanProbe(),
+        decisionShell(),
+        inference: heldInference,
+      );
+
+      expect(
+        await held.runner.run([
+          'approve',
+          '--json',
+          '--actor',
+          'governor',
+          '--grid-home',
+          _gridHome,
+          'pow-child',
+        ]),
+        1,
+        reason: '${held.out}${held.err}',
+      );
+      expect(heldBd.updates, isEmpty);
+      expect(heldInference.calls, hasLength(1));
+      expect(held.out.toString(), contains(holdReason));
+
+      final stampedBd = readyBd();
+      final stampedInference = _ScriptedInferenceRunner([
+        _readinessReply('B'),
+        for (final lens in kDiscoveryLenses) _cleanDiscoveryReply(lens),
+      ]);
+      final stamped = _defaultServiceHarness(
+        stampedBd,
+        _PassingValidationPlanProbe(),
+        decisionShell(),
+        inference: stampedInference,
+      );
+
+      expect(
+        await stamped.runner.run([
+          'approve',
+          '--json',
+          '--actor',
+          'governor',
+          '--grid-home',
+          _gridHome,
+          'pow-child',
+        ]),
+        0,
+        reason: '${stamped.out}${stamped.err}',
+      );
+      expect(stampedBd.updates, hasLength(1));
+      expect(
+        _metadataOf(stampedBd.updates.single.argv)['grid.readiness_grade'],
+        'B',
+      );
+      expect(stampedInference.calls, hasLength(1 + kDiscoveryLenses.length));
+      final report = jsonDecode(stamped.out.toString()) as Map<String, dynamic>;
+      expect(report['approved'], isTrue);
+      expect(report['readiness_grade'], 'B');
+    },
+  );
+
   test('a bead id NO coded substation mints is refused LOUD: exit 1, the '
       'substations '
       'named, nothing read', () async {
     final h = _harness(_ScriptedBdRunner(const {}));
 
-    expect(await h.runner.run(['filing', '--json', 'zzz-1']), 1);
+    expect(
+      await h.runner.run(['filing', '--json', '--readiness=skip', 'zzz-1']),
+      1,
+    );
     expect(
       h.err.toString(),
       contains('no substation in the CODED roster mints'),
@@ -848,7 +999,7 @@ void main() {
     );
 
     expect(
-      await h.runner.run(['filing', '--json', 'pow-child']),
+      await h.runner.run(['filing', '--json', '--readiness=skip', 'pow-child']),
       0,
       reason: '${h.out}${h.err}',
     );
@@ -871,7 +1022,10 @@ void main() {
       }),
     );
 
-    expect(await h.runner.run(['filing', '--json', 'pow-child']), 1);
+    expect(
+      await h.runner.run(['filing', '--json', '--readiness=skip', 'pow-child']),
+      1,
+    );
     final row = _dependenciesRow(h.out);
     expect(row['passed'], isFalse);
     expect(
@@ -900,7 +1054,13 @@ void main() {
     });
     final approve = _harness(bd);
     expect(
-      await approve.runner.run(['approve', '--actor', 'governor', 'pow-child']),
+      await approve.runner.run([
+        'approve',
+        '--readiness=skip',
+        '--actor',
+        'governor',
+        'pow-child',
+      ]),
       1,
     );
     expect(approve.out.toString(), contains('REFUSED pow-child'));
@@ -922,7 +1082,12 @@ void main() {
       );
 
       expect(
-        await h.runner.run(['filing', '--json', 'pow-child']),
+        await h.runner.run([
+          'filing',
+          '--json',
+          '--readiness=skip',
+          'pow-child',
+        ]),
         0,
         reason: '${h.out}${h.err}',
       );
@@ -947,6 +1112,7 @@ void main() {
       await h.runner.run([
         'approve',
         '--json',
+        '--readiness=skip',
         '--actor',
         'governor',
         'pow-child',
@@ -967,10 +1133,14 @@ void main() {
         'grid.approved_by',
         'grid.approved_at',
         'grid.approved_rev',
+        'grid.readiness_skipped',
+        'grid.approved_advisory',
       ]),
     );
     expect(metadata['grid.approved_by'], 'governor');
     expect(metadata['grid.approved_at'], '2026-09-02T14:30:00.000Z');
+    expect(metadata['grid.readiness_skipped'], 'true');
+    expect(metadata['grid.approved_advisory'], 'skipped');
     final approvedRev = metadata['grid.approved_rev'];
     expect(approvedRev, matches(RegExp(r'^filing:v2:sha256:[0-9a-f]{64}$')));
     expect(
@@ -988,6 +1158,8 @@ void main() {
     final report = jsonDecode(h.out.toString()) as Map<String, dynamic>;
     expect(report['approved'], isTrue);
     expect(report['rev'], approvedRev);
+    expect(report['readiness_skipped'], isTrue);
+    expect(report.containsKey('readiness_grade'), isFalse);
   });
 
   test('a RELATIVE --grid-home is refused LOUD by BOTH verbs: exit 1, nothing '
@@ -996,6 +1168,7 @@ void main() {
     expect(
       await filing.runner.run([
         'filing',
+        '--readiness=skip',
         '--grid-home',
         'rel/home',
         'pow-child',
@@ -1010,6 +1183,7 @@ void main() {
     expect(
       await approve.runner.run([
         'approve',
+        '--readiness=skip',
         '--actor',
         'governor',
         '--grid-home',
@@ -1035,7 +1209,12 @@ void main() {
     );
 
     expect(
-      await h.runner.run(['filing', '--json', 'swift-infer-zfor']),
+      await h.runner.run([
+        'filing',
+        '--json',
+        '--readiness=skip',
+        'swift-infer-zfor',
+      ]),
       0,
       reason: '${h.out}${h.err}',
     );
@@ -1059,6 +1238,7 @@ void main() {
         await h.runner.run([
           'approve',
           '--json',
+          '--readiness=skip',
           '--actor',
           'governor',
           'swift-infer-zfor',
