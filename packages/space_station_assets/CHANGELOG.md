@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0-dev.5
+
+- Changed: floors `grid_assets` at `^0.7.0-dev.5` and `github_grid_assets` at `^0.2.0-dev.5` — the wave
+  that renames the readiness result fields to identifiers (power_station#365, the dev.4 first-advance
+  failure), resolves bare ACP pins by seat tier under codex 0.155.1 (#364) and runs the pre-stamp
+  advisory (#358).
+
 ## 0.5.0-dev.4
 
 - Breaking: `PrimeCommand` now receives the composed `runnerInvocation`, so
