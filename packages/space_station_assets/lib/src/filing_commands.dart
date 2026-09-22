@@ -3,7 +3,7 @@
 /// Commands from `grid_assets`, never new ones.
 ///
 /// The asset owns the domain AND its CLI component (the_grid ADR-0011 D3;
-/// power_station ADR-0001): `grid_assets` ships the deterministic ten-row
+/// power_station ADR-0001): `grid_assets` ships the deterministic eleven-row
 /// filing preflight ([FilingService]) and the approval verb over it
 /// ([ApproveService] — the preflight, then ONE stamped `bd update`), plus the
 /// THIN Commands over both. A station COMPOSES them with ITS resident-station
@@ -59,13 +59,18 @@ import 'package:grid_assets/grid_assets.dart'
         BdListAllStatusBeadSource,
         ExactSubstationBeadSource,
         FilingCommand,
+        DecisionIndexSource,
+        FilingAdvisory,
+        FilingAdvisoryVerdict,
         FilingEvidence,
         FilingEvidenceSource,
         FilingService,
+        InferenceRunner,
         MountCommand,
         MountExplanationService,
         ParkCommand,
         ParkService,
+        PreStampAdvisory,
         ShellRunner,
         ShowCommand,
         ShowService,
@@ -149,30 +154,53 @@ _owningScopeForBead({
   );
 }
 
-/// Binds invocation-time station context to the shared live evidence gather.
+/// Binds invocation-time station context to the shared live filing checks.
 ///
 /// Commands are assembled once, while ownership and `--grid-home` vary per
 /// invocation. Their store-root callbacks call [bind] immediately before the
-/// shared [FilingService] gathers, then this source remounts that home's coded
-/// roster and delegates every evidence leg to [SystemFilingEvidenceSource].
-final class _DeferredFilingEvidenceSource implements FilingEvidenceSource {
-  _DeferredFilingEvidenceSource({
+/// shared [FilingService] gathers. One context per normalized work-store root
+/// carries that invocation's resolved owner, coded roster, grid home, and ONE
+/// roster-mode [DecisionIndexSource] into both [SystemFilingEvidenceSource]
+/// and [PreStampAdvisory], so the mechanical row and advisory cannot ask the
+/// decision register through different compositions.
+final class _DeferredFilingContext
+    implements FilingEvidenceSource, FilingAdvisory {
+  _DeferredFilingContext({
     required this.runnerFor,
     required this.validationPlanProbe,
     required this.decisionShell,
     required this.runnerInvocation,
-    required this.delegateFactory,
+    required this.inference,
   });
 
   final BdRunner Function(String storeRoot) runnerFor;
   final ValidationPlanProbe validationPlanProbe;
   final ShellRunner decisionShell;
   final String runnerInvocation;
-  final SpaceDelegateFactory delegateFactory;
-  final Map<String, String> _gridHomesByStoreRoot = {};
+  final InferenceRunner? inference;
+  final Map<String, _BoundFilingContext> _contextsByStoreRoot = {};
 
-  void bind({required String storeRoot, required String gridHome}) {
-    _gridHomesByStoreRoot[p.normalize(storeRoot)] = p.normalize(gridHome);
+  void bind({
+    required String storeRoot,
+    required ({
+      String home,
+      List<SubstationScope> roster,
+      SubstationScope owner,
+    })
+    resolved,
+  }) {
+    final normalizedStoreRoot = p.normalize(storeRoot);
+    final decisions = commandDecisionIndexSource(
+      decisionShell,
+      runnerInvocation: runnerInvocation,
+      gridHome: resolved.home,
+    );
+    _contextsByStoreRoot[normalizedStoreRoot] = _BoundFilingContext(
+      home: resolved.home,
+      roster: resolved.roster,
+      owner: resolved.owner,
+      decisions: decisions,
+    );
   }
 
   @override
@@ -181,31 +209,54 @@ final class _DeferredFilingEvidenceSource implements FilingEvidenceSource {
     required Bead bead,
   }) async {
     final normalizedStoreRoot = p.normalize(storeRoot);
-    final gridHome = _gridHomesByStoreRoot[normalizedStoreRoot];
-    if (gridHome == null) {
-      throw StateError(
-        'space filing evidence: no invocation grid home was bound for '
-        '$normalizedStoreRoot',
-      );
-    }
-    final resolved = _owningScopeForBead(
-      verb: 'filing evidence',
-      beadId: bead.id,
-      gridHome: gridHome,
-      delegateFactory: delegateFactory,
-    );
+    final context = _contextFor(normalizedStoreRoot);
     return SystemFilingEvidenceSource(
       probe: validationPlanProbe,
       catalog: BdListAllStatusBeadSource(runnerFor: runnerFor),
-      owning: resolved.owner,
-      attached: resolved.roster,
-      decisions: commandDecisionIndexSource(
-        decisionShell,
-        runnerInvocation: runnerInvocation,
-        gridHome: resolved.home,
-      ),
+      owning: context.owner,
+      attached: context.roster,
+      decisions: context.decisions,
     ).gather(storeRoot: normalizedStoreRoot, bead: bead);
   }
+
+  @override
+  Future<FilingAdvisoryVerdict> evaluate({
+    required String storeRoot,
+    required Bead bead,
+  }) {
+    final normalizedStoreRoot = p.normalize(storeRoot);
+    final context = _contextFor(normalizedStoreRoot);
+    return PreStampAdvisory(
+      inference: inference,
+      decisions: context.decisions,
+      decisionRunner: runnerInvocation,
+      decisionGridHome: context.home,
+      substation: context.owner.name,
+    ).evaluate(storeRoot: normalizedStoreRoot, bead: bead);
+  }
+
+  _BoundFilingContext _contextFor(String normalizedStoreRoot) {
+    final context = _contextsByStoreRoot[normalizedStoreRoot];
+    if (context != null) return context;
+    throw StateError(
+      'space filing context: no invocation was bound for '
+      '$normalizedStoreRoot',
+    );
+  }
+}
+
+final class _BoundFilingContext {
+  const _BoundFilingContext({
+    required this.home,
+    required this.roster,
+    required this.owner,
+    required this.decisions,
+  });
+
+  final String home;
+  final List<SubstationScope> roster;
+  final SubstationScope owner;
+  final DecisionIndexSource decisions;
 }
 
 /// The station's ARMED substation NAMES, rooted at [gridHome] — what an
@@ -240,7 +291,9 @@ Set<String> armedSubstationNames({
 /// [unpark], and [show] are authoritative service overrides. Without them,
 /// one shared vended [FilingService] and [ApproveService] serve filing,
 /// approve, and unpark over the invocation-bound live evidence. [runnerFor],
-/// [validationPlanProbe], and [decisionShell] are its I/O seams.
+/// [validationPlanProbe], [decisionShell], and [inference] are its I/O seams.
+/// Production leaves [inference] null so the advisory uses its real runner;
+/// tests inject a scripted Fake.
 /// [delegateFactory] names WHICH [SpaceDelegate] subclass authors the roster
 /// the bead id is resolved against. [out]/[err] default to the process sinks.
 SpaceFilingCommands buildSpaceFilingCommands({
@@ -255,22 +308,24 @@ SpaceFilingCommands buildSpaceFilingCommands({
   BdRunner Function(String storeRoot) runnerFor = _processRunnerFor,
   ValidationPlanProbe validationPlanProbe = const SystemValidationPlanProbe(),
   ShellRunner decisionShell = const SystemShellRunner(),
+  InferenceRunner? inference,
   SpaceDelegateFactory delegateFactory = SpaceDelegate.new,
   StringSink? out,
   StringSink? err,
 }) {
-  final deferredEvidence = _DeferredFilingEvidenceSource(
+  final deferredContext = _DeferredFilingContext(
     runnerFor: runnerFor,
     validationPlanProbe: validationPlanProbe,
     decisionShell: decisionShell,
     runnerInvocation: runnerInvocation,
-    delegateFactory: delegateFactory,
+    inference: inference,
   );
   final resolvedFiling =
       filing ??
       FilingService(
         source: ExactSubstationBeadSource(runnerFor: runnerFor),
-        evidence: deferredEvidence,
+        evidence: deferredContext,
+        advisory: deferredContext,
       );
   final resolvedApprove =
       approve ?? ApproveService(filing: resolvedFiling, runnerFor: runnerFor);
@@ -303,7 +358,7 @@ SpaceFilingCommands buildSpaceFilingCommands({
       delegateFactory: delegateFactory,
     );
     final storeRoot = resolved.owner.workStore.storeRoot;
-    deferredEvidence.bind(storeRoot: storeRoot, gridHome: resolved.home);
+    deferredContext.bind(storeRoot: storeRoot, resolved: resolved);
     return storeRoot;
   }
 

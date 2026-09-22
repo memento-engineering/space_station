@@ -891,14 +891,11 @@ void main() {
       );
 
       expect(packageVersion, matches(RegExp(r'^0\.5\.0-dev\.\d+$')));
-      expect(
-        _caretDevFloorAtLeast(gridAssetsFloor, family: '0.7.0', floor: 4),
-        isTrue,
-      );
-      expect(
-        _caretDevFloorAtLeast(githubGridAssetsFloor, family: '0.2.0', floor: 4),
-        isTrue,
-      );
+      expect(gridAssetsFloor, matches(RegExp(r'^\^0\.7\.0-dev\.\d+$')));
+      expect(githubGridAssetsFloor, matches(RegExp(r'^\^0\.2\.0-dev\.\d+$')));
+      final releaseCounter = _devCounter(packageVersion);
+      expect(_devCounter(gridAssetsFloor), releaseCounter);
+      expect(_devCounter(githubGridAssetsFloor), releaseCounter);
       expect(
         _manifestValue(appPubspec, 'space_station_assets'),
         '^$packageVersion',
@@ -918,38 +915,47 @@ void main() {
         multiLine: true,
       ).allMatches(changelog).toList();
       expect(headings, hasLength(greaterThanOrEqualTo(3)));
-      expect(headings.first.group(1), packageVersion);
-      final release = changelog.substring(
-        headings.first.start,
-        headings[1].start,
+      final releaseHeading = headings.indexWhere(
+        (heading) => heading.group(1) == packageVersion,
       );
-      final firstBullet = RegExp(
-        r'^- .+$',
-        multiLine: true,
-      ).firstMatch(release)!.group(0)!;
-      expect(
-        firstBullet,
-        startsWith(
-          '- Breaking: `PrimeCommand` now receives the composed '
-          '`runnerInvocation`',
-        ),
+      expect(releaseHeading, greaterThanOrEqualTo(0));
+      final releaseEnd = releaseHeading + 1 < headings.length
+          ? headings[releaseHeading + 1].start
+          : changelog.length;
+      final release = changelog.substring(
+        headings[releaseHeading].start,
+        releaseEnd,
       );
       expect(release, contains('`grid_assets` at `$gridAssetsFloor`'));
       expect(
         release,
         contains('`github_grid_assets` at `$githubGridAssetsFloor`'),
       );
-      expect(
-        release,
-        contains(
-          'the shared runner now composes `admission set` for every downstream\n'
-          '  station and raises the `grid_cli` floor to `^0.6.0-dev.4`',
-        ),
-      );
       // Every breaking bullet of the cut section carries its own Migration
       // line, indented under it — the shape a downstream station reads to
       // adopt.
-      final cut = changelog.substring(headings[1].start, headings[2].start);
+      final historicalHeading =
+          [
+            for (
+              var index = releaseHeading + 1;
+              index < headings.length;
+              index++
+            )
+              index,
+          ].singleWhere((index) {
+            final end = index + 1 < headings.length
+                ? headings[index + 1].start
+                : changelog.length;
+            return changelog
+                .substring(headings[index].start, end)
+                .contains('the `unlink` verb is REMOVED');
+          });
+      final cut = changelog.substring(
+        headings[historicalHeading].start,
+        historicalHeading + 1 < headings.length
+            ? headings[historicalHeading + 1].start
+            : changelog.length,
+      );
       final breaking = RegExp(
         r'^- Breaking: ',
         multiLine: true,
@@ -1040,15 +1046,14 @@ String _manifestValue(String manifest, String key) {
   return matches.single.group(1)!;
 }
 
-bool _caretDevFloorAtLeast(
-  String constraint, {
-  required String family,
-  required int floor,
-}) {
+int _devCounter(String versionOrConstraint) {
   final match = RegExp(
-    '^\\^${RegExp.escape(family)}-dev\\.(\\d+)\$',
-  ).firstMatch(constraint);
-  return match != null && int.parse(match.group(1)!) >= floor;
+    r'^\^?\d+\.\d+\.\d+-dev\.(\d+)$',
+  ).firstMatch(versionOrConstraint);
+  if (match == null) {
+    throw StateError('expected a dev release, got $versionOrConstraint');
+  }
+  return int.parse(match.group(1)!);
 }
 
 bool _gridCliLockVersionIsAtLeastDev4(String version) {

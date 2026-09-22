@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.5.0-dev.4
+version: 0.5.0-dev.5
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -39,10 +39,10 @@ dependencies:
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # 0.1.1-dev.1 is the compatible asset-pack release wave for grid_assets
   # 0.7.0-dev.1.
-  github_grid_assets: ^0.2.0-dev.4
+  github_grid_assets: ^0.2.0-dev.5
   # 0.7.0-dev.3 requires PrimeCommand to receive the composing station's
   # runner invocation so its pointers reach that station's JIT runner.
-  grid_assets: ^0.7.0-dev.4
+  grid_assets: ^0.7.0-dev.5
   # 0.6.0-dev.4 is the first release exporting the admission noun and setter.
   grid_cli: ^0.6.0-dev.4
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
