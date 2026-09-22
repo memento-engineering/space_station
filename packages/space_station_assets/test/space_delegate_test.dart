@@ -252,6 +252,73 @@ void main() {
       );
     });
 
+    test('a live-shaped tree keeps an app-null sibling undelivered while the '
+        'ambient opener remains visible', () {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final subject = _DeliveryPostureDelegate(
+        gridRoot: '/home/memento/space_station',
+        live: true,
+      );
+      addTearDown(subject.dispose);
+      late _SwapHostState host;
+      final root = owner.mountRoot(
+        _SwapHost(
+          onCreate: (state) => host = state,
+          describe: () => _Author(subject),
+        ),
+      );
+      owner.flush();
+
+      final ambientOps = _valuesUnder<GitOps>(root).single;
+      final ambientOpener = _valuesUnder<PrOpener>(root).single;
+      final scopes = _branchesUnder<sdk.SubstationScope>(root);
+      final enabled = scopes.singleWhere(
+        (branch) => branch.value.name == 'enabled',
+      );
+      final disabled = scopes.singleWhere(
+        (branch) => branch.value.name == 'disabled',
+      );
+      expect(_effectiveBundle(enabled).delivery, isNotNull);
+      expect(_effectiveBundle(disabled).delivery, isNull);
+      expect(
+        _valuesUnder<_ObservedOpener>(enabled).single.opener,
+        same(ambientOpener),
+      );
+      expect(
+        _valuesUnder<_ObservedOpener>(disabled).single.opener,
+        same(ambientOpener),
+        reason: 'the app-null seed does not mask the station opener',
+      );
+
+      host.swap(() => _Author(subject));
+      owner.flush();
+      expect(_valuesUnder<GitOps>(root).single, same(ambientOps));
+      expect(_valuesUnder<PrOpener>(root).single, same(ambientOpener));
+
+      final dry = _DeliveryPostureDelegate(
+        gridRoot: '/home/memento/space_station',
+      );
+      addTearDown(dry.dispose);
+      final dryOwner = TreeOwner();
+      addTearDown(dryOwner.dispose);
+      final dryRoot = dryOwner.mountRoot(_Author(dry));
+      dryOwner.flush();
+      expect(_valuesUnder<PrOpener>(dryRoot), isEmpty);
+      expect(
+        _branchesUnder<sdk.SubstationScope>(
+          dryRoot,
+        ).map(_effectiveBundle).every((bundle) => bundle.delivery == null),
+        isTrue,
+      );
+      expect(
+        _valuesUnder<_ObservedOpener>(
+          dryRoot,
+        ).every((observation) => observation.opener == null),
+        isTrue,
+      );
+    });
+
     test(
       'GitHub self trust resolves through gh and mounts once only for live station',
       () async {
@@ -1164,6 +1231,24 @@ List<T> _mountedValues<T extends Object>(Seed seed) {
   return values;
 }
 
+List<T> _valuesUnder<T extends Object>(Branch root) =>
+    _branchesUnder<T>(root).map((branch) => branch.value).toList();
+
+List<InheritedBranch<T>> _branchesUnder<T extends Object>(Branch root) {
+  final branches = <InheritedBranch<T>>[];
+  void walk(Branch branch) {
+    if (branch is InheritedBranch<T>) branches.add(branch);
+    branch.visitChildren(walk);
+  }
+
+  walk(root);
+  return branches;
+}
+
+ServiceBundle _effectiveBundle(Branch root) => _valuesUnder<ServiceBundle>(
+  root,
+).singleWhere((bundle) => bundle.mountEligibility != null);
+
 /// Mounts [root], flushes once, and collects every provided [ServiceBundle]
 /// in tree order — the delivery-posture projection of the authored tree.
 /// A commit-only substation provides ONE bundle (its git asset's); a
@@ -1326,6 +1411,61 @@ class _AssetRosterDelegate extends SpaceDelegate {
     ),
   ];
 }
+
+class _DeliveryPostureDelegate extends SpaceDelegate {
+  _DeliveryPostureDelegate({required super.gridRoot, super.live});
+
+  @override
+  List<Seed> substations(
+    TreeContext context,
+    sdk.GridConfiguration configuration,
+  ) => [
+    station.SubstationSeed(
+      name: 'enabled',
+      root: '../enabled',
+      app: kMementoOrgApp,
+      seatSeeds: const [_AmbientOpenerProbeAssets()],
+      githubAppCredentialLoader: const github.GitHubAppCredentialLoader(
+        environment: _emptyEnvironment,
+      ),
+    ),
+    station.SubstationSeed(
+      name: 'disabled',
+      root: '../disabled',
+      seatSeeds: const [_AmbientOpenerProbeAssets()],
+    ),
+  ];
+}
+
+class _AmbientOpenerProbeAssets extends SingleChildStatelessSeed {
+  const _AmbientOpenerProbeAssets({
+    // Nest supplies this fold child; direct call sites deliberately omit it.
+    // ignore: unused_element_parameter
+    super.child,
+  });
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) =>
+      InheritedSeed<_ObservedOpener>(
+        value: _ObservedOpener(context.watch<PrOpener>()),
+        child: child,
+      );
+}
+
+final class _ObservedOpener {
+  const _ObservedOpener(this.opener);
+
+  final PrOpener? opener;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ObservedOpener && identical(other.opener, opener);
+
+  @override
+  int get hashCode => identityHashCode(opener);
+}
+
+Map<String, String> _emptyEnvironment() => const {};
 
 class _BuildMethodProbeDelegate extends SpaceDelegate {
   _BuildMethodProbeDelegate({
