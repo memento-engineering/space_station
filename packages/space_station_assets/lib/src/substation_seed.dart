@@ -13,9 +13,10 @@
 /// `deliveryFor(name)`, no stringy substation registry of any kind. A
 /// substation's delivery posture is what its OWN subtree mounts. A
 /// [GitHubAppConfig] value selects App-authenticated delivery on a live
-/// substation; no value preserves the nearest
-/// ambient opener. Polling is independently and explicitly selected by the
-/// substation's reconciler config.
+/// substation; no value is the explicit undelivered composition. The nearest
+/// ambient opener remains observable, but this seed does not compose
+/// `github.GitHubGridAssets` to bind it into delivery. Polling is independently
+/// and explicitly selected by the substation's reconciler config.
 ///
 /// **The `GitServices` bundle is SPLIT** (STYLE rule 4: no provider is
 /// universal): the assets watch `StationGitRepository` and `GitOps`
@@ -25,7 +26,11 @@
 ///
 /// The GitHub binding and reconciler lifecycle belong to `github_grid_assets`.
 /// This library composes those imported extensions but exports only
-/// [SubstationSeed] and [GitHubAppConfig] downstream.
+/// [SubstationSeed] and [GitHubAppConfig] downstream. `github_grid_assets` also
+/// vends its own `SubstationSeed`; space cannot use that seed because its
+/// asset-selection projection differs, so this local composition is the only
+/// one reachable from space's delegate. The vended twin remains owned and
+/// released by `power_station`, outside this repository's composition boundary.
 library;
 
 import 'package:beads_dart/beads_dart.dart' show BdRunner, ProcessBdRunner;
@@ -53,7 +58,8 @@ import 'package:grid_sdk/grid_sdk.dart' as sdk;
 /// Carries the non-secret identifiers a live substation uses to select
 /// `github.GitHubAppPrOpener`. The injected authenticated client owns secrets
 /// and resolves them at effect time; this value deliberately has nowhere to
-/// store one. A null substation identity preserves ambient-opener behavior.
+/// store one. A null substation identity leaves the ambient opener visible but
+/// selects the undelivered composition.
 class GitHubAppConfig {
   /// Creates the identity value.
   const GitHubAppConfig({
@@ -163,7 +169,10 @@ class SubstationSeed extends StatelessSeed {
   final String? prefix;
 
   /// The substation's delivery identity. On a live substation, non-null selects
-  /// the App-authenticated opener; null preserves ambient-opener behavior.
+  /// the App-authenticated opener and enables GitHub delivery composition.
+  ///
+  /// Null is the explicit undelivered posture: an ambient opener remains
+  /// visible to the subtree, but is not bound into its [ServiceBundle].
   final GitHubAppConfig? app;
 
   /// Explicit polling values for this substation; null keeps reconciliation
@@ -173,10 +182,12 @@ class SubstationSeed extends StatelessSeed {
   /// inferred from [root], a git remote, the environment, or station defaults.
   final github.GitHubReconcilerConfig? githubPoll;
 
-  /// The substation's explicitly selected GitHub landing posture.
+  /// The substation's explicitly selected GitHub landing posture when [app] is
+  /// non-null.
   ///
-  /// Null preserves `github.GitHubGridAssets`' default
+  /// Null on an app-bearing seed preserves `github.GitHubGridAssets`' default
   /// `github.PrNoMergePolicy`: open or reuse a PR and leave it unmerged.
+  /// An app-null seed composes no GitHub delivery, regardless of this value.
   final github.GitHubDeliveryPolicy? landingPolicy;
 
   /// The substation's AGENT SEAT provider seeds — the PER-SUBSTATION rung of
@@ -214,6 +225,7 @@ class SubstationSeed extends StatelessSeed {
 
   @override
   Seed build(TreeContext context) {
+    final identity = app;
     final githubPoll = this.githubPoll;
     final mountEligibilityRunnerFor = this.mountEligibilityRunnerFor;
     final landingPolicy = this.landingPolicy;
@@ -237,7 +249,7 @@ class SubstationSeed extends StatelessSeed {
           githubPoll.arm == github.GitHubReconcilerArm.live)
         _SubstationGitHubReconcilerBindingAssets(config: githubPoll),
       if (githubPoll != null) github.GitHubReconcilerAssets(config: githubPoll),
-      github.GitHubGridAssets(policy: landingPolicy),
+      if (identity != null) github.GitHubGridAssets(policy: landingPolicy),
       if (mountEligibilityRunnerFor == null)
         const MountEligibilityAssets()
       else
@@ -260,7 +272,6 @@ class SubstationSeed extends StatelessSeed {
         ),
       ],
     );
-    final identity = app;
     if (identity == null) return substation;
     final ops = context.watch<GitOps>();
     final pollAllowsEffects =

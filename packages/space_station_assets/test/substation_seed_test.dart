@@ -181,6 +181,7 @@ void main() {
                       child: SubstationSeed(
                         name: 'mine',
                         root: '../mine',
+                        app: _appIdentity,
                         landingPolicy: policy,
                       ),
                     ),
@@ -219,7 +220,11 @@ void main() {
                   create: (_) => GitOps(SystemGitRunner()),
                   child: Provider<PrOpener>.value(
                     _FakePrOpener(),
-                    child: SubstationSeed(name: 'mine', root: '../mine'),
+                    child: SubstationSeed(
+                      name: 'mine',
+                      root: '../mine',
+                      app: _appIdentity,
+                    ),
                   ),
                 ),
               ],
@@ -384,7 +389,8 @@ void main() {
       );
     });
 
-    test('delivery identity selects App opener or ambient fallback', () {
+    test('delivery identity selects an App opener while null keeps the ambient '
+        'opener visible without delivery', () {
       final transport = _FakeTransport();
       final client = _fakeClient(transport);
       const identity = GitHubAppConfig(
@@ -409,6 +415,7 @@ void main() {
         ),
       );
       expect(app.values<PrOpener>().single, isA<github.GitHubAppPrOpener>());
+      expect(_gated(app).delivery, isNotNull);
 
       final ambient = _FakePrOpener();
       final noApp = _mount(
@@ -429,6 +436,13 @@ void main() {
         ),
       );
       expect(identical(noApp.values<PrOpener>().single, ambient), isTrue);
+      expect(
+        _gated(noApp).delivery,
+        isNull,
+        reason:
+            'the ambient opener stays visible, but an app-null seed does not '
+            'compose GitHub delivery',
+      );
 
       expect(
         () => _mount(
@@ -561,7 +575,19 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: sdk.RawAssetGrid(
                   root: '/home/me/station',
-                  assets: [SubstationSeed(name: 'ambient', root: '../ambient')],
+                  assets: [
+                    SubstationSeed(
+                      name: 'ambient',
+                      root: '../ambient',
+                      githubPoll: const github.GitHubReconcilerConfig(
+                        owner: 'memento',
+                        repository: 'ambient',
+                        substation: 'ambient',
+                        installationId: '99',
+                        arm: github.GitHubReconcilerArm.offline,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -571,6 +597,12 @@ void main() {
         final walk = _Walk(root);
         expect(walk.values<github.GitHubAppClient>(), isEmpty);
         expect(identical(walk.values<PrOpener>().single, ambient), isTrue);
+        expect(_gated(walk).delivery, isNull);
+        expect(
+          walk.values<MountedSubstationSeed>().single.githubPollingConfigured,
+          isTrue,
+          reason: 'polling composition is independent of delivery identity',
+        );
       },
     );
 
@@ -997,7 +1029,8 @@ void main() {
         reason: 'an opener without ops must stay commit-only',
       );
 
-      // Both halves: the substation re-provides a delivery-bound bundle.
+      // Both halves plus the seed's explicit delivery identity: the
+      // substation re-provides a delivery-bound bundle.
       final both = _mount(
         ProviderScope(
           child: sdk.RawAssetGrid(
@@ -1007,7 +1040,11 @@ void main() {
                 create: (_) => GitOps(SystemGitRunner()),
                 child: Provider<PrOpener>.value(
                   _FakePrOpener(),
-                  child: SubstationSeed(name: 'mine', root: '../mine'),
+                  child: SubstationSeed(
+                    name: 'mine',
+                    root: '../mine',
+                    app: _appIdentity,
+                  ),
                 ),
               ),
             ],
@@ -1026,6 +1063,75 @@ void main() {
             'one gated bundle per substation, and this tree mounts one '
             'substation',
       );
+    });
+
+    test('app and ambient opener replacement and removal rederive the '
+        'effective descendant delivery posture', () async {
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      late _HostState host;
+      final firstOpener = _FakePrOpener();
+      final secondOpener = _FakePrOpener();
+
+      Seed describe({
+        required GitHubAppConfig? app,
+        required PrOpener? opener,
+      }) {
+        final substation = SubstationSeed(
+          name: 'mine',
+          root: '../mine',
+          app: app,
+        );
+        return opener == null
+            ? substation
+            : Provider<PrOpener>.value(opener, child: substation);
+      }
+
+      final root = owner.mountRoot(
+        ProviderScope(
+          child: sdk.RawAssetGrid(
+            root: '/home/me/station',
+            assets: [
+              Provider<GitOps>(
+                create: (_) => GitOps(SystemGitRunner()),
+                child: _Host(
+                  onCreate: (state) => host = state,
+                  describe: () =>
+                      describe(app: _appIdentity, opener: firstOpener),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      await _settle(owner);
+      expect(_gated(_Walk(root)).delivery, isNotNull);
+
+      host.swap(() => describe(app: _appIdentity, opener: secondOpener));
+      await _settle(owner);
+      var walk = _Walk(root);
+      expect(identical(walk.values<PrOpener>().single, secondOpener), isTrue);
+      expect(_gated(walk).delivery, isNotNull);
+
+      host.swap(() => describe(app: _appIdentity, opener: null));
+      await _settle(owner);
+      walk = _Walk(root);
+      expect(walk.values<PrOpener>(), isEmpty);
+      expect(_gated(walk).delivery, isNull);
+
+      host.swap(() => describe(app: null, opener: secondOpener));
+      await _settle(owner);
+      walk = _Walk(root);
+      expect(identical(walk.values<PrOpener>().single, secondOpener), isTrue);
+      expect(
+        _gated(walk).delivery,
+        isNull,
+        reason: 'removing the app disables delivery without masking the opener',
+      );
+
+      host.swap(() => describe(app: _appIdentity, opener: secondOpener));
+      await _settle(owner);
+      expect(_gated(_Walk(root)).delivery, isNotNull);
     });
 
     test('FLIPS posture when the opener provider appears later: the watch '
@@ -1243,9 +1349,16 @@ class _NonGitSeed extends StatelessSeed {
       sdk.Substation(name, root, assets: const [sdk.SubstationWork()]);
 }
 
-/// The standard seed stack under test (no app identity — the opener, when
-/// present, is ambient).
-Seed _seedStack() => SubstationSeed(name: 'mine', root: '../mine');
+/// The standard delivery-enabled seed stack under test. Its App identity opts
+/// into GitHub delivery composition; the opener itself remains ambient.
+Seed _seedStack() =>
+    SubstationSeed(name: 'mine', root: '../mine', app: _appIdentity);
+
+const _appIdentity = GitHubAppConfig(
+  appId: '1234',
+  installationId: '99',
+  privateKeyVar: 'MY_APP_KEY',
+);
 
 _Walk _mount(Seed root) => _mountOwned(root).walk;
 
