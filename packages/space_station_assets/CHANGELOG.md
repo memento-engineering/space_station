@@ -2,6 +2,8 @@
 
 ## 0.5.0-dev.6
 
+- Changed: floors `grid_assets` at `^0.7.0-dev.6` and `github_grid_assets` at `^0.2.0-dev.6` (the wave
+  carrying power_station#367 lane-level infra classification and #368 the shared poll coordinator).
 - Changed: a `SubstationSeed` with no app is undelivered by construction — the ambient PR opener is no
   longer applied to it (space-c0u, #127); the hot-restart work-policy refresh is kept on the refreshable
   wiring (space-hjf, #126).

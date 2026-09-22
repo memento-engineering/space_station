@@ -39,10 +39,10 @@ dependencies:
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # 0.1.1-dev.1 is the compatible asset-pack release wave for grid_assets
   # 0.7.0-dev.1.
-  github_grid_assets: ^0.2.0-dev.5
+  github_grid_assets: ^0.2.0-dev.6
   # 0.7.0-dev.3 requires PrimeCommand to receive the composing station's
   # runner invocation so its pointers reach that station's JIT runner.
-  grid_assets: ^0.7.0-dev.5
+  grid_assets: ^0.7.0-dev.6
   # 0.6.0-dev.4 is the first release exporting the admission noun and setter.
   grid_cli: ^0.6.0-dev.4
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
