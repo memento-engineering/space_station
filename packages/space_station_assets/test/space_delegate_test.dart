@@ -150,6 +150,26 @@ void main() {
   );
 
   test(
+    'the live station owns one GitHub poll coordinator above the fan-out',
+    () {
+      final armed = delegate(live: true);
+      addTearDown(armed.dispose);
+      expect(
+        _mountedValues<github.GitHubPollCoordinator>(_Author(armed)),
+        hasLength(1),
+      );
+
+      final offline = delegate();
+      addTearDown(offline.dispose);
+      expect(
+        _mountedValues<github.GitHubPollCoordinator>(_Author(offline)),
+        isEmpty,
+        reason: 'an offline mount owns no live polling resources',
+      );
+    },
+  );
+
+  test(
     'the worktree provisioner is provided as the station-lifetime REPOSITORY '
     'the substation assets watch, and absence is the offline posture',
     () {

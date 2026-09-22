@@ -100,6 +100,9 @@ void main() {
     expect(
       station.describe(snapshot.registry),
       'build codex  ·  spec frontier  ·  critic mid  ·  gather cheap',
+      reason:
+          'full value equality makes EnvironmentRegistry.nameOf choose '
+          'the alphabetically earlier builtin codex over custom codex-frontier',
     );
     expect(snapshot.preferences, hasLength(5));
     expect(

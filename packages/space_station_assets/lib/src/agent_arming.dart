@@ -99,11 +99,13 @@ const AgentEnvironment kCheapEnvironment = AgentEnvironment(
 );
 
 /// The org's BUILD environment: codex on its own native pin (a claude tier name
-/// 400s on codex), driven through the ACP adapter.
+/// 400s on codex), driven through the ACP adapter. Lane health fingerprints the
+/// real Codex agent rather than the `npx` launcher.
 const AgentEnvironment kCodexFrontierEnvironment = AgentEnvironment(
   base: EnvBaseStandalone(),
   command: 'npx',
   args: ['-y', '@agentclientprotocol/codex-acp@1.6.2'],
+  pathCheck: 'codex',
   env: {'INITIAL_AGENT_MODE': 'agent-full-access'},
   promptMode: PromptMode.none,
   target: InferenceTarget.providerManaged,
