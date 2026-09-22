@@ -751,12 +751,19 @@ void main() {
 
     test('resident assembly owns and disposes its policy delegate', () {
       final source = File('lib/src/up_command.dart').readAsStringSync();
+      final delegateSource = File(
+        'lib/src/space_delegate.dart',
+      ).readAsStringSync();
       final construction = source.indexOf('final workPolicyDelegate =');
       final assembly = source.indexOf(
         'workRuntime = await assembleStationWork(',
       );
+      final refreshableWiring = source.indexOf(
+        'RefreshableStationWorkWiring.fromRuntime(',
+      );
       expect(construction, greaterThanOrEqualTo(0));
       expect(construction, lessThan(assembly));
+      expect(assembly, lessThan(refreshableWiring));
       expect(
         source,
         contains('overrideFor: workPolicyDelegate.circuitOverrideFor'),
@@ -765,12 +772,66 @@ void main() {
         source,
         contains(
           'registryBuilderWithSpecWriter: '
-          '(appendNote, writeSpecifyAuthoredSpec) =>\n'
-          '            workPolicyDelegate.buildWorkRegistry(\n'
-          '              appendNote,\n'
-          '              writeSpecifyAuthoredSpec,\n'
-          '            ),',
+          '(appendNote, writeAuthoredSpec) {\n'
+          '          appendWorkNote = appendNote;\n'
+          '          writeSpecifyAuthoredSpec = writeAuthoredSpec;\n'
+          '          return workPolicyDelegate.buildWorkRegistry(\n'
+          '            appendNote,\n'
+          '            writeAuthoredSpec,\n'
+          '          );\n'
+          '        },',
         ),
+      );
+      expect(
+        RegExp(
+          r'RefreshableStationWorkWiring\.fromRuntime\(',
+        ).allMatches(source),
+        hasLength(1),
+      );
+      expect(
+        RegExp(r'assembleStationWork\(').allMatches(source),
+        hasLength(1),
+        reason: 'the runtime remains the sole stable-resource assembly',
+      );
+      expect(
+        source,
+        contains(
+          'policyBuilder: (delegate) => DelegateWorkPolicy(\n'
+          '        resolver: CodeCircuitResolver(\n'
+          '          kCodeCircuit,\n'
+          '          overrideFor: delegate.circuitOverrideFor,\n'
+          '        ),\n'
+          '        registry: delegate.buildWorkRegistry(\n'
+          '          appendWorkNote,\n'
+          '          writeSpecifyAuthoredSpec,\n'
+          '        ),\n'
+          '      ),',
+        ),
+      );
+      expect(source, contains('wiring: refreshableWorkWiring,'));
+      expect(
+        RegExp(r'wiring: workRuntime\.wiring').allMatches(source),
+        isEmpty,
+        reason: 'every delegate generation receives the refreshable wrapper',
+      );
+      for (final resource in const [
+        'notifier',
+        'services',
+        'processLeaseVendor',
+        'transport',
+        'trajectory',
+        'relayRegistrar',
+      ]) {
+        expect(
+          delegateSource,
+          contains('$resource: wiring.$resource,'),
+          reason: '$resource is copied from the sole runtime assembly',
+        );
+      }
+      expect(
+        delegateSource,
+        isNot(contains('void dispose()')),
+        reason: 'refreshable wiring is non-owning',
       );
       expect(source, isNot(contains('registryBuilder:')));
       expect(source, isNot(contains('registry: buildCodeRegistry()')));

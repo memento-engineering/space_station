@@ -82,6 +82,7 @@ import 'package:grid_sdk/grid_sdk.dart'
         GridHandle,
         GridHookError,
         GridStateStore,
+        SpecifyAuthoredSpecWriter,
         StationWorkRuntime,
         StoreLocator,
         StoreRefusal,
@@ -722,6 +723,8 @@ class UpCommand extends Command<int> {
       runnerName: runnerName,
       resolution: trajectoryResolution,
     );
+    late NoteAppender appendWorkNote;
+    late SpecifyAuthoredSpecWriter writeSpecifyAuthoredSpec;
     final StationWorkRuntime workRuntime;
     try {
       workRuntime = await assembleStationWork(
@@ -734,11 +737,14 @@ class UpCommand extends Command<int> {
           kCodeCircuit,
           overrideFor: workPolicyDelegate.circuitOverrideFor,
         ),
-        registryBuilderWithSpecWriter: (appendNote, writeSpecifyAuthoredSpec) =>
-            workPolicyDelegate.buildWorkRegistry(
-              appendNote,
-              writeSpecifyAuthoredSpec,
-            ),
+        registryBuilderWithSpecWriter: (appendNote, writeAuthoredSpec) {
+          appendWorkNote = appendNote;
+          writeSpecifyAuthoredSpec = writeAuthoredSpec;
+          return workPolicyDelegate.buildWorkRegistry(
+            appendNote,
+            writeAuthoredSpec,
+          );
+        },
         dryRun: config.dryRun,
         maxConcurrentWork: maxAgents,
         transport: diagnostics,
@@ -764,6 +770,20 @@ class UpCommand extends Command<int> {
       err('space up: $e');
       return 1;
     }
+
+    final refreshableWorkWiring = RefreshableStationWorkWiring.fromRuntime(
+      workRuntime.wiring,
+      policyBuilder: (delegate) => DelegateWorkPolicy(
+        resolver: CodeCircuitResolver(
+          kCodeCircuit,
+          overrideFor: delegate.circuitOverrideFor,
+        ),
+        registry: delegate.buildWorkRegistry(
+          appendWorkNote,
+          writeSpecifyAuthoredSpec,
+        ),
+      ),
+    );
 
     // --- space_station AS A SEED: author the delegate, ARMED with the work
     // wiring. The coded org is hardcoded in its build; only the operator's
@@ -797,7 +817,7 @@ class UpCommand extends Command<int> {
       appended: config.appended,
       agentConfig: agentConfig,
       harnesses: harnesses,
-      wiring: workRuntime.wiring,
+      wiring: refreshableWorkWiring,
       provisioner: workRuntime.git,
       // The harness's OWN resolved posture, never a second copy of the rule:
       // the assembly applied the dry-run force and appended its own station

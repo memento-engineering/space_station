@@ -116,6 +116,121 @@ typedef SpaceDelegateFactory =
 /// station-owned write chokepoint.
 typedef NoteAppender = Future<void> Function(String beadId, String line);
 
+/// The work policy one delegate generation derives for work first mounted by
+/// that generation.
+///
+/// The resolver and registry are immutable policy values. Their collaborators
+/// remain owned by the station work runtime; this value owns and disposes
+/// nothing.
+final class DelegateWorkPolicy {
+  /// Creates one delegate generation's work policy.
+  const DelegateWorkPolicy({required this.resolver, required this.registry});
+
+  /// Selects and roots a session for a work bead.
+  final sdk.SessionResolver resolver;
+
+  /// Resolves the circuits and capabilities used by that session.
+  final sdk.CapabilityRegistry registry;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DelegateWorkPolicy &&
+          identical(resolver, other.resolver) &&
+          identical(registry, other.registry);
+
+  @override
+  int get hashCode =>
+      Object.hash(identityHashCode(resolver), identityHashCode(registry));
+}
+
+/// Builds the policy belonging to [delegate]'s generation.
+typedef DelegateWorkPolicyBuilder =
+    DelegateWorkPolicy Function(SpaceDelegate delegate);
+
+/// Stable station-work resources whose policy can be rebound per delegate.
+///
+/// This wrapper is non-owning. [fromRuntime] copies the runtime-owned handles
+/// once, and [bind] returns an ordinary wiring value over those same handles
+/// with only its resolver and registry replaced. It opens no connection and
+/// deliberately exposes no disposal surface.
+final class RefreshableStationWorkWiring extends sdk.StationWorkWiring {
+  RefreshableStationWorkWiring._({
+    required super.notifier,
+    required super.services,
+    required super.resolver,
+    required super.registry,
+    required super.processLeaseVendor,
+    required super.transport,
+    required super.trajectory,
+    required super.relayRegistrar,
+    required DelegateWorkPolicyBuilder policyBuilder,
+  }) : _policyBuilder = policyBuilder;
+
+  /// Copies the stable resources from the runtime-owned [wiring] once.
+  factory RefreshableStationWorkWiring.fromRuntime(
+    sdk.StationWorkWiring wiring, {
+    required DelegateWorkPolicyBuilder policyBuilder,
+  }) => RefreshableStationWorkWiring._(
+    notifier: wiring.notifier,
+    services: wiring.services,
+    resolver: wiring.resolver,
+    registry: wiring.registry,
+    processLeaseVendor: wiring.processLeaseVendor,
+    transport: wiring.transport,
+    trajectory: wiring.trajectory,
+    relayRegistrar: wiring.relayRegistrar,
+    policyBuilder: policyBuilder,
+  );
+
+  final DelegateWorkPolicyBuilder _policyBuilder;
+
+  /// Derives the policy belonging to [delegate]'s generation.
+  DelegateWorkPolicy buildPolicy(SpaceDelegate delegate) =>
+      _policyBuilder(delegate);
+
+  /// Binds [policy] over the stable runtime-owned resources.
+  sdk.StationWorkWiring bind(DelegateWorkPolicy policy) =>
+      sdk.StationWorkWiring(
+        notifier: notifier,
+        services: services,
+        resolver: policy.resolver,
+        registry: policy.registry,
+        processLeaseVendor: processLeaseVendor,
+        transport: transport,
+        trajectory: trajectory,
+        relayRegistrar: relayRegistrar,
+      );
+}
+
+final class _DelegateWorkPolicyAssets extends SingleChildStatelessSeed {
+  const _DelegateWorkPolicyAssets({required this.policy});
+
+  final DelegateWorkPolicy policy;
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) =>
+      InheritedSeed<DelegateWorkPolicy>(value: policy, child: child);
+}
+
+final class _PolicyBoundStationWork extends SingleChildStatelessSeed {
+  const _PolicyBoundStationWork({required this.wiring});
+
+  final RefreshableStationWorkWiring wiring;
+
+  @override
+  Seed buildWithChild(TreeContext context, Seed child) {
+    final policy = context
+        .dependOnInheritedSeedOfExactType<DelegateWorkPolicy>();
+    if (policy == null) {
+      throw StateError(
+        '_PolicyBoundStationWork requires an inherited DelegateWorkPolicy',
+      );
+    }
+    return sdk.StationWork(wiring: wiring.bind(policy), child: child);
+  }
+}
+
 /// The memento org's ONE GitHub App delivery identity — the `grid-assets` App
 /// installed on `memento-engineering` (`repository_selection: all`), carried as
 /// a VALUE by each of the seven org substations [SpaceDelegate.substations]
@@ -539,6 +654,9 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// work — offline tests, `space status` fixtures).
   final sdk.StationWorkWiring? wiring;
 
+  late final DelegateWorkPolicy _delegateWorkPolicy =
+      (wiring! as RefreshableStationWorkWiring).buildPolicy(this);
+
   /// The `RawAssetGrid` root — the grid's home (v3 §3). `space` overrides the
   /// base's throwing [sdk.GridDelegate.root] so the default-build machinery and
   /// this wholesale [build] agree on one home.
@@ -673,7 +791,12 @@ class SpaceDelegate extends sdk.GridDelegate {
                     // ARMED: StationWork provides the engine's ambient
                     // work-axis stack above the fan-out (the runGrid→engine
                     // bridge, tg-yl8); UNARMED: H2's authoring-only shape.
-                    if (armedWiring != null)
+                    if (armedWiring
+                        case final RefreshableStationWorkWiring
+                            refreshable) ...[
+                      _DelegateWorkPolicyAssets(policy: _delegateWorkPolicy),
+                      _PolicyBoundStationWork(wiring: refreshable),
+                    ] else if (armedWiring != null)
                       sdk.StationWork(wiring: armedWiring),
                   ],
                   child: sdk.Substations(
