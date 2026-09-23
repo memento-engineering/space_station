@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0-dev.6
+
+- Changed: floors `grid_assets` at `^0.7.0-dev.6` and `github_grid_assets` at `^0.2.0-dev.6` (the wave
+  carrying power_station#367 lane-level infra classification and #368 the shared poll coordinator).
+- Changed: `SpaceDelegate.build` now mounts the station's ONE
+  `GitHubPollCoordinatorAssets` above the substation fan-out, so every downstream station composing
+  this delegate — lunar included — inherits that single poll coordinator. Mounting a second one
+  anywhere beneath it is a DEFECT: a GitHub App installation has one request allowance and the
+  repositories polled under it spend it between them, so two coordinators split that allowance
+  again and neither the serialization nor the start-spacing applies across the repositories that
+  actually share the budget.
+- Changed: `kCodexFrontierEnvironment` adopts the builtin `pathCheck: codex`, so lane probes fingerprint the actual
+  Codex agent instead of `npx`; full transport parity keeps the rendered label `codex`, and
+  downstream stations such as lunar that reuse `kCodexLadder` see that same label on Codex
+  build/spec seats, while `kMidLadder` and `kCheapLadder` remain on the unchanged Claude transport.
+- Changed: a `SubstationSeed` with no app is undelivered by construction — the ambient PR opener is no
+  longer applied to it (space-c0u, #127); the hot-restart work-policy refresh is kept on the refreshable
+  wiring (space-hjf, #126).
+
 ## 0.5.0-dev.5
 
 - Changed: floors `grid_assets` at `^0.7.0-dev.5` and `github_grid_assets` at `^0.2.0-dev.5` — the wave

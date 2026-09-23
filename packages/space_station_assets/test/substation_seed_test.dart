@@ -51,7 +51,7 @@ Seed _stationTick({required Seed child}) => InheritedSeed<sdk.TrajectoryConfig>(
   value: const sdk.TrajectoryConfig().withAppendedObligationQueries([
     github.GitHubReconciliationQuery(),
   ]),
-  child: child,
+  child: github.GitHubPollCoordinatorAssets(child: child),
 );
 
 void main() {

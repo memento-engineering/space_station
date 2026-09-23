@@ -788,6 +788,7 @@ class SpaceDelegate extends sdk.GridDelegate {
                     // provider — an offline mount arms no live seat.
                     if (trajectory != null)
                       _StationTrajectoryAssets(config: trajectory),
+                    if (live) const github.GitHubPollCoordinatorAssets(),
                     // ARMED: StationWork provides the engine's ambient
                     // work-axis stack above the fan-out (the runGrid→engine
                     // bridge, tg-yl8); UNARMED: H2's authoring-only shape.

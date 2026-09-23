@@ -92,6 +92,8 @@ void main() {
         expect(value.env, claude.env);
       }
       final codex = kBuiltinEnvironments['codex']!;
+      expect(kCodexFrontierEnvironment.pathCheck, 'codex');
+      expect(kCodexFrontierEnvironment.pathCheck, codex.pathCheck);
       expect(kCodexFrontierEnvironment.roleAsset, codex.roleAsset);
       expect(kCodexFrontierEnvironment.primeMode, codex.primeMode);
       expect(kCodexFrontierEnvironment.flattened, codex.flattened);
