@@ -116,8 +116,9 @@ dart run --enable-vm-service \            # ARM a LIVE station (builds + opens P
   space:space up --no-dry-run \           #   service open for hot-reload + lenny debugging
   --grid-home "$(pwd)"                    # ABSOLUTE path required (relative = loud refusal).
                                           # NO --substation flags for the memento roster: it is
-                                          # CODED in SpaceDelegate.build() (space-6ds; currently
-                                          # genesis, the_grid, power_station, space_station, lenny, decisions)
+                                          # CODED in SpaceDelegate.build() (space-6ds; currently genesis,
+                                          # the_grid, power_station, space_station, lenny, butcher,
+                                          # decisions, memento-engineering)
                                           # and naming a coded substation REFUSES; flags APPEND only.
 dart run space:space down                 # tear down
 ```
@@ -168,10 +169,12 @@ type is a new rubric pack, not new machinery. The **coupled skill+command** patt
 vended deterministic Command like `space search`, instead of inferring the operation) is
 `ADR-0001, draft`.
 
-**The roster.** The coded drive set is the six memento org substations — `genesis`, `the_grid`,
-`power_station`, `space_station` (self), `lenny`, and `decisions` — authored as literal substations in
+**The roster.** The coded drive set is the eight memento org substations — `genesis`, `the_grid`,
+`power_station`, `space_station` (self), `lenny`, `butcher`, `decisions`, and `memento-engineering`
+(the org register, prefix `org`) — authored as literal substations in
 `SpaceDelegate.substations()` (space-6ds; the subclass override point a downstream station
-composes). `decisions`/`expression` join when they gain bead stores. **Coexistence:** the_grid's
+composes). Every one of them is ARMED: it carries the org App identity and a live GitHub poll, and
+`butcher` alone also carries a workflow-run intake rule for its CI workflow. **Coexistence:** the_grid's
 work store is the shared `tg` Dolt server (gc coexists on `ga-*`); the A37 split fences session
 writes to the `houston` state store so the work store stays read-only.
 

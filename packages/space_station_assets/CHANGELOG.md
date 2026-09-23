@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Added: `butcher` — the org's Dart mutation-testing workspace
+  (`memento-engineering/butcher`) — is the eighth coded org substation in
+  `SpaceDelegate.substations`, at the umbrella sibling `../butcher` with the
+  prefix default standing (its store mints `butcher-`). It is armed like its
+  siblings: the `kMementoOrgApp` identity plus a live `githubPoll`. It is also
+  the first org substation to carry a `workflowRuns` rule — one rule for
+  `.github/workflows/ci.yaml`, whose validation plan is that workflow's own fast
+  leg (resolve, analyze, `dart test -x slow` in `packages/butcher` and the plain
+  selections in `packages/butcher_process` and `packages/butcher_report`), which
+  stays well inside the critic lane's budget.
+  Downstream: a station that overrides the roster inherits the new substation
+  through its `super.substations(...)` call and needs no edit; a station that
+  pins the org roster by name, prefix or length updates those expectations.
+
 ## 0.5.0-dev.6
 
 - Changed: floors `grid_assets` at `^0.7.0-dev.6` and `github_grid_assets` at `^0.2.0-dev.6` (the wave

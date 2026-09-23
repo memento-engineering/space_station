@@ -77,7 +77,7 @@ void main() {
     final bySubstation = seatEnvironmentsBySubstation(
       SpaceDelegate(gridRoot: '/home/memento/space_station'),
     );
-    expect(bySubstation.keys, hasLength(7));
+    expect(bySubstation.keys, hasLength(8));
     final power = bySubstation['power_station']!;
     final genesis = bySubstation['genesis']!;
 

@@ -19,7 +19,7 @@ import 'package:space_station_assets/src/substation_seed.dart';
 import 'package:test/test.dart';
 
 /// space-6ds round 3 (`the_grid/docs/SCRATCH-memento-composition.md` §3,
-/// evolved): the memento org is authored as seven literal substations in
+/// evolved): the memento org is authored as eight literal substations in
 /// [SpaceDelegate.substations] (the roster BUILD HOOK) and `--substation`
 /// flags APPEND new substations after it — no merge, no override-by-name (Fork B
 /// as re-ruled: the roster changes in CODE — space edits [substations]; a
@@ -40,6 +40,7 @@ void main() {
     'power_station',
     'space_station',
     'lenny',
+    'butcher',
     'decisions',
     'memento-engineering',
   };
@@ -52,7 +53,7 @@ void main() {
       );
 
   group('SpaceDelegate.build — the hardcoded memento org (Fork A)', () {
-    test('a BARE delegate mounts the seven coded substations at their '
+    test('a BARE delegate mounts the eight coded substations at their '
         '../<repo> '
         'umbrella siblings with the coded prefixes — the roster is the tree, '
         'not config', () {
@@ -65,6 +66,7 @@ void main() {
           'power_station',
           'space_station',
           'lenny',
+          'butcher',
           'decisions',
           'memento-engineering',
         ],
@@ -80,14 +82,15 @@ void main() {
           'power_station': '$umbrella/power_station',
           'space_station': '$umbrella/space_station',
           'lenny': '$umbrella/lenny',
+          'butcher': '$umbrella/butcher',
           'decisions': '$umbrella/decisions',
           'memento-engineering': '$umbrella/memento-engineering',
         },
       );
       // Prefix is a SEPARATE axis from the name wherever the store mints
       // differently (the_grid → `tg-…`, power_station → `pow-…`,
-      // space_station → `space-…`, decisions → `dec-…`); genesis and lenny
-      // default to their names (round 3).
+      // space_station → `space-…`, decisions → `dec-…`); genesis, lenny and
+      // butcher default to their names (round 3).
       expect(
         {for (final s in substations) s.name: s.prefix},
         {
@@ -96,6 +99,7 @@ void main() {
           'power_station': 'pow',
           'space_station': 'space',
           'lenny': 'lenny',
+          'butcher': 'butcher',
           'decisions': 'dec',
           'memento-engineering': 'org',
         },
@@ -121,12 +125,13 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
         'tgdog',
         'extra',
       ]);
-      expect(substations[7].root, '/work/td');
+      expect(substations[8].root, '/work/td');
       expect(substations.last.prefix, 'ex');
     });
   });
@@ -142,6 +147,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
       ]);
@@ -161,7 +167,7 @@ void main() {
       );
     });
 
-    test('the identity binds PER SUBSTATION: seven identity providers, each '
+    test('the identity binds PER SUBSTATION: eight identity providers, each '
         'over '
         'exactly one substation scope — none above the fan-out, no name-keyed '
         'map', () {
@@ -170,7 +176,7 @@ void main() {
       final root = owner.mountRoot(_Author(delegate()));
       owner.flush();
       final identities = _branches<GitHubAppConfig>(root);
-      expect(identities, hasLength(7));
+      expect(identities, hasLength(8));
       expect(identities.map((branch) => branch.value).toSet(), {
         kMementoOrgApp,
       });
@@ -178,20 +184,20 @@ void main() {
         expect(
           _branches<sdk.SubstationScope>(identity),
           hasLength(1),
-          reason: 'an identity above the fan-out would carry all seven scopes',
+          reason: 'an identity above the fan-out would carry all eight scopes',
         );
       }
     });
 
-    test('a downstream override inherits the seven org substations WITH the '
+    test('a downstream override inherits the eight org substations WITH the '
         'memento App through super, and its own substation keeps its own '
         'identity', () {
       final substations = _capturedSubstations(
         _DownstreamDelegate(gridRoot: '/home/me/my_station'),
       );
-      expect(substations, hasLength(8));
+      expect(substations, hasLength(9));
       expect(
-        substations.take(7).map((substation) => substation.app),
+        substations.take(8).map((substation) => substation.app),
         everyElement(kMementoOrgApp),
       );
       expect(substations.last.name, 'mine');
@@ -213,6 +219,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
       ]);
@@ -237,17 +244,72 @@ void main() {
       }
     });
 
+    test('butcher is ARMED like its siblings — the org App, a live poll at the '
+        'org and the butcher repository, at the umbrella sibling root, with the '
+        'prefix default standing', () {
+      final butcher = _capturedSubstations(
+        delegate(),
+      ).singleWhere((substation) => substation.name == 'butcher');
+
+      // The AUTHORED value: `p.join(umbrella, 'butcher')` — the SDK resolves
+      // it against the ambient GridRoot, which the mounted roots map above
+      // pins at `$umbrella/butcher`.
+      expect(butcher.root, '../butcher');
+      expect(butcher.prefix, isNull, reason: 'the store mints `butcher-`');
+      expect(butcher.app, kMementoOrgApp);
+      final poll = butcher.githubPoll!;
+      expect(poll.owner, 'memento-engineering');
+      expect(poll.repository, 'butcher');
+      expect(poll.substation, 'butcher');
+      expect(poll.installationId, kMementoOrgApp.installationId);
+    });
+
+    test('butcher carries exactly ONE workflow-run intake rule, at the yaml '
+        'spelling of its CI workflow, whose plan stays inside the critic lane '
+        'budget — and no sibling carries one', () {
+      final substations = _capturedSubstations(delegate());
+      expect(
+        {
+          for (final substation in substations)
+            if ((substation.githubPoll?.workflowRuns ?? const []).isNotEmpty)
+              substation.name,
+        },
+        {'butcher'},
+        reason: 'a rule on a workflow nobody watches mints noise',
+      );
+
+      final rule = substations
+          .singleWhere((substation) => substation.name == 'butcher')
+          .githubPoll!
+          .workflowRuns
+          .single;
+      // `.yaml`, not `.yml`: the path is matched EXACTLY against the run's own
+      // workflow path, so the wrong spelling arms nothing.
+      expect(rule.workflowPath, '.github/workflows/ci.yaml');
+      expect(rule.validationPlan, contains('dart pub get'));
+      expect(rule.validationPlan, contains('dart analyze'));
+      expect(
+        rule.validationPlan,
+        contains('cd packages/butcher && dart test -x slow'),
+      );
+      expect(rule.validationPlan, contains('cd packages/butcher_process'));
+      expect(rule.validationPlan, contains('cd packages/butcher_report'));
+      // The slow selection spawns real process trees on three platforms; it
+      // would overrun the lane, latch `failed` and strand the session.
+      expect(rule.validationPlan, isNot(contains('-t slow')));
+    });
+
     test(
-      'a downstream override inherits the seven polling org substations '
+      'a downstream override inherits the eight polling org substations '
       'through super and keeps its own substation on its own installation',
       () {
         final substations = _capturedSubstations(
           _DownstreamDelegate(gridRoot: '/home/me/my_station'),
         );
-        expect(substations, hasLength(8));
+        expect(substations, hasLength(9));
         expect(
           substations
-              .take(7)
+              .take(8)
               .map((substation) => substation.githubPoll?.installationId),
           everyElement('152260260'),
         );
@@ -275,6 +337,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
         'mine',
@@ -292,11 +355,11 @@ void main() {
         'offline mount (construct → mount → dispose)', () {
       final scopes = codedRosterOf(_DownstreamDelegate.new);
       expect(scopes.map((s) => s.name), contains('mine'));
-      expect(scopes, hasLength(8));
+      expect(scopes, hasLength(9));
     });
 
     test('coded roster snapshot keeps scopes and reports every GitHub polling '
-        'substation — the seven org substations, plus a downstream substation '
+        'substation — the eight org substations, plus a downstream substation '
         'that polls', () {
       final base = codedRosterSnapshotOf(SpaceDelegate.new, gridRoot: gridHome);
       expect(base.scopes.map((scope) => scope.name), [
@@ -305,6 +368,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
       ]);
@@ -314,6 +378,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
       });
@@ -329,6 +394,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
         'mine',
@@ -339,6 +405,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
         'mine',
@@ -377,7 +444,7 @@ void main() {
         expect(substation.root, '/work/td');
         expect(substation.prefix, 'td');
         // The parsed substation carries the standard substation stack — it
-        // mounts clean after the coded seven.
+        // mounts clean after the coded eight.
         final substations = _mountedSubstations(
           _Author(delegate(appended: config.appended)),
         );
@@ -387,6 +454,7 @@ void main() {
           'power_station',
           'space_station',
           'lenny',
+          'butcher',
           'decisions',
           'memento-engineering',
           'tgdog',

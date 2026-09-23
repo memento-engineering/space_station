@@ -10,7 +10,7 @@ import 'package:test/test.dart';
 
 /// The LAST-MILE composition: `space search` is the VENDED `grid_assets`
 /// Command curried with space's resident-station context, so the roster it
-/// searches is the BAKED memento org ([SpaceDelegate.build]) — seven coded
+/// searches is the BAKED memento org ([SpaceDelegate.build]) — eight coded
 /// substations at their `../<repo>` umbrella siblings, resolved against the grid
 /// home. The Command's own behaviour is pinned in power_station; this suite
 /// pins the WIRING. Offline: a Fake bead source + a Fake directory probe +
@@ -71,7 +71,7 @@ void main() {
     return (runner: runner, out: out, err: err);
   }
 
-  test('`search --json <q>` searches the BAKED memento roster — the seven '
+  test('`search --json <q>` searches the BAKED memento roster — the eight '
       'coded '
       'substations, in tree order, at their ../<repo> siblings, with the coded '
       'prefixes', () async {
@@ -93,6 +93,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
       ],
@@ -106,6 +107,7 @@ void main() {
         'power_station': 'pow',
         'space_station': 'space',
         'lenny': 'lenny',
+        'butcher': 'butcher',
         'decisions': 'dec',
         'memento-engineering': 'org',
       },
@@ -125,6 +127,7 @@ void main() {
         'power_station',
         'space_station',
         'lenny',
+        'butcher',
         'decisions',
         'memento-engineering',
       ],
