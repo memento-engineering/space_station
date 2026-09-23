@@ -36,9 +36,9 @@
 ///
 /// space_station IS memento's grid instance
 /// (`the_grid/docs/SCRATCH-memento-composition.md`, Nico 2026-07-10): the
-/// seven org substations — genesis, the_grid, power_station, space_station,
-/// lenny, decisions, memento-engineering — are authored as literal substations
-/// in
+/// eight org substations — genesis, the_grid, power_station, space_station,
+/// lenny, butcher, decisions, memento-engineering — are authored as literal
+/// substations in
 /// [SpaceDelegate.substations], the ONE
 /// definition both [SpaceDelegate.build] and `space up`'s off-tree machinery
 /// consume (the old hand-kept mirror in `up_command.dart` is gone — the
@@ -233,7 +233,7 @@ final class _PolicyBoundStationWork extends SingleChildStatelessSeed {
 
 /// The memento org's ONE GitHub App delivery identity — the `grid-assets` App
 /// installed on `memento-engineering` (`repository_selection: all`), carried as
-/// a VALUE by each of the seven org substations [SpaceDelegate.substations]
+/// a VALUE by each of the eight org substations [SpaceDelegate.substations]
 /// authors.
 ///
 /// PER SUBSTATION, never per station (pow-1rn): this is a shared value, not a
@@ -241,7 +241,7 @@ final class _PolicyBoundStationWork extends SingleChildStatelessSeed {
 /// substation fan-out; a substation delivering under a DIFFERENT App simply
 /// passes a
 /// different [GitHubAppConfig], which is how a downstream station's private
-/// substations keep their own App while inheriting these seven through
+/// substations keep their own App while inheriting these eight through
 /// `super`.
 ///
 /// ONE STATION OWNS DELIVERY FOR THESE REPOS. Whichever station runs resident
@@ -803,7 +803,7 @@ class SpaceDelegate extends sdk.GridDelegate {
                   child: sdk.Substations(
                     substations: [
                       // ── The CODED roster (space-6ds): the [substations]
-                      // build hook — memento's seven org substations unless
+                      // build hook — memento's eight org substations unless
                       // a subclass overrides. ──
                       ...substations(context, configuration),
                       // ── The append layer (Fork B): `--substation` values
@@ -824,7 +824,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// signature (the template-method idiom the substrate is built on): the
   /// station's coded drive set as authored [SubstationSeed] values, spread
   /// into [build] BEFORE the [appended] layer. Base = the
-  /// memento-engineering org, seven substations at their [umbrella]-relative
+  /// memento-engineering org, eight substations at their [umbrella]-relative
   /// roots.
   ///
   /// Returns `List<Seed>` (space-47t): a seed is the COMPOSED wrapper, and
@@ -843,7 +843,7 @@ class SpaceDelegate extends sdk.GridDelegate {
   ) => [
     // ONE STATION OWNS INTAKE FOR THESE REPOS. Each substation below carries
     // its own
-    // `githubPoll` VALUE, so whichever station runs resident polls all seven
+    // `githubPoll` VALUE, so whichever station runs resident polls all eight
     // of them; two resident stations over the same umbrella would intake the
     // same
     // issues twice. The one-grid-per-machine rule already fences that, exactly
@@ -934,6 +934,40 @@ class SpaceDelegate extends sdk.GridDelegate {
         repository: 'lenny',
         substation: 'lenny',
         installationId: '152260260',
+      ),
+    ),
+    // the mutation-testing tool (memento-engineering/butcher) — a public pub
+    // workspace of three members. Its store mints `butcher-`, so the prefix
+    // default (prefix ?? name) holds and no prefix is authored.
+    //
+    // The ONLY org substation carrying a workflow-run intake rule: a red CI
+    // run on `main` mints a bug carrying the plan below, which is the
+    // workflow's own FAST leg (resolve, analyze, the three members' quick
+    // selections) and nothing else. The slow selection — the suites that spawn
+    // real subprocesses — is deliberately excluded: the critic lane's budget is
+    // roughly ten minutes, and a plan that overruns it latches `failed`, mints
+    // no gate and strands the session invisibly.
+    SubstationSeed(
+      name: 'butcher',
+      root: p.join(umbrella, 'butcher'),
+      app: kMementoOrgApp,
+      githubPoll: github.GitHubReconcilerConfig(
+        owner: 'memento-engineering',
+        repository: 'butcher',
+        substation: 'butcher',
+        installationId: '152260260',
+        workflowRuns: [
+          github.WorkflowRunIntakeRule(
+            // The yaml spelling is the repository's own; a rule pointing at
+            // `ci.yml` would match nothing and arm nothing.
+            workflowPath: '.github/workflows/ci.yaml',
+            validationPlan:
+                'dart pub get && dart analyze && '
+                '(cd packages/butcher && dart test -x slow) && '
+                '(cd packages/butcher_process && dart test) && '
+                '(cd packages/butcher_report && dart test)',
+          ),
+        ],
       ),
     ),
     // the decision record (memento-engineering/decisions); its store mints
