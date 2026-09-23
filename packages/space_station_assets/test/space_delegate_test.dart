@@ -150,14 +150,40 @@ void main() {
   );
 
   test(
-    'the live station owns one GitHub poll coordinator above the fan-out',
+    'the live station owns ONE GitHub poll coordinator above the fan-out, and '
+    'every armed substation scope resolves that same instance',
     () {
       final armed = delegate(live: true);
       addTearDown(armed.dispose);
+      final owner = TreeOwner();
+      addTearDown(owner.dispose);
+      final root = owner.mountRoot(_Author(armed));
+      owner.flush();
+      final coordinators = _valuesUnder<github.GitHubPollCoordinator>(root);
       expect(
-        _mountedValues<github.GitHubPollCoordinator>(_Author(armed)),
+        coordinators,
         hasLength(1),
+        reason:
+            'an installation has ONE request allowance and the repositories '
+            'on it spend it between them, so a second coordinator anywhere in '
+            'this tree would split the budget again',
       );
+      final scopes = _branchesUnder<sdk.SubstationScope>(root);
+      expect(
+        scopes,
+        isNotEmpty,
+        reason: 'the fan-out mounts the coded roster under this rung',
+      );
+      for (final scope in scopes) {
+        expect(
+          scope.getInheritedSeedOfExactType<github.GitHubPollCoordinator>(),
+          same(coordinators.single),
+          reason:
+              'the rung sits ABOVE the fan-out, so substation '
+              '${scope.value.name} resolves the station instance rather than '
+              'one of its own',
+        );
+      }
 
       final offline = delegate();
       addTearDown(offline.dispose);
