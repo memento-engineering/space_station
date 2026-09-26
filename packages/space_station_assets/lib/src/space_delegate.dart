@@ -69,6 +69,9 @@ import 'package:grid_assets/grid_assets.dart'
         MountEligibilityAssets,
         PackagedAssetLoader,
         ProcessEnvironmentProbe,
+        RelayAssets,
+        RelayInferenceRunner,
+        RelayReadTools,
         SeatPreference,
         SeatEnvironments,
         SpecAgentEnvironment,
@@ -478,6 +481,8 @@ class SpaceDelegate extends sdk.GridDelegate {
     this.provisioner,
     this.trajectoryConfig,
     this.githubSelfTrust,
+    this.relayTools,
+    this.relayRunner,
     this.live = false,
   }) : _bootAgentConfig = agentConfig,
        _bootHarnesses = harnesses,
@@ -630,6 +635,28 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// tree.
   final github.GitHubSelfTrust? githubSelfTrust;
 
+  /// The protective relay's READ-ONLY tool surface — the four injected readers
+  /// (`worktree.read`, `flares.read`, `telemetry.read`, `gates.read`) the
+  /// vended `RelayAssets` inspects a due session through. Implementations are
+  /// DI; the seat's tool NAMES stay tree values on its `RelayAgentEnvironment`.
+  ///
+  /// [build] composes `RelayAssets` immediately below whichever `StationWork`
+  /// it mounts ONLY when this and [relayRunner] are both supplied: the seed
+  /// takes its collaborators by construction, so a delegate armed without
+  /// them mounts no relay seed at all and the engine's `relay.absent` path
+  /// stays armed — absence declared in the tree, the same posture as every
+  /// other unsupplied collaborator here. Null (the default) is the offline
+  /// authoring mount and every boot that has not yet threaded a relay
+  /// implementation through.
+  final RelayReadTools? relayTools;
+
+  /// The protective relay's ONE inference seam — the injected runner the
+  /// vended `RelayAssets` answers a brief through (grid_assets'
+  /// `RelayInferenceRunner`, deliberately NOT the process-level inference
+  /// runner: a relay that cannot answer must THROW so the engine escalates it).
+  /// Composed with [relayTools]; see that field for the mount rule.
+  final RelayInferenceRunner? relayRunner;
+
   /// The LIVE posture VALUE — the boot's one remaining say on effects
   /// (space-47t; the old `gitOps`/`prOpener` reference params are retired,
   /// space-00g subsumed). False (dry-run, the default): [build] authors NO
@@ -697,6 +724,12 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// the tree, visible in the projection.
   /// Each substation's fold-child is [sdk.SubstationWork] — the substation the
   /// engine's `WorkList` binds into when the station is armed (Track J).
+  /// **The protective relay is ARMED here too** (space-8pq): grid_assets'
+  /// vended `RelayAssets` is mounted immediately below the station-work seed
+  /// in both the refreshable and the plain branch, built from the injected
+  /// [relayTools] and [relayRunner]. Presence stays the downstream station's
+  /// exact `RelayAgentEnvironment.provider()` in [seatSeeds]; with no exact
+  /// seat above it the seed mounts nothing and the tree is unchanged.
   /// FOLLOW-ON (space-7uc): the committee's rubric/extension asset root
   /// belongs in these `assets:` slots too, so the critic resolves
   /// `grid_assets/extension` from the DECLARED path rather than a cwd walk-up
@@ -712,6 +745,24 @@ class SpaceDelegate extends sdk.GridDelegate {
     final trajectory = trajectoryConfig;
     final selfTrust = githubSelfTrust;
     final registry = _bootHarnesses ?? environments(context, configuration);
+    // The station's protective relay (space-8pq): grid_assets' vended
+    // `RelayAssets`, constructed here from its injected collaborators and
+    // mounted IMMEDIATELY BELOW the station-work seed in BOTH branches below.
+    // Presence (the exact `RelayAgentEnvironment` a downstream station's
+    // seatSeeds mounts above the roster — lunar's station-wide relay) and
+    // arming (this seed) are composed independently: the seed subscribes to
+    // the seat above it and watches the `RelayRegistrar` StationWork provides
+    // in this delegate's own ProviderScope, mounts exactly one
+    // `RelayAgentObserver` under the seat's ceiling, and with no exact seat
+    // mounts NOTHING — a station declaring none is unchanged. A relay is a
+    // TREE seed (power_station#adr-0006 D2: mount at the root or wrap one
+    // substation, nearest ancestor wins); it is never a delegate-contributed
+    // roster value. Both collaborators absent ⇒ no seed, by construction.
+    final relayTools = this.relayTools;
+    final relayRunner = this.relayRunner;
+    final relay = relayTools != null && relayRunner != null
+        ? RelayAssets(tools: relayTools, runner: relayRunner)
+        : null;
     // The availability registry (tg-1fa2.5): the substation assets OBSERVE their
     // collaborators (`watch<T>()` — nullable always, absence is a posture),
     // and a watch MISS parks a pending registration with the enclosing
@@ -792,13 +843,22 @@ class SpaceDelegate extends sdk.GridDelegate {
                     // ARMED: StationWork provides the engine's ambient
                     // work-axis stack above the fan-out (the runGrid→engine
                     // bridge, tg-yl8); UNARMED: H2's authoring-only shape.
+                    // The relay rides immediately below EITHER branch — the
+                    // refreshable dispatch is ratified
+                    // (space_station#hot-restart-refreshes-new-work-policy)
+                    // and a wiring subtype would fall into the plain branch
+                    // and silently lose the refresh, so the relay is placed
+                    // by this build, never by a wiring type.
                     if (armedWiring
                         case final RefreshableStationWorkWiring
                             refreshable) ...[
                       _DelegateWorkPolicyAssets(policy: _delegateWorkPolicy),
                       _PolicyBoundStationWork(wiring: refreshable),
-                    ] else if (armedWiring != null)
+                      if (relay != null) relay,
+                    ] else if (armedWiring != null) ...[
                       sdk.StationWork(wiring: armedWiring),
+                      if (relay != null) relay,
+                    ],
                   ],
                   child: sdk.Substations(
                     substations: [
