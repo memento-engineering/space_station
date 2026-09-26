@@ -93,6 +93,7 @@ import 'package:path/path.dart' as p;
 import '../station_asset_registry.dart';
 import 'agent_arming.dart';
 import 'assets_command.dart' show kSpaceRunner;
+import 'station_relay.dart';
 import 'substation_seed.dart';
 
 /// The factory signature the runner compositions construct a station's
@@ -635,27 +636,36 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// tree.
   final github.GitHubSelfTrust? githubSelfTrust;
 
-  /// The protective relay's READ-ONLY tool surface — the four injected readers
-  /// (`worktree.read`, `flares.read`, `telemetry.read`, `gates.read`) the
-  /// vended `RelayAssets` inspects a due session through. Implementations are
-  /// DI; the seat's tool NAMES stay tree values on its `RelayAgentEnvironment`.
+  /// An OVERRIDE of the protective relay's READ-ONLY tool surface — the four
+  /// readers (`worktree.read`, `flares.read`, `telemetry.read`, `gates.read`)
+  /// the vended `RelayAssets` inspects a due session through. The seat's tool
+  /// NAMES stay tree values on its `RelayAgentEnvironment`.
   ///
-  /// [build] composes `RelayAssets` immediately below whichever `StationWork`
-  /// it mounts ONLY when this and [relayRunner] are both supplied: the seed
-  /// takes its collaborators by construction, so a delegate armed without
-  /// them mounts no relay seed at all and the engine's `relay.absent` path
-  /// stays armed — absence declared in the tree, the same posture as every
-  /// other unsupplied collaborator here. Null (the default) is the offline
-  /// authoring mount and every boot that has not yet threaded a relay
-  /// implementation through.
+  /// Null (the default, and every production boot) means the STATION'S OWN
+  /// readers ([StationRelayReads]) built from what this delegate already
+  /// holds: the roster roots its [build] mounts, the state store under
+  /// [gridRoot], and the flare tail attached to the armed wiring's
+  /// diagnostics reporter. The relay is therefore composed whenever work is
+  /// armed, and a downstream station's `RelayAgentEnvironment` presence ALONE
+  /// mounts its observer (space-8pq). A test injects Fakes here.
   final RelayReadTools? relayTools;
 
-  /// The protective relay's ONE inference seam — the injected runner the
-  /// vended `RelayAssets` answers a brief through (grid_assets'
+  /// An OVERRIDE of the protective relay's ONE inference seam (grid_assets'
   /// `RelayInferenceRunner`, deliberately NOT the process-level inference
   /// runner: a relay that cannot answer must THROW so the engine escalates it).
-  /// Composed with [relayTools]; see that field for the mount rule.
+  ///
+  /// Null (the default) means the station's own seam: a real harness process
+  /// on a [live] arm ([ProcessRelayInference]) and, on a dry run, a seam that
+  /// spawns nothing and refuses every brief ([DryRunRelayInference]) — the
+  /// relay stays mounted, so a due session escalates as `relay.error` rather
+  /// than `relay.absent`.
   final RelayInferenceRunner? relayRunner;
+
+  /// The station's own readers, built once per delegate on the first armed
+  /// [build] (so every rebuild hands `RelayAssets` the same identity and the
+  /// mounted observer is never churned). Null until then, and whenever
+  /// [relayTools] overrides them.
+  StationRelayReads? _stationRelayReads;
 
   /// The LIVE posture VALUE — the boot's one remaining say on effects
   /// (space-47t; the old `gitOps`/`prOpener` reference params are retired,
@@ -726,10 +736,11 @@ class SpaceDelegate extends sdk.GridDelegate {
   /// engine's `WorkList` binds into when the station is armed (Track J).
   /// **The protective relay is ARMED here too** (space-8pq): grid_assets'
   /// vended `RelayAssets` is mounted immediately below the station-work seed
-  /// in both the refreshable and the plain branch, built from the injected
-  /// [relayTools] and [relayRunner]. Presence stays the downstream station's
-  /// exact `RelayAgentEnvironment.provider()` in [seatSeeds]; with no exact
-  /// seat above it the seed mounts nothing and the tree is unchanged.
+  /// in both the refreshable and the plain branch, over the station's own
+  /// collaborators ([StationRelayReads] + the posture's inference seam) unless
+  /// [relayTools] / [relayRunner] override them. Presence stays the
+  /// downstream station's exact `RelayAgentEnvironment.provider()` in
+  /// [seatSeeds]; with no exact seat above it the seed mounts nothing.
   /// FOLLOW-ON (space-7uc): the committee's rubric/extension asset root
   /// belongs in these `assets:` slots too, so the critic resolves
   /// `grid_assets/extension` from the DECLARED path rather than a cwd walk-up
@@ -746,8 +757,8 @@ class SpaceDelegate extends sdk.GridDelegate {
     final selfTrust = githubSelfTrust;
     final registry = _bootHarnesses ?? environments(context, configuration);
     // The station's protective relay (space-8pq): grid_assets' vended
-    // `RelayAssets`, constructed here from its injected collaborators and
-    // mounted IMMEDIATELY BELOW the station-work seed in BOTH branches below.
+    // `RelayAssets`, constructed here ([_stationRelay]) and mounted
+    // IMMEDIATELY BELOW the station-work seed in BOTH branches below.
     // Presence (the exact `RelayAgentEnvironment` a downstream station's
     // seatSeeds mounts above the roster — lunar's station-wide relay) and
     // arming (this seed) are composed independently: the seed subscribes to
@@ -757,12 +768,20 @@ class SpaceDelegate extends sdk.GridDelegate {
     // mounts NOTHING — a station declaring none is unchanged. A relay is a
     // TREE seed (power_station#adr-0006 D2: mount at the root or wrap one
     // substation, nearest ancestor wins); it is never a delegate-contributed
-    // roster value. Both collaborators absent ⇒ no seed, by construction.
-    final relayTools = this.relayTools;
-    final relayRunner = this.relayRunner;
-    final relay = relayTools != null && relayRunner != null
-        ? RelayAssets(tools: relayTools, runner: relayRunner)
-        : null;
+    // roster value. The collaborators are the STATION'S OWN (the roster roots
+    // below, the state store, the diagnostics reporter's flare tail), so the
+    // seed is composed on EVERY armed build and presence alone decides.
+    final roster = <Seed>[
+      // ── The CODED roster (space-6ds): the [substations] build hook —
+      // memento's eight org substations unless a subclass overrides. ──
+      ...substations(context, configuration),
+      // ── The append layer (Fork B): `--substation` values fan out AFTER
+      // the roster, in flag order. ──
+      ...appended,
+    ];
+    final relay = armedWiring == null
+        ? null
+        : _stationRelay(armedWiring, roster);
     // The availability registry (tg-1fa2.5): the substation assets OBSERVE their
     // collaborators (`watch<T>()` — nullable always, absence is a posture),
     // and a watch MISS parks a pending registration with the enclosing
@@ -860,17 +879,7 @@ class SpaceDelegate extends sdk.GridDelegate {
                       if (relay != null) relay,
                     ],
                   ],
-                  child: sdk.Substations(
-                    substations: [
-                      // ── The CODED roster (space-6ds): the [substations]
-                      // build hook — memento's eight org substations unless
-                      // a subclass overrides. ──
-                      ...substations(context, configuration),
-                      // ── The append layer (Fork B): `--substation` values
-                      // fan out AFTER the roster, in flag order. ──
-                      ...appended,
-                    ],
-                  ),
+                  child: sdk.Substations(substations: roster),
                 ),
               ),
             ],
@@ -878,6 +887,24 @@ class SpaceDelegate extends sdk.GridDelegate {
         ],
       ),
     );
+  }
+
+  /// The station's relay-arming seed over [wiring] and the [roster] this
+  /// build mounts: the [relayTools] / [relayRunner] overrides when supplied,
+  /// otherwise the station's own [StationRelayReads] (created once per
+  /// delegate) and the posture's inference seam.
+  RelayAssets _stationRelay(sdk.StationWorkWiring wiring, List<Seed> roster) {
+    final tools =
+        relayTools ??
+        (_stationRelayReads ??= StationRelayReads(
+          worktreeRoots: relayWorktreeRootsOf(roster, gridRoot: gridRoot),
+          stateStoreRoot: sdk.GridStateStore.forGridRoot(gridRoot).runtimeDir,
+          flares: StationFlareTail.attachedTo(wiring.transport),
+        )).tools;
+    final runner =
+        relayRunner ??
+        (live ? const ProcessRelayInference() : const DryRunRelayInference());
+    return RelayAssets(tools: tools, runner: runner);
   }
 
   /// THE roster hook — a BUILD METHOD, decomposed out of [build] with its

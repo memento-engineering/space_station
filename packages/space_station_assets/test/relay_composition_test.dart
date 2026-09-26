@@ -3,27 +3,36 @@
 /// `SpaceDelegate.build` composes grid_assets' vended `RelayAssets` immediately
 /// below whichever `StationWork` it mounts — the refreshable
 /// `_PolicyBoundStationWork` branch AND the plain `sdk.StationWork` branch —
-/// from the delegate's injected read tools and inference runner. Presence is
-/// the downstream station's own exact `RelayAgentEnvironment.provider()` above
-/// the roster (lunar's station-wide relay); arming is this seed. The two are
-/// composed independently, so:
+/// over the STATION'S OWN collaborators (`StationRelayReads` and the posture's
+/// inference seam) unless a test overrides them. Presence is the downstream
+/// station's own exact `RelayAgentEnvironment.provider()` above the roster
+/// (lunar's station-wide relay); arming is this seed, composed on every armed
+/// build. So:
 ///
 ///  * AC-1 — with lunar-shaped presence, EACH branch registers exactly ONE
 ///    `RelayAgentObserver` at the seat's ceiling on the registrar `StationWork`
-///    provides; with no exact presence, NEITHER registers anything and the
-///    tree is unchanged.
+///    provides — with injected Fakes AND with nothing injected at all (the
+///    production constructor shape every `up` uses); with no exact presence,
+///    NEITHER registers anything.
 ///  * AC-2 — an already-expired live session driven through the REAL
 ///    `WorkSessionLiveness` reaches the mounted relay once, persists one UTC
 ///    next-observation horizon, closes no session and emits no `relay.absent`
-///    flare — the exact signal the unmounted station escalated every epoch.
+///    flare — the exact signal the unmounted station escalated every epoch —
+///    including through the station's own readers over a real worktree.
 ///
-/// Zero I/O, Fakes not mocks: a recording registrar, recording readers, a
-/// canned-answer runner, a recording transport and the engine's own
-/// `buildFakes()` services. Every tree owner, relay registration, liveness
-/// coordinator, notifier and delegate is disposed exactly once.
+/// Fakes, not mocks: a recording registrar, recording readers, a canned-answer
+/// runner, a recording transport, recording git/bd runners and the engine's
+/// own `buildFakes()` services. Only the station-reader AC-2 case touches the
+/// filesystem (a temp worktree it deletes). Every tree owner, relay
+/// registration, liveness coordinator, notifier and delegate is disposed
+/// exactly once.
 library;
 
-import 'package:beads_dart/beads_dart.dart' show GraphSnapshot;
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:beads_dart/beads_dart.dart'
+    show BdResult, BdRunner, GraphSnapshot;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart'
     show
@@ -41,7 +50,9 @@ import 'package:grid_assets/grid_assets.dart'
         kRelayToolAllowList;
 import 'package:grid_engine/grid_engine.dart' as engine;
 import 'package:grid_engine/testing.dart' show Fakes, buildFakes;
+import 'package:grid_runtime/grid_runtime.dart' show GitRunResult, GitRunner;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
+import 'package:path/path.dart' as p;
 import 'package:space_station_assets/space_station_assets.dart';
 import 'package:test/test.dart';
 
@@ -139,6 +150,46 @@ final class _RecordingTransport implements engine.ExplorationTransport {
       flares.add((name, Map<String, String>.of(data)));
 }
 
+/// Answers `git log -1` with one canned commit record and records the calls.
+final class _CannedGit implements GitRunner {
+  final List<({String workingDirectory, List<String> args})> calls =
+      <({String workingDirectory, List<String> args})>[];
+
+  @override
+  Future<GitRunResult> run({
+    required String workingDirectory,
+    required List<String> args,
+  }) async {
+    calls.add((workingDirectory: workingDirectory, args: args));
+    return const GitRunResult(
+      exitCode: 0,
+      output: 'abc1234 feat: halfway\x002026-09-23T10:00:00-05:00\n',
+    );
+  }
+}
+
+/// Answers every bd call with one enveloped list and records the argv.
+final class _CannedBd implements BdRunner {
+  _CannedBd(this.rows);
+
+  final List<Map<String, Object?>> rows;
+  final List<List<String>> calls = <List<String>>[];
+
+  @override
+  Future<BdResult> run(
+    List<String> args, {
+    Duration? timeout,
+    String? stdin,
+  }) async {
+    calls.add(args);
+    return BdResult(
+      exitCode: 0,
+      stdout: jsonEncode({'schema_version': 1, 'data': rows}),
+      stderr: '',
+    );
+  }
+}
+
 // ── The delegate fixture ─────────────────────────────────────────────────────
 
 /// The real `SpaceDelegate` with lunar's presence declaration either mounted
@@ -151,6 +202,9 @@ final class _RelayDelegate extends SpaceDelegate {
     super.relayTools,
     super.relayRunner,
   }) : super(gridRoot: '/grid/home');
+
+  // `live` stays false (the dry-run default): an offline mount probes no
+  // machine, so the seat's environment resolves from the boot registry.
 
   final bool relayPresence;
 
@@ -211,8 +265,8 @@ _Rig _arm({
   required _WiringShape shape,
   required bool relayPresence,
   required engine.RelayRegistrar registrar,
-  required RelayReadTools tools,
-  required RelayInferenceRunner runner,
+  RelayReadTools? tools,
+  RelayInferenceRunner? runner,
 }) {
   final fakes = buildFakes();
   final notifier = engine.JoinedSnapshotNotifier(engine.JoinedSnapshot.empty());
@@ -357,41 +411,90 @@ void main() {
       });
     }
 
-    test(
-      'a delegate armed without relay collaborators composes no relay seed',
-      () {
-        // Implementations are DI (the seed takes them by construction); a boot
-        // that has not threaded them through mounts no RelayAssets at all, so
-        // the tree is byte-for-byte the pre-relay tree — absence, not a relay
-        // that cannot answer.
-        final fakes = buildFakes();
-        final notifier = engine.JoinedSnapshotNotifier(
-          engine.JoinedSnapshot.empty(),
-        );
-        addTearDown(notifier.dispose);
-        final policy = _policy();
-        final registrar = _RecordingRegistrar();
-        final delegate = _RelayDelegate(
-          relayPresence: true,
-          wiring: sdk.StationWorkWiring(
-            notifier: notifier,
-            services: fakes.ctx,
-            resolver: policy.resolver,
-            registry: policy.registry,
-            relayRegistrar: registrar,
-          ),
-        );
-        addTearDown(delegate.dispose);
-        final owner = TreeOwner();
-        addTearDown(owner.dispose);
-        final root = owner.mountRoot(_Author(delegate));
-        owner.flush();
+    for (final shape in _WiringShape.values) {
+      test(
+        '${shape.name} wiring: a delegate built with NO injected relay '
+        'collaborators (the production constructor shape) still registers '
+        'exactly one RelayAgentObserver from the station\'s own services',
+        () {
+          // This is the shape `up` builds through SpaceDelegateFactory: no
+          // relayTools, no relayRunner. Presence alone must arm the relay.
+          final registrar = _RecordingRegistrar();
+          final rig = _arm(
+            shape: shape,
+            relayPresence: true,
+            registrar: registrar,
+          );
 
-        expect(_branchesOf<RelayAssets>(root), isEmpty);
-        expect(_branchesOf<sdk.StationWork>(root), hasLength(1));
+          expect(_branchesOf<RelayAssets>(rig.root), hasLength(1));
+          expect(registrar.mounted, hasLength(1));
+          final registration = registrar.live.single;
+          expect(registration.ceiling, 1);
+          final observer = registration.observer;
+          expect(observer, isA<RelayAgentObserver>());
+          observer as RelayAgentObserver;
+          expect(observer.seat, kLunarShapedRelay);
+          expect(observer.environment, kCheapEnvironment);
+          // The station's own seams: a dry-run delegate (live: false) spawns no
+          // inference, so its relay answers by REFUSING (relay.error), never by
+          // an absent relay (relay.absent).
+          expect(observer.runner, isA<DryRunRelayInference>());
+
+          rig.owner.dispose();
+          expect(registration.disposals, 1);
+        },
+      );
+
+      test('${shape.name} wiring: with NO injected collaborators and no '
+          'presence, nothing registers', () {
+        final registrar = _RecordingRegistrar();
+        final rig = _arm(
+          shape: shape,
+          relayPresence: false,
+          registrar: registrar,
+        );
+
+        expect(_branchesOf<RelayAssets>(rig.root), hasLength(1));
         expect(registrar.mounted, isEmpty);
-      },
-    );
+        rig.owner.dispose();
+      });
+    }
+
+    test('the station\'s own readers keep ONE identity across builds, so a '
+        'rebuild never churns the mounted observer', () {
+      final fakes = buildFakes();
+      final notifier = engine.JoinedSnapshotNotifier(
+        engine.JoinedSnapshot.empty(),
+      );
+      addTearDown(notifier.dispose);
+      final policy = _policy();
+      final registrar = _RecordingRegistrar();
+      final delegate = _RelayDelegate(
+        relayPresence: true,
+        wiring: sdk.StationWorkWiring(
+          notifier: notifier,
+          services: fakes.ctx,
+          resolver: policy.resolver,
+          registry: policy.registry,
+          relayRegistrar: registrar,
+        ),
+      );
+      addTearDown(delegate.dispose);
+      final first = TreeOwner();
+      addTearDown(first.dispose);
+      first.mountRoot(_Author(delegate));
+      first.flush();
+      final second = TreeOwner();
+      addTearDown(second.dispose);
+      second.mountRoot(_Author(delegate));
+      second.flush();
+
+      expect(registrar.mounted, hasLength(2));
+      final a = registrar.mounted[0].observer as RelayAgentObserver;
+      final b = registrar.mounted[1].observer as RelayAgentObserver;
+      expect(b.tools, same(a.tools));
+      expect(b.runner, same(a.runner));
+    });
   });
 
   group('AC-2 an expired session reaches the mounted relay', () {
@@ -487,6 +590,92 @@ void main() {
         rig.owner.dispose();
       });
     }
+
+    test('station readers: an expired session is inspected through the '
+        'station\'s own worktree, flare, telemetry and gate reads, and its '
+        'absorb persists one horizon with no relay.absent flare', () async {
+      final home = await Directory.systemTemp.createTemp('relay-ac2-');
+      addTearDown(() => home.delete(recursive: true));
+      final worktree = p.join(
+        home.path,
+        'power_station',
+        '.grid',
+        'worktrees',
+        'power_station',
+        workBeadId,
+      );
+      await File(p.join(worktree, 'lib', 'a.dart')).create(recursive: true);
+      final git = _CannedGit();
+      final bd = _CannedBd([
+        {
+          'id': 'houston-gate1',
+          'title': 'grid gate $sessionId@$workBeadId/review/route',
+          'status': 'open',
+          'priority': 2,
+          'issue_type': 'gate',
+          'metadata': {'blocks': sessionId, 'reason': 'a critic returned F'},
+        },
+      ]);
+      final tail = StationFlareTail(clock: () => clock);
+      tail.flare('step.gated', {'nodePath': '$workBeadId/review/route'});
+      tail.flare('step.gated', {'nodePath': 'pow-other/review/route'});
+      final reads = StationRelayReads(
+        worktreeRoots: [
+          (
+            substation: 'power_station',
+            root: p.join(home.path, 'power_station'),
+          ),
+        ],
+        stateStoreRoot: p.join(home.path, '.grid'),
+        flares: tail,
+        git: git,
+        stateStoreBd: bd,
+      );
+
+      final transport = _RecordingTransport();
+      final horizons = <(String, DateTime)>[];
+      final liveness = engine.WorkSessionLiveness(
+        writeHorizon: (id, at) async => horizons.add((id, at)),
+        transport: transport,
+        clock: () => clock,
+      );
+      addTearDown(liveness.dispose);
+      final runner = _CannedRelayRunner(absorbInAnHour);
+      final rig = _arm(
+        shape: _WiringShape.refreshable,
+        relayPresence: true,
+        registrar: liveness,
+        tools: reads.tools,
+        runner: runner,
+      );
+
+      liveness.refresh(expiredSession());
+      liveness.activate();
+      liveness.onFencedTick();
+      for (var i = 0; i < 20 && runner.briefs.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await drain();
+
+      // Every station read ran against the real sources ...
+      expect(git.calls.single.workingDirectory, worktree);
+      expect(bd.calls.single, containsAllInOrder(['list', '-t', 'gate']));
+      expect(bd.calls.single, contains('blocks=$sessionId'));
+      // ... and their evidence reached the ONE inference the relay made.
+      expect(runner.briefs, hasLength(1));
+      final brief = runner.briefs.single.task;
+      expect(brief, contains('lib/a.dart'));
+      expect(brief, contains('abc1234 feat: halfway'));
+      expect(brief, contains('houston-gate1'));
+      expect(brief, contains('$workBeadId/review/route'));
+      expect(brief, isNot(contains('pow-other')));
+      // One UTC horizon, no flare, no bd write through the engine chokepoint.
+      expect(horizons, [(sessionId, clock.add(const Duration(hours: 1)))]);
+      expect(transport.flares, isEmpty);
+      expect(rig.fakes.runner.calls, isEmpty);
+
+      rig.owner.dispose();
+    });
 
     test(
       'control: the same rig with no presence escalates relay.absent',

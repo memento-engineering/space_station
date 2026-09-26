@@ -9,29 +9,31 @@
 - Fixed (space-8pq): `SpaceDelegate.build` now composes grid_assets' vended
   `RelayAssets` immediately below the station-work seed in BOTH branches — the
   refreshable `_PolicyBoundStationWork` branch and the plain `sdk.StationWork`
-  branch — so a downstream station whose `seatSeeds` mounts an exact
-  `RelayAgentEnvironment` (lunar's station-wide relay) gets exactly one
-  `RelayAgentObserver` registered on the `RelayRegistrar` that station work
-  provides, under that seat's own ceiling, and a station declaring none mounts
-  nothing and is unchanged. Before this, nothing in the shared runner composed
-  the relay seed at all, so the engine's liveness watchdog escalated every
-  expired or paused session as `relay.absent` ("no relay is mounted") however
-  the station was armed. The relay is a TREE seed placed by this build, never a
-  wiring subtype (a subtype would fall into the plain branch and silently lose
-  the ratified hot-restart policy refresh) and never a delegate-contributed
-  roster value.
-  The seed's collaborators are DI: `SpaceDelegate` takes an optional
-  `relayTools` (`RelayReadTools`) and `relayRunner` (`RelayInferenceRunner`),
-  and composes the seed only when BOTH are supplied — a boot that has not yet
-  threaded a relay implementation through mounts no seed, so its tree is
-  byte-for-byte the previous one. `SpaceDelegateFactory` and `UpCommand` are
-  untouched; threading production implementations through the boot is a
-  follow-on. Proved offline by `test/relay_composition_test.dart` (one observer
-  per branch with lunar-shaped presence, none without it; an already-expired
-  session driven through the real `WorkSessionLiveness` yields one inference,
-  one UTC horizon write, no close and no `relay.absent` flare).
-  Downstream: a subclass forwarding `super.*` constructor parameters is
-  unaffected; to arm a relay it passes `relayTools:` and `relayRunner:`.
+  branch — on EVERY armed build, over the station's OWN collaborators, so a
+  downstream station whose `seatSeeds` mounts an exact `RelayAgentEnvironment`
+  (lunar's station-wide relay) gets exactly one `RelayAgentObserver` mounted on
+  the `RelayRegistrar` station work provides, under that seat's own ceiling,
+  with no new constructor argument. A station declaring no relay mounts no
+  observer. Before this, nothing in the shared runner composed the relay seed,
+  so the engine's liveness watchdog escalated every expired or paused session
+  as `relay.absent` ("no relay is mounted") however the station was armed. The
+  relay is a TREE seed placed by this build, never a wiring subtype (a subtype
+  would fall into the plain branch and silently lose the hot-restart policy
+  refresh) and never a delegate-contributed roster value.
+- Added (space-8pq): `StationRelayReads`, the station's `RelayReadTools` —
+  `worktree.read` over the session worktree found under the roster's roots
+  (`relayWorktreeRootsOf`), `flares.read` over `StationFlareTail` (a bounded
+  in-process tail attached once to the resident's `StationDiagnosticsReporter`
+  through its `addTransport` seam), `telemetry.read` over the worktree's FT-2
+  usage envelopes, and `gates.read` over the open `gate` bead blocking the
+  session in the state store. `ProcessRelayInference` runs the seat's
+  environment through `spawnFor` in a throwaway directory on a live arm;
+  `DryRunRelayInference` spawns nothing on a dry run and refuses, so a due
+  session escalates as `relay.error` instead of `relay.absent`. Every reader
+  and both seams THROW when they cannot answer, so a relay that cannot see
+  escalates rather than absorbing blind. `SpaceDelegate`'s optional
+  `relayTools` / `relayRunner` are now OVERRIDES of these defaults (tests
+  inject Fakes); `SpaceDelegateFactory` and `UpCommand` are unchanged.
 
 - Added: `butcher` — the org's Dart mutation-testing workspace
   (`memento-engineering/butcher`) — is the eighth coded org substation in

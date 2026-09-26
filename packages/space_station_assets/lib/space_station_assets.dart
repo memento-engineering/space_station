@@ -122,6 +122,18 @@ export 'src/space_delegate.dart'
         codedSeatEnvironmentsOf,
         codedStationNameOf,
         kMementoOrgApp;
+// The station's OWN relay collaborators (space-8pq): the read tools and the
+// inference seam SpaceDelegate.build hands grid_assets' RelayAssets, so a
+// downstream station's RelayAgentEnvironment presence alone arms a relay.
+export 'src/station_relay.dart'
+    show
+        DryRunRelayInference,
+        ProcessRelayInference,
+        RelayWorktreeRoot,
+        StationFlareTail,
+        StationRelayReads,
+        kRelayWorktreeWalkSkips,
+        relayWorktreeRootsOf;
 // The launchd supervisor behind `up --daemon` / `down --daemon` (space-5lh):
 // the label derivation, the ProgramArguments surgery, the arm-time
 // environment capture, the pre-arm start check, the plist renderer, and the
