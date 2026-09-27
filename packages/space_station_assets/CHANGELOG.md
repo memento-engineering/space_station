@@ -6,6 +6,15 @@
 
 ## Unreleased
 
+- Fixed: `ProcessRelayInference` now accepts only the Claude harness, removes
+  the autonomous-seat bypass flag, refuses caller-supplied boundary controls,
+  and launches with Claude's restricted safe mode and an explicitly empty
+  built-in tool set. The child inherits no parent environment: the runner
+  routes the host through `grid_runtime`'s `AgentEnvAllowlist`, narrows it to
+  noncredential runtime values, adds only the exact temporary-directory value,
+  and starts with parent inheritance disabled. Relay evidence is now enclosed
+  in explicit untrusted-JSON markers, delimiter-shaped data is escaped, and
+  briefs outside grid_assets' self-contained relay shape fail before launch.
 - Fixed (space-8pq): `SpaceDelegate.build` now composes grid_assets' vended
   `RelayAssets` immediately below the station-work seed in BOTH branches — the
   refreshable `_PolicyBoundStationWork` branch and the plain `sdk.StationWork`
