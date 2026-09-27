@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0-dev.7
+
+- Adopt the 2026-09-27 dev waves: grid_engine 0.4.0-dev.13 (mount-slot accounting, the session void verb, teardown reads on the writer store, zombie-PR guard) and grid_assets 0.7.0-dev.7 / github_grid_assets 0.2.0-dev.7 (ci-rework cap gate under the state store prefix, classify verdict for an unresolvable baseline, hard-block only on merge-base regressions). The space dev counter tracks the grid_assets wave counter.
+
 ## Unreleased
 
 - Added: `butcher` — the org's Dart mutation-testing workspace

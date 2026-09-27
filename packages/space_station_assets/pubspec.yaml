@@ -1,7 +1,7 @@
 name: space_station_assets
 # ADR-0003 D1 source amendment: published dependencies resolve from hosted
 # constraints because hosted sibling dependencies cannot mix with git sources.
-version: 0.5.0-dev.6
+version: 0.5.0-dev.7
 description: >-
   The reusable core of memento's grid station — SpaceDelegate (the station
   authored as a Seed), the resident verbs (up/down/status), and the composed
@@ -21,7 +21,7 @@ dependencies:
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
-  beads_dart: ^0.3.0-dev.2
+  beads_dart: ^0.3.0-dev.7
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint. Hosted source
   # is required because published siblings depend on each other from hosted;
@@ -39,12 +39,12 @@ dependencies:
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # 0.1.1-dev.1 is the compatible asset-pack release wave for grid_assets
   # 0.7.0-dev.1.
-  github_grid_assets: ^0.2.0-dev.6
+  github_grid_assets: ^0.2.0-dev.7
   # 0.7.0-dev.3 requires PrimeCommand to receive the composing station's
   # runner invocation so its pointers reach that station's JIT runner.
-  grid_assets: ^0.7.0-dev.6
+  grid_assets: ^0.7.0-dev.7
   # 0.6.0-dev.4 is the first release exporting the admission noun and setter.
-  grid_cli: ^0.6.0-dev.4
+  grid_cli: ^0.6.0-dev.7
   # 0.2.1 is the matching hosted diagnostics-contract floor. This direct
   # dependency pins the contract version; code imports the public grid_cli
   # barrel rather than introducing a second import surface.
@@ -55,7 +55,7 @@ dependencies:
   # Hosted release constraint (ADR-0003 D1 source amendment): a producer
   # change is adopted DELIBERATELY by bumping this constraint.
   # rc.23 is the wave-16 engine floor.
-  grid_engine: ^0.4.0-dev.3
+  grid_engine: ^0.4.0-dev.13
   # The dev-mode host: `GridExplorationHost` (the sole registrar of
   # `ext.exploration.*`) + the optional `ReassembleTool` a JIT station composes
   # so `space reload` has an extension to invoke.
@@ -69,7 +69,7 @@ dependencies:
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # rc.16 is the required wave-16 runtime floor.
-  grid_runtime: ^0.2.1-dev.2
+  grid_runtime: ^0.2.1-dev.9
   # The public authoring surface of the grid (ADR-0008 D2): `GridDelegate` +
   # the composition Seeds space authors its station as (`SpaceDelegate`, the v3
   # code-as-config model — `the_grid/docs/SCRATCH-station-config-model.md`).
@@ -78,7 +78,7 @@ dependencies:
   # is required because published siblings depend on each other from hosted;
   # local co-editing still rides gitignored pubspec_overrides.yaml (D5).
   # dev.5 adds the Stage-2 posture, G1 receipt, and named prerequisite refusal.
-  grid_sdk: ^0.4.0-dev.5
+  grid_sdk: ^0.4.0-dev.8
   path: ^1.9.0
   # bd's own config primitive is YAML: `beads configure` READS the existing
   # `.beads/config.local.yaml` (to decide written-vs-unchanged) and REWRITES
