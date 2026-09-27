@@ -64,6 +64,10 @@ const _excludedCommands = <String, String>{
   'grid_cli:SessionCollectCommand':
       '`session collect` is standalone held-worktree maintenance outside this '
       'station baseline.',
+  'grid_cli:SessionVoidCommand':
+      '`session void` (the ungated operator exit, grid_cli 0.6.0-dev.7) rides '
+      'the same standalone session noun; a downstream station that operates '
+      'sessions composes the noun itself (lunar does).',
   'grid_cli:SubstationCommand':
       '`substation` mutates the live roster while this station authors its '
       'roster in SpaceDelegate.',

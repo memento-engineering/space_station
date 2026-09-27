@@ -1074,11 +1074,11 @@ void main() {
         _manifestValue(appPubspec, 'space_station_assets'),
         '^$packageVersion',
       );
-      expect(pubspec, contains('grid_sdk: ^0.4.0-dev.5'));
+      expect(pubspec, contains('grid_sdk: ^0.4.0-dev.8'));
       for (final source in <String>[pubspec, appPubspec]) {
         expect(
           RegExp(
-            r'^  grid_cli: \^0\.6\.0-dev\.4$',
+            r'^  grid_cli: \^0\.6\.0-dev\.7$',
             multiLine: true,
           ).allMatches(source),
           hasLength(1),

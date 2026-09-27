@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0-dev.7
+
+- Adopt the 2026-09-27 grid dev waves. Dependency floors: `grid_assets` at `^0.7.0-dev.7` (resolves 0.7.0-dev.8: the ci-rework cap gate under the state store prefix, the classify verdict for an unresolvable baseline, hard-block only on merge-base regressions), `github_grid_assets` at `^0.2.0-dev.7`, `grid_engine` at `^0.4.0-dev.13` (mount-slot accounting, teardown reads on the writer store, zombie-PR guard), `grid_sdk` at `^0.4.0-dev.8`, `grid_runtime` at `^0.2.1-dev.9`, `grid_cli` at `^0.6.0-dev.7` (vends `session void`, excluded from this baseline with its reason), `beads_dart` at `^0.3.0-dev.7`. The space dev counter tracks the grid_assets wave counter; apps/space floors this package at its own version.
+
 ## Unreleased
 
 - Added: `butcher` — the org's Dart mutation-testing workspace
