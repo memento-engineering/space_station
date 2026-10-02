@@ -59,7 +59,12 @@ import 'package:grid_engine/grid_engine.dart'
     show ExplorationTransport, RelayObservation, Workspace;
 import 'package:genesis_tree/genesis_tree.dart' show Seed;
 import 'package:grid_runtime/grid_runtime.dart'
-    show AgentEnvAllowlist, GitRunner, SystemGitRunner, WorktreeLayout;
+    show
+        AgentEnvAllowlist,
+        GitRunner,
+        SystemGitRunner,
+        WorktreeLayout,
+        systemEnvironment;
 import 'package:grid_sdk/grid_sdk.dart' as sdk;
 import 'package:path/path.dart' as p;
 
@@ -388,7 +393,7 @@ final class ProcessRelayInference implements RelayInferenceRunner {
   /// Creates the runner; [timeout] is the wall-clock cap on one answer, set
   /// under the engine's own relay observation timeout. [hostEnvironment]
   /// injects the parent environment for deterministic boundary tests; null
-  /// reads [Platform.environment] when the relay runs.
+  /// reads [systemEnvironment] when the relay runs.
   const ProcessRelayInference({
     this.timeout = const Duration(minutes: 4),
     this.hostEnvironment,
@@ -556,7 +561,7 @@ final class ProcessRelayInference implements RelayInferenceRunner {
   }
 
   Map<String, String> _relayEnvironment() {
-    final parent = hostEnvironment ?? Platform.environment;
+    final parent = hostEnvironment ?? systemEnvironment();
     // Start from grid_runtime's one curated agent-child boundary, then narrow
     // it: a relay uses Claude's provider-managed keychain and receives no
     // ambient provider credential. Missing authentication therefore fails the

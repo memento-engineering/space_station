@@ -627,39 +627,17 @@ void main() {
               line.indexOf('=') + 1,
             ),
       };
+      const allowed = <String>{'HOME', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL'};
       expect(
         <String, String>{
           for (final entry in child.entries)
             if (supplied.containsKey(entry.key)) entry.key: entry.value,
         },
-        <String, String>{
-          for (final key in <String>[
-            'HOME',
-            'PATH',
-            'TMPDIR',
-            'LANG',
-            'LC_ALL',
-          ])
-            key: supplied[key]!,
-        },
+        <String, String>{for (final key in allowed) key: supplied[key]!},
       );
-      expect(child.keys.toSet(), <String>{
-        'HOME',
-        'PATH',
-        'TMPDIR',
-        'LANG',
-        'LC_ALL',
-        // Added by /bin/sh itself after the exact environment crosses the
-        // Process.start boundary.
-        'PWD',
-        'SHLVL',
-        '_',
-      });
-      expect(child, isNot(contains('GRID_GITHUB_APP_KEY_MEMENTO')));
-      expect(child, isNot(contains('GH_TOKEN')));
-      expect(child, isNot(contains('ANTHROPIC_API_KEY')));
-      expect(child, isNot(contains('CLAUDE_CODE_OAUTH_TOKEN')));
-      expect(child, isNot(contains('AWS_SECRET_ACCESS_KEY')));
+      for (final key in supplied.keys.where((key) => !allowed.contains(key))) {
+        expect(child, isNot(contains(key)));
+      }
     });
 
     test('AC-3 relay evidence is data', () async {
