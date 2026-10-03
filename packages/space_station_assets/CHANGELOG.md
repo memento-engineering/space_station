@@ -6,6 +6,44 @@
 
 ## Unreleased
 
+- Fixed: `ProcessRelayInference` now accepts only the Claude harness, removes
+  the autonomous-seat bypass flag, refuses caller-supplied boundary controls,
+  and launches with Claude's restricted safe mode and an explicitly empty
+  built-in tool set. The child inherits no parent environment: the runner
+  routes the host through `grid_runtime`'s `AgentEnvAllowlist`, narrows it to
+  noncredential runtime values, adds only the exact temporary-directory value,
+  and starts with parent inheritance disabled. Relay evidence is now enclosed
+  in explicit untrusted-JSON markers, delimiter-shaped data is escaped, and
+  briefs outside grid_assets' self-contained relay shape fail before launch.
+- Fixed (space-8pq): `SpaceDelegate.build` now composes grid_assets' vended
+  `RelayAssets` immediately below the station-work seed in BOTH branches — the
+  refreshable `_PolicyBoundStationWork` branch and the plain `sdk.StationWork`
+  branch — on EVERY armed build, over the station's OWN collaborators, so a
+  downstream station whose `seatSeeds` mounts an exact `RelayAgentEnvironment`
+  (lunar's station-wide relay) gets exactly one `RelayAgentObserver` mounted on
+  the `RelayRegistrar` station work provides, under that seat's own ceiling,
+  with no new constructor argument. A station declaring no relay mounts no
+  observer. Before this, nothing in the shared runner composed the relay seed,
+  so the engine's liveness watchdog escalated every expired or paused session
+  as `relay.absent` ("no relay is mounted") however the station was armed. The
+  relay is a TREE seed placed by this build, never a wiring subtype (a subtype
+  would fall into the plain branch and silently lose the hot-restart policy
+  refresh) and never a delegate-contributed roster value.
+- Added (space-8pq): `StationRelayReads`, the station's `RelayReadTools` —
+  `worktree.read` over the session worktree found under the roster's roots
+  (`relayWorktreeRootsOf`), `flares.read` over `StationFlareTail` (a bounded
+  in-process tail attached once to the resident's `StationDiagnosticsReporter`
+  through its `addTransport` seam), `telemetry.read` over the worktree's FT-2
+  usage envelopes, and `gates.read` over the open `gate` bead blocking the
+  session in the state store. `ProcessRelayInference` runs the seat's
+  environment through `spawnFor` in a throwaway directory on a live arm;
+  `DryRunRelayInference` spawns nothing on a dry run and refuses, so a due
+  session escalates as `relay.error` instead of `relay.absent`. Every reader
+  and both seams THROW when they cannot answer, so a relay that cannot see
+  escalates rather than absorbing blind. `SpaceDelegate`'s optional
+  `relayTools` / `relayRunner` are now OVERRIDES of these defaults (tests
+  inject Fakes); `SpaceDelegateFactory` and `UpCommand` are unchanged.
+
 - Added: `butcher` — the org's Dart mutation-testing workspace
   (`memento-engineering/butcher`) — is the eighth coded org substation in
   `SpaceDelegate.substations`, at the umbrella sibling `../butcher` with the
